@@ -357,7 +357,7 @@ public class MHistograms {
 			Container treeContainer =  new ConverterContainer( new BlockFileContainer(rtreePath, blockSize), 
 					sortBasedRTree.nodeConverter(Rectangles.getDoublePointRectangleConverter(dimension), dimension));
 			sortBasedRTree.determineContainer = new Constant<Object>(treeContainer);
-			sortBasedRTree.getContainer =new Constant<Object>(treeContainer);
+			sortBasedRTree.getContainer = new Constant<Object>(treeContainer);
 			boolean processList = (pType == ProcessingType.GOPT) ? true: false;
 			double[] sideLength = new double[dimension];
 			for(int i = 0; i < sideLength.length; i++){

@@ -199,7 +199,7 @@ public class HistogramEval {
 		Container treeContainer =  new ConverterContainer( new BlockFileContainer(tempPath, BLOCKSIZE), 
 				sortBasedRTree.nodeConverter(Rectangles.getDoublePointRectangleConverter(dimension), dimension));
 		sortBasedRTree.determineContainer = new Constant<Object>(treeContainer);
-		sortBasedRTree.getContainer =new Constant<Object>(treeContainer);
+		sortBasedRTree.getContainer = new Constant<Object>(treeContainer);
 		boolean processList =  true;
 		double[] sideLength = new double[dimension];
 		for(int i = 0; i < sideLength.length; i++){

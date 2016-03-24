@@ -127,8 +127,8 @@ public class MVBTree extends BPlusTree {
 	protected Queue<BlockDelInfo> purgeQueue = new ListQueue<BlockDelInfo>();
 	
 	/**Creates a new <tt>MVBTree</tt>.
-	 * KeyDomainMinValue set to default value @see {@link MVBTree#DEAFUALT_KEYDOMAIN_MINVALUE}
-	 * @param blockSize the block size of the underlaying <tt>Container</tt>.
+	 * KeyDomainMinValue set to default value {@see MVBTree#DEAFUALT_KEYDOMAIN_MINVALUE}
+	 * @param blockSize the block size of the underlying <tt>Container</tt>.
 	 * @param minCapRatio the minimal capacity ratio of the tree's nodes.
 	 * @param e the epsilon of the <tt>strong version condition</tt>.
 	 */	
@@ -140,14 +140,14 @@ public class MVBTree extends BPlusTree {
 	}
 	
 	/**Creates a new <tt>MVBTree</tt>.  The minimal capacity ratio of the tree's nodes is set ot 50%.
-	 * @param blockSize the block size of the underlaying <tt>Container</tt>.
+	 * @param blockSize the block size of the underlying <tt>Container</tt>.
 	 * @param e the epsilon of the <tt>strong version condition</tt>.
 	 */	
 	public MVBTree(int blockSize, float e) {
 		this(blockSize, 0.5f, e);
 	}
 	/**Creates a new <tt>MVBTree</tt>.  The minimal capacity ratio of the tree's nodes is set ot 50%.
-	 * @param blockSize the block size of the underlaying <tt>Container</tt>.
+	 * @param blockSize the block size of the underlying <tt>Container</tt>.
 	 * @param e the epsilon of the <tt>strong version condition</tt>.
 	 */	
 	public MVBTree(int blockSize, float e, Comparable keyDomainMinValue) {
@@ -277,9 +277,9 @@ public class MVBTree extends BPlusTree {
 	}
 	/** Initializes the <tt>MVBTree</tt> with the given parameters.
 	 * @param getKey a <tt>Function</tt> to extract the key of a data object.
-	 * @param getRootsContainer the new @link{BPlusTree#getContainer <tt>Function "getContainer"</tt>} of the 
+	 * @param getRootsContainer the new {@link BPlusTree#getContainer} <tt>Function "getContainer"</tt> of the 
 	 * <tt>BPlusTree</tt> which is used to store the historical roots of the <tt>MVBTree</tt>.
-	 * @param determineRootsContainer the new @link{BPlusTree#determineContainer <tt>Function "determineContainer"</tt>} 
+	 * @param determineRootsContainer the new {@link BPlusTree#determineContainer} <tt>Function "determineContainer"</tt> 
 	 * of the <tt>BPlusTree</tt> which is used to store the historical roots of the <tt>MVBTree</tt>.
 	 * @param getContainer a <tt>Function</tt> which gives the <tt>Container</tt> in which a particular <tt>Node</tt> 
 	 * of the <tt>MVBTree</tt> is sotred. 

@@ -259,11 +259,23 @@ public class BPlusTree extends Tree {
             public boolean invoke(Object o) {
                 Node node = (Node) o;
                 return node.number() < (node.level() == 0 ? D_LeafNode : D_IndexNode);
-            }
-        };
-        return initialize(getDescriptor, underflows, overflows,
-                getSplitMinRatio, getSplitMaxRatio);
-    }
+			}
+		};
+		
+		/* Omitting redundant initialization function #1. */
+		// return initialize(getDescriptor, underflows, overflows,
+		// getSplitMinRatio, getSplitMaxRatio);
+
+		/* Omitting redundant initialization function #2. */
+		// return initialize(getDescriptor, this.getContainer,
+		// this.determineContainer, underflows, overflows,
+		// getSplitMinRatio, getSplitMaxRatio);
+
+		return (BPlusTree) super.initialize((IndexEntry) null,
+				(Descriptor) null, getDescriptor, getContainer,
+				determineContainer, underflows, overflows, getSplitMinRatio,
+				getSplitMaxRatio);
+	}
     /**
      * Initializes the <tt>BPlusTree</tt>.
      * 
@@ -346,14 +358,15 @@ public class BPlusTree extends Tree {
     }
     /**
      * Initializes the <tt>BPlusTree</tt>. It initializes
-     * {@link xxl.core.indexStructures.Tree#getSplitMinRatio}and
+     * {@link xxl.core.indexStructures.Tree#getSplitMinRatio} and
      * {@link xxl.core.indexStructures.Tree#getSplitMaxRatio} in the following
      * manner: <code><pre>
      * Function getSplitMinRatio = new Constant(minCapacityRatio);
      * Function getSplitMaxRatio = new Constant(1.0);
      * return initialize(getKey, container, keyConverter, dataConverter,
      *         createSeparator, createKeyRange, getSplitMinRatio, getSplitMaxRatio);
-     * </pre></code> NOTE: This method is used in the case that the tree has only one
+     * </pre></code> 
+     * NOTE: This method is used in the case that the tree has only one
      * container. For multidisk storage the user has to use the method:
      * {@link #initialize (Function, Function, Function, MeasuredConverter, MeasuredConverter, Function, Function)}.
      * 
@@ -433,6 +446,11 @@ public class BPlusTree extends Tree {
                 getSplitMinRatio, getSplitMaxRatio);
     }
     /**
+     * Deprecated because only used from {@link xxl.core.indexStructures.BPlusTree.initialize(Function, MeasuredConverter, MeasuredConverter, Function, Function, Function, Function)}
+     * Moving functionality there.
+     * 
+     * Convenience initialization function. Taking {@link Tree#getContainer} and {@link Tree#determineContainer} from (already set?) fields.
+     *  
      * Initializes the <tt>BPlusTree</tt> and sets the member fields
      * <tt>rootEntry</tt> and <tt>rootDescriptor</tt> to null.
      * 
@@ -450,6 +468,7 @@ public class BPlusTree extends Tree {
      *            of entries which the node may contain after a split
      * @return the initialized <tt>BPlusTree</tt> itself
      */
+    @Deprecated
     protected BPlusTree initialize(Function getDescriptor,
             Predicate underflows, Predicate overflows,
             Function getSplitMinRatio, Function getSplitMaxRatio) {
@@ -458,7 +477,10 @@ public class BPlusTree extends Tree {
                 getSplitMinRatio, getSplitMaxRatio);
     }
     /**
-     * Initializes the <tt>BPlusTree</tt> and sets the member fields
+     * Deprecated, as it is only used by {@link xxl.core.indexStructures.BPlusTree.initialize(Function, MeasuredConverter, MeasuredConverter, Function, Function, Function, Function)}.
+     * Moving functionality there.
+     * 
+     * Actual initialization. Initializes the <tt>BPlusTree</tt> and sets the member fields
      * <tt>rootEntry</tt> and <tt>rootDescriptor</tt> to null.
      * 
      * @param getDescriptor
@@ -481,6 +503,7 @@ public class BPlusTree extends Tree {
      *            of entries which the node may contain after a split
      * @return the initialized <tt>BPlusTree</tt> itself
      */
+    @Deprecated
     protected BPlusTree initialize(Function getDescriptor,
             Function getContainer, Function determineContainer,
             Predicate underflows, Predicate overflows,
@@ -490,6 +513,7 @@ public class BPlusTree extends Tree {
                 determineContainer, underflows, overflows, getSplitMinRatio,
                 getSplitMaxRatio);
     }
+    
     /**
      * Initializes the <tt>BPlusTree</tt>.It initializes
      * {@link xxl.core.indexStructures.Tree#getSplitMinRatio}and
