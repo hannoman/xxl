@@ -189,8 +189,8 @@ public class HistogramEval3D {
 		RTree sortBasedRTree = new RTree();
 		Container treeContainer =  new ConverterContainer( new BlockFileContainer(tempPath, BLOCKSIZE), 
 				sortBasedRTree.nodeConverter(Rectangles.getDoublePointRectangleConverter(dimension), dimension));
-		sortBasedRTree.determineContainer = new Constant<Object>(treeContainer);
-		sortBasedRTree.getContainer = new Constant<Object>(treeContainer);
+		sortBasedRTree.determineContainer = new Constant<Container>(treeContainer);
+		sortBasedRTree.getContainer = new Constant<Container>(treeContainer);
 		boolean processList =  true;
 		double[] sideLength = new double[dimension];
 		for(int i = 0; i < sideLength.length; i++){

@@ -143,7 +143,7 @@ public abstract class Tree {
 		Function: {@link Tree.IndexEntry} &rarr; {@link Container}
 		<br>
 	*/
-	public Function getContainer;
+	public Function<? extends Object, Container> getContainer;
 
 	/** Checks if a <tt>Node</tt> overflows. 
 	 * 
