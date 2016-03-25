@@ -27,12 +27,15 @@ package xxl.core.indexStructures.btrees;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Random;
 
-import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.BufferedContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
@@ -40,7 +43,6 @@ import xxl.core.cursors.Cursors;
 import xxl.core.functions.AbstractFunction;
 import xxl.core.functions.Function;
 import xxl.core.indexStructures.BPlusTree;
-import xxl.core.indexStructures.BPlusTree.KeyRange;
 import xxl.core.indexStructures.descriptors.BigIntegerKeyRange;
 import xxl.core.indexStructures.descriptors.BigIntegerSeparator;
 import xxl.core.io.LRUBuffer;
@@ -172,13 +174,24 @@ public class SimpleBPlusTreeTest {
 //		}
 //		System.out.println();
 		
-		String fileName = "../../../../data/simple_bplus_tree_test";
-		
-		if(args.length == 0) {
-			System.out.println("No filename as program parameter found. Using standard: \""+ fileName +"\"");
-		} else {
-			fileName = args[0];
+		if(args.length > 0) { // custom container file
+			String fileName = args[0];
+			testBPlusTree(fileName);
 		}
-		testBPlusTree(fileName);
+		else { // std container file
+			String container_file_prefix = "simple_bplus_tree_test";
+			System.out.println("No filename as program parameter found. Using standard: \""+ "<project dir>\\test_data\\"+ container_file_prefix +"\"");
+			
+			// and the whole thing in short
+			Path curpath = Paths.get("").toAbsolutePath();
+			if(!curpath.resolve("temp_data").toFile().exists()) {
+				System.out.println("Error: Couldn't find \"test_data\" directory.");
+				return;
+			}
+			String fileName = curpath.resolve("temp_data").resolve(container_file_prefix).toString();
+			System.out.println("resolved to: \""+ fileName +"\".");
+			testBPlusTree(fileName);
+		}
+		
 	}
 }
