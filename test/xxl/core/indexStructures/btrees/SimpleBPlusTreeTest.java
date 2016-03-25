@@ -32,6 +32,7 @@ import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Random;
 
+import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.BufferedContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
@@ -53,7 +54,7 @@ public class SimpleBPlusTreeTest {
 	public static final int BUFFER_SIZE = 5;
 	public static final int NUMBER_OF_BITS = 256;
 	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 100000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 		
 	private static BPlusTree createBPlusTree(String name) {	
 		System.out.println("Initialization of the B+ tree.");
@@ -64,17 +65,22 @@ public class SimpleBPlusTreeTest {
 				return argument;
 			}
 		};
+
 		BufferedContainer treeContainer = new BufferedContainer(
-			new ConverterContainer(
-				new BlockFileContainer(
-					name,
-					BLOCK_SIZE
+				new ConverterContainer(
+					new BlockFileContainer(
+						name,
+						BLOCK_SIZE
+					),
+					tree.nodeConverter()
 				),
-				tree.nodeConverter()
-			),
-			new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
-			true
-		);
+				new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
+				true
+			);
+
+		// TODO: BufferedContainer macht Probleme hier!!
+//		Container treeContainer = new ConverterContainer(new BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
+		
 		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
 			@Override
 			public int getMaxObjectSize() {
@@ -104,12 +110,13 @@ public class SimpleBPlusTreeTest {
 	}
 
 	public static void testBPlusTree(String testFile) throws IOException {
+		System.out.println("Creating new BPlusTree on container files: \""+ testFile +"\" ...");
 		BPlusTree bpTree= createBPlusTree(testFile);
 		System.out.println("BPlusTree has been created.");
 		
 		// Generate test data
 		System.out.println();
-		System.out.println("Generating random test data");
+		System.out.println("-- Generating random test data");
 		Random random = new Random(42);
 		for (int i = 0; i < 10; i++)
 			new BigInteger(NUMBER_OF_BITS, random);
@@ -120,11 +127,11 @@ public class SimpleBPlusTreeTest {
 		}
 		System.out.println("100%");
 		bpTree.wasReorg();
-		System.out.println(bpTree.height());
+		System.out.println("Resulting tree height: "+ bpTree.height());
 		
 		// delete test
 		random = new Random(42);
-		System.out.println("Remove Test:");
+		System.out.println("-- Remove Test:");
 		int error = 0;
 		for (int i = 0; i < 10; i++) {
 			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random).negate();
@@ -149,7 +156,7 @@ public class SimpleBPlusTreeTest {
 		BigInteger min = (BigInteger)region.minBound();
 		BigInteger max = (BigInteger)region.maxBound();
 		BigInteger temp = max.subtract(min).divide(new BigInteger("10"));
-		System.out.println("Query Test:");
+		System.out.println("-- Query Test:");
 		BigInteger minQR = min.add(temp);
 		BigInteger maxQR = minQR.add(temp);
 		System.out.println("Query: ["+minQR+", "+maxQR+"]");
@@ -159,6 +166,19 @@ public class SimpleBPlusTreeTest {
 	}
 		
 	public static void main(String[] args) throws Exception{
-		testBPlusTree(args[0]);
+//		System.out.println("Got args (#="+ args.length +"):");
+//		for(int i=0; i < args.length; i++) {
+//			System.out.println("\targs["+ i +"]: "+ args[i]);
+//		}
+//		System.out.println();
+		
+		String fileName = "../../../../data/simple_bplus_tree_test";
+		
+		if(args.length == 0) {
+			System.out.println("No filename as program parameter found. Using standard: \""+ fileName +"\"");
+		} else {
+			fileName = args[0];
+		}
+		testBPlusTree(fileName);
 	}
 }
