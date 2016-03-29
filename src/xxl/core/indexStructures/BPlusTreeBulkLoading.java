@@ -50,7 +50,7 @@ public class BPlusTreeBulkLoading {
     public static final boolean DESCENDING_BULKLOAD = true;
     
     protected BPlusTree btree; 
-    protected Function<BPlusTree.Node,Container> determineTreeContainer;
+    protected Function<BPlusTree.Node, Container> determineTreeContainer;
     protected Predicate treeOverflows;
     protected ArrayList<MapEntry<Object,BPlusTree.Node>> treePath = null; //main buffer
     protected ArrayList<MapEntry<Object,BPlusTree.Node>> bufferPath = null; //buffer for sibling nodes
@@ -62,7 +62,7 @@ public class BPlusTreeBulkLoading {
     * @param objects
     */
     public BPlusTreeBulkLoading(BPlusTree tree, Iterator objects){
-    	 this(tree, objects, tree.getContainer);
+    	 this(tree, objects, (Function<BPlusTree.Node, Container>) tree.getContainer);
     }
     /**
      * Bulk loads the given <tt>tree</tt>
@@ -85,7 +85,7 @@ public class BPlusTreeBulkLoading {
      * @param order in which the data objects are sorted
      */
      public BPlusTreeBulkLoading(BPlusTree tree, Iterator objects, boolean order){
-     	 this( tree, objects, tree.getContainer, order);
+     	 this( tree, objects, (Function<BPlusTree.Node, Container>) tree.getContainer, order);
      }
      /**
       * Bulk loads the given <tt>tree</tt>

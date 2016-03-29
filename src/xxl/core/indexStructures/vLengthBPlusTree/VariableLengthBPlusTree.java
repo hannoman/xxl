@@ -292,7 +292,7 @@ public class VariableLengthBPlusTree extends Tree {
 	}
 	/**
 	 * 
-	 * This method initializes the B+Tree. It also initializes SplitStrategy and UnderflowHanlder Objects. 
+	 * This method initializes the B+Tree. It also initializes SplitStrategy and UnderflowHandler Objects. 
 	 * 
 	 * @param rootEntry rootEntry of the tree 
 	 * @param rootDescriptor rootDescriptor of the tree; @see {@link KeyRange}

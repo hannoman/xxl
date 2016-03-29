@@ -181,9 +181,9 @@ public class MVBTree extends BPlusTree {
 								Function createMVSeparator,
 								Function createMVRegion) {
 		Function getRootsContainer = new Constant(rootsContainer);
-		Function determineRootsContainer= getRootsContainer;
+		Function determineRootsContainer = getRootsContainer;
 		Function getContainer = new Constant(treeContainer);
-		Function determineContainer= new Constant(treeContainer);
+		Function determineContainer = new Constant(treeContainer);
 		return initialize(getKey, getRootsContainer, determineRootsContainer, 
 							getContainer, determineContainer, versionConverter, keyConverter, 
 							dataConverter, createMVSeparator, createMVRegion);

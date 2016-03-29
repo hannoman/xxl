@@ -126,8 +126,8 @@ public abstract class Tree {
 		<br>
 	*/
 	public Function getDescriptor;
-
-	/** Returns the <tt>Container</tt>used to store a new <tt>Node</tt> created by a split operation.
+	
+	/** Returns the <tt>Container</tt> used to store a new <tt>Node</tt> created by a split operation.
 		<br>
 		Function: {@link Tree.Node.SplitInfo} &rarr; {@link Container},
 		<br>
@@ -143,7 +143,7 @@ public abstract class Tree {
 		Function: {@link Tree.IndexEntry} &rarr; {@link Container}
 		<br>
 	*/
-	public Function<? extends Object, Container> getContainer;
+	public Function<? extends IndexEntry, Container> getContainer;
 
 	/** Checks if a <tt>Node</tt> overflows. 
 	 * 
@@ -461,7 +461,7 @@ public abstract class Tree {
 	/**
 	 * sets container 
 	 * for determineContainer function
-	 * and for getConatainer 
+	 * and for getContainer 
 	 * 
 	 *  sets both variables as follows: 
 	 *  
@@ -1051,7 +1051,7 @@ public abstract class Tree {
 		 * this <tt>IndexEntry</tt> is stored
 		 */
 		public Container container () {
-			return (Container)getContainer.invoke(this);
+			return (Container)getContainer.invoke((Object)this);
 		}
 
 		/** Is used to get the Node to which this IndexEntry refers (subnode). 
