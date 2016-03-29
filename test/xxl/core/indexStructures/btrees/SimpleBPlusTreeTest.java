@@ -27,8 +27,12 @@ package xxl.core.indexStructures.btrees;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Random;
 
@@ -39,7 +43,6 @@ import xxl.core.cursors.Cursors;
 import xxl.core.functions.AbstractFunction;
 import xxl.core.functions.Function;
 import xxl.core.indexStructures.BPlusTree;
-import xxl.core.indexStructures.BPlusTree.KeyRange;
 import xxl.core.indexStructures.descriptors.BigIntegerKeyRange;
 import xxl.core.indexStructures.descriptors.BigIntegerSeparator;
 import xxl.core.io.LRUBuffer;
@@ -53,7 +56,7 @@ public class SimpleBPlusTreeTest {
 	public static final int BUFFER_SIZE = 5;
 	public static final int NUMBER_OF_BITS = 256;
 	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 100000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 		
 	private static BPlusTree createBPlusTree(String name) {	
 		System.out.println("Initialization of the B+ tree.");
@@ -64,17 +67,22 @@ public class SimpleBPlusTreeTest {
 				return argument;
 			}
 		};
+
 		BufferedContainer treeContainer = new BufferedContainer(
-			new ConverterContainer(
-				new BlockFileContainer(
-					name,
-					BLOCK_SIZE
+				new ConverterContainer(
+					new BlockFileContainer(
+						name,
+						BLOCK_SIZE
+					),
+					tree.nodeConverter()
 				),
-				tree.nodeConverter()
-			),
-			new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
-			true
-		);
+				new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
+				true
+			);
+
+		// TODO: BufferedContainer macht Probleme hier!!
+//		Container treeContainer = new ConverterContainer(new BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
+		
 		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
 			@Override
 			public int getMaxObjectSize() {
@@ -104,12 +112,13 @@ public class SimpleBPlusTreeTest {
 	}
 
 	public static void testBPlusTree(String testFile) throws IOException {
+		System.out.println("Creating new BPlusTree on container files: \""+ testFile +"\" ...");
 		BPlusTree bpTree= createBPlusTree(testFile);
 		System.out.println("BPlusTree has been created.");
 		
 		// Generate test data
 		System.out.println();
-		System.out.println("Generating random test data");
+		System.out.println("-- Generating random test data");
 		Random random = new Random(42);
 		for (int i = 0; i < 10; i++)
 			new BigInteger(NUMBER_OF_BITS, random);
@@ -120,11 +129,11 @@ public class SimpleBPlusTreeTest {
 		}
 		System.out.println("100%");
 		bpTree.wasReorg();
-		System.out.println(bpTree.height());
+		System.out.println("Resulting tree height: "+ bpTree.height());
 		
 		// delete test
 		random = new Random(42);
-		System.out.println("Remove Test:");
+		System.out.println("-- Remove Test:");
 		int error = 0;
 		for (int i = 0; i < 10; i++) {
 			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random).negate();
@@ -149,7 +158,7 @@ public class SimpleBPlusTreeTest {
 		BigInteger min = (BigInteger)region.minBound();
 		BigInteger max = (BigInteger)region.maxBound();
 		BigInteger temp = max.subtract(min).divide(new BigInteger("10"));
-		System.out.println("Query Test:");
+		System.out.println("-- Query Test:");
 		BigInteger minQR = min.add(temp);
 		BigInteger maxQR = minQR.add(temp);
 		System.out.println("Query: ["+minQR+", "+maxQR+"]");
@@ -159,6 +168,30 @@ public class SimpleBPlusTreeTest {
 	}
 		
 	public static void main(String[] args) throws Exception{
-		testBPlusTree(args[0]);
+//		System.out.println("Got args (#="+ args.length +"):");
+//		for(int i=0; i < args.length; i++) {
+//			System.out.println("\targs["+ i +"]: "+ args[i]);
+//		}
+//		System.out.println();
+		
+		if(args.length > 0) { // custom container file
+			String fileName = args[0];
+			testBPlusTree(fileName);
+		}
+		else { // std container file
+			String container_file_prefix = "simple_bplus_tree_test";
+			System.out.println("No filename as program parameter found. Using standard: \""+ "<project dir>\\test_data\\"+ container_file_prefix +"\"");
+			
+			// and the whole thing in short
+			Path curpath = Paths.get("").toAbsolutePath();
+			if(!curpath.resolve("temp_data").toFile().exists()) {
+				System.out.println("Error: Couldn't find \"test_data\" directory.");
+				return;
+			}
+			String fileName = curpath.resolve("temp_data").resolve(container_file_prefix).toString();
+			System.out.println("resolved to: \""+ fileName +"\".");
+			testBPlusTree(fileName);
+		}
+		
 	}
 }
