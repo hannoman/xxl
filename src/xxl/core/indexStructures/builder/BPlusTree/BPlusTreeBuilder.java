@@ -585,13 +585,16 @@ public class BPlusTreeBuilder<E>
                 + File.separatorChar
                 + configuration.getManagedType().getTableName()
                 + BPlusIndexedSet.META_FILE_EXTENSION, configuration);
-        retval.initialize(restoredTreeMeta.getElement1(), restoredTreeMeta
-            .getElement2(), configuration.getKeyFunctionFactory()
-            .getKeyFunction(), bufferedContainer, configuration
-            .getKeyFunctionFactory().getKeyConverter(), configuration
-            .getDataConverter(), configuration.getKeyFunctionFactory()
-            .getKeyValueSeparatorFunction(), configuration
-            .getKeyFunctionFactory().getKeyRangeFunction(1));
+        retval.initialize(
+        		restoredTreeMeta.getElement1(), 
+    			restoredTreeMeta.getElement2(), 
+    			configuration.getKeyFunctionFactory().getKeyFunction(), 
+    			bufferedContainer, 
+    			configuration.getKeyFunctionFactory().getKeyConverter(), 
+    			configuration.getDataConverter(), 
+    			configuration.getKeyFunctionFactory().getKeyValueSeparatorFunction(), 
+    			configuration.getKeyFunctionFactory().getKeyRangeFunction(1)
+    			);
 
       } catch (Exception e) {
         e.printStackTrace();

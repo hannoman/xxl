@@ -35,6 +35,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Stack;
+import java.util.function.*;
 
 import xxl.core.collections.MapEntry;
 import xxl.core.collections.MappedList;
@@ -128,7 +129,7 @@ public class BPlusTree extends Tree {
      * Comparable key = (Comparable) getKey.invoke(data);
      * </pre></code>
      */
-    protected Function getKey;
+    protected java.util.function.Function getKey;
     /**
      * This <tt>Function</tt> is used by the method
      * {BPlusTree#createSeparator(Comparable)} to create <tt>Separators</tt>.
@@ -227,7 +228,7 @@ public class BPlusTree extends Tree {
      *            of entries which the node may contain after a split
      * @return the initialized <tt>BPlusTree</tt> itself
      */
-    protected BPlusTree initialize(Function getKey,
+    protected BPlusTree initialize(java.util.function.Function getKey,
             MeasuredConverter keyConverter, MeasuredConverter dataConverter,
             Function createSeparator, Function createKeyRange,
             Function getSplitMinRatio, Function getSplitMaxRatio) {
@@ -291,7 +292,7 @@ public class BPlusTree extends Tree {
      *            of entries which the node may contain after a split
      * @return the initialized <tt>BPlusTree</tt> itself
      */
-    public BPlusTree initialize(Function getKey, Function getContainer,
+    public BPlusTree initialize(java.util.function.Function getKey, Function getContainer,
             Function determineContainer, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, Function createSeparator,
             Function createKeyRange, Function getSplitMinRatio,
@@ -334,7 +335,7 @@ public class BPlusTree extends Tree {
      * @see #initialize(Function, Container, MeasuredConverter,
      *      MeasuredConverter, Function, Function, Function, Function)
      */
-    public BPlusTree initialize(Function getKey, final Container container,
+    public BPlusTree initialize(java.util.function.Function getKey, final Container container,
             MeasuredConverter keyConverter, MeasuredConverter dataConverter,
             Function createSeparator, Function createKeyRange,
             Function getSplitMinRatio, Function getSplitMaxRatio) {
@@ -376,7 +377,7 @@ public class BPlusTree extends Tree {
      * @see #initialize (Function, Container, MeasuredConverter,
      *      MeasuredConverter, Function, Function, Function, Function)
      */
-    public BPlusTree initialize(final Function getKey,
+    public BPlusTree initialize(final java.util.function.Function getKey,
             final Container container, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, final Function createSeparator,
             final Function createKeyRange) {
@@ -422,7 +423,7 @@ public class BPlusTree extends Tree {
      * @see #initialize (Function, Container, MeasuredConverter,
      *      MeasuredConverter, Function, Function)
      */
-    public BPlusTree initialize(Function getKey, Function getContainer,
+    public BPlusTree initialize(java.util.function.Function getKey, Function getContainer,
             Function determineContainer, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, final Function createSeparator,
             final Function createKeyRange) {
@@ -520,7 +521,7 @@ public class BPlusTree extends Tree {
      * @return the initialized <tt>BPlusTree</tt> itself
      */
     public BPlusTree initialize(IndexEntry rootEntry,
-            Descriptor rootDescriptor, final Function getKey,
+            Descriptor rootDescriptor, final java.util.function.Function getKey,
             final Container container, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, final Function createSeparator,
             final Function createKeyRange) {
@@ -567,7 +568,7 @@ public class BPlusTree extends Tree {
      * @return the initialized <tt>BPlusTree</tt> itself
      */
     public BPlusTree initialize(IndexEntry rootEntry,
-            Descriptor rootDescriptor, Function getKey,
+            Descriptor rootDescriptor, java.util.function.Function getKey,
             final Container container, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, Function createSeparator,
             Function createKeyRange, Function getSplitMinRatio,
@@ -619,7 +620,7 @@ public class BPlusTree extends Tree {
      * @return the initialized <tt>BPlusTree</tt> itself
      */
     public BPlusTree initialize(IndexEntry rootEntry,
-            Descriptor rootDescriptor, Function getKey, Function getContainer,
+            Descriptor rootDescriptor, java.util.function.Function getKey, Function getContainer,
             Function determineContainer, MeasuredConverter keyConverter,
             MeasuredConverter dataConverter, Function createSeparator,
             Function createKeyRange, Function getSplitMinRatio,
@@ -693,7 +694,7 @@ public class BPlusTree extends Tree {
      * @return the key of the given data object
      */
     protected Comparable key(Object data) {
-        return (Comparable) getKey.invoke(data);
+        return (Comparable) getKey.apply(data);
     }
     /**
      * It is used to determine the <tt>Separator</tt> of a given entry (e.g.

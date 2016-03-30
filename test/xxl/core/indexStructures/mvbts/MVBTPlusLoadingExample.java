@@ -396,13 +396,15 @@ public class MVBTPlusLoadingExample {
 	/**
 	 * A key is a long value of a triple
 	 */
-	public static Function<Object, Long> getKey = new AbstractFunction<Object, Long>() {
-		
-		public Long invoke(Object argument) {
-			return ((Pair<Long,  PayLoadEntry>)argument).getFirst();
-		};
-		
-	}; 
+//	public static Function<Object, Long> getKey = new AbstractFunction<Object, Long>() {
+//		
+//		public Long invoke(Object argument) {
+//			return ((Pair<Long,  PayLoadEntry>)argument).getFirst();
+//		};
+//	}; 
+	
+	// replaced by lambda expression
+	public static java.util.function.Function<Object, Long> getKey = (argument -> ((Pair<Long,  PayLoadEntry>)argument).getFirst());
 	
 	
 	/**

@@ -172,7 +172,7 @@ public class SingleLevelwiseOptimizedBulkloader<T> {
 	/**
 	 * 
 	 */
-	final Function<T, Long> getKey; 
+	final java.util.function.Function<T, Long> getKey; 
 	
 	/**
 	 * 
@@ -200,11 +200,11 @@ public class SingleLevelwiseOptimizedBulkloader<T> {
 			Container fileContainer,
 			DistributionType distributionType, 
 			String path, 
-			UnaryFunction<T,Long> getKey, 
+			java.util.function.Function<T,Long> getKey, 
 			Buffer buffer) {
 		super();
 		this.dataConverter = dataConverter;
-		this.getKey = Functions.toFunction(getKey);
+		this.getKey = getKey;
 		// duplicates enabled
 		tree = new BPlusTree(blockSize, true);
 		this.partitionSize = partitionSize;
@@ -308,7 +308,7 @@ public class SingleLevelwiseOptimizedBulkloader<T> {
 				Function mapping = new AbstractFunction() {
 					
 					public Object invoke(Object obj ){
-						return (level ==  0 )? getKey.invoke((T)obj) : ((IndexEntry)obj).separator.sepValue(); 
+						return (level ==  0 )? getKey.apply((T)obj) : ((IndexEntry)obj).separator.sepValue(); 
 					}
 				}; 
 				final int[] distribution = computeDistribution((Iterator<Long>)new Mapper(mapping,  partition.iterator() ), 
@@ -349,12 +349,12 @@ public class SingleLevelwiseOptimizedBulkloader<T> {
 	public MapEntry<Long, Long> writeNode(final List entries, int level) {
 		Long descriptor = null;
 		if (level == 0){ 
-			descriptor = (Long) getKey.invoke((T)entries.get(entries.size()-1)); 
+			descriptor = (Long) getKey.apply((T)entries.get(entries.size()-1)); 
 		}else{
 			descriptor = (Long) ((IndexEntry) entries.get(entries.size()-1)).separator().sepValue();
 		}
 		if(rootDescriptor == null){
-			Long smallestVal = (Long) getKey.invoke((T)entries.get(0)); 
+			Long smallestVal = (Long) getKey.apply((T)entries.get(0)); 
 			rootDescriptor = new LongKeyRange(smallestVal, smallestVal);
 		}else{
 			rootDescriptor.union(descriptor);

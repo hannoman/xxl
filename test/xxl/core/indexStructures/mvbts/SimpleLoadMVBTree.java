@@ -308,13 +308,15 @@ public class SimpleLoadMVBTree {
 	/**
 	 * Function to extract key from the key values pairs
 	 */
-	public static Function<Object, Long> getKey = new AbstractFunction<Object, Long>() {
-		
-		public Long invoke(Object argument) {
-			return ((Pair<Long, Integer>)argument).getFirst();
-		};
-		
-	}; 
+//	public static Function<Object, Long> getKey = new AbstractFunction<Object, Long>() {
+//		
+//		public Long invoke(Object argument) {
+//			return ((Pair<Long, Integer>)argument).getFirst();
+//		};
+//		
+//	}; 
+	// replaced with lambda expression
+	public static java.util.function.Function<Object, Long> getKey = (argument -> ((Pair<Long, Integer>)argument).getFirst());
 
 	/**
 	 * Serializer, provides additionally the maximal size of the object 

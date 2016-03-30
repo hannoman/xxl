@@ -48,7 +48,7 @@ public class TupleKeyFunctionFactory extends KeyFunctionFactory {
   /*
    * Functions needed for initialization of BPlus Tree
    */
-  protected Function mKeyFunction;
+  protected java.util.function.Function mKeyFunction;
   protected Function mKeyRangeFunction;
 
   protected Function mSeparatorFunction;
@@ -88,7 +88,7 @@ public class TupleKeyFunctionFactory extends KeyFunctionFactory {
    * @return The key function built up with the given information
    */
   @Override
-  public Function getKeyFunction() {
+  public java.util.function.Function getKeyFunction() {
     return mKeyFunction;
   }
 

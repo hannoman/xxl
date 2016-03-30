@@ -77,7 +77,7 @@ public class PrimitivesKeyFunctionFactory extends KeyFunctionFactory {
   }
 
   @Override
-  public Function getKeyFunction() {
+  public java.util.function.Function getKeyFunction() {
     return new PrimitivesGetKeyFunction(mJavaType);
   }
 

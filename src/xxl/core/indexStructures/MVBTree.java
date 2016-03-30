@@ -35,9 +35,9 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Stack;
-import java.util.Map.Entry;
 
 import xxl.core.collections.MapEntry;
 import xxl.core.collections.MappedList;
@@ -206,7 +206,7 @@ public class MVBTree extends BPlusTree {
 			Descriptor liveRootDescriptor, 
 			IndexEntry rootsRootEntry,	
 			Descriptor rootsRootDescriptor, 
-			final Function getKey,
+			final java.util.function.Function getKey,
 			final Container rootsContainer, 
 			final Container treeContainer, 
 			MeasuredConverter versionConverter, 
@@ -218,12 +218,18 @@ public class MVBTree extends BPlusTree {
 		this.lifespanConverter=lifespanConverter();
 		Function getSplitMinRatio= new Constant(new Float((1+EPSILON)*minCapacityRatio));
 		Function getSplitMaxRatio= new Constant(new Float(1- EPSILON*minCapacityRatio));
-		Function newGetKey=	new AbstractFunction() {
-				public Object invoke(Object entry) {
-					if(entry instanceof LeafEntry) return getKey.invoke(((LeafEntry)entry).data());
-					return getKey.invoke(entry);	
-				}
-			};
+		
+//		Function newGetKey=	new AbstractFunction() {
+//				public Object invoke(Object entry) {
+//					if(entry instanceof LeafEntry) return getKey.invoke(((LeafEntry)entry).data());
+//					return getKey.invoke(entry);	
+//				}
+//			};
+			
+		// replaced by lambda expression		
+		java.util.function.Function newGetKey = 
+				(entry -> entry instanceof LeafEntry ? getKey.apply(((LeafEntry)entry).data()) : getKey.apply(entry) );
+		
 		super.initialize(rootEntry, liveRootDescriptor, newGetKey, treeContainer, keyConverter, 
 								dataConverter, createMVSeparator, createMVRegion, getSplitMinRatio, getSplitMaxRatio);
 		this.getDescriptor= new AbstractFunction() {
@@ -240,12 +246,8 @@ public class MVBTree extends BPlusTree {
 				}
 			};
 		this.rootConverter=rootConverter(lifespanConverter);
-		roots.initialize(rootsRootEntry,rootsRootDescriptor, new AbstractFunction() {
-									public Object invoke(Object object) {
-										// Roots have always bounded intervals
-										return ((Root)object).lifespan().endVersion();
-									}
-								},
+		roots.initialize(rootsRootEntry,rootsRootDescriptor, 
+								(object -> /* Roots have always bounded intervals */ ((Root)object).lifespan().endVersion() ),
 								rootsContainer,
 								//lifespanConverter,
 								versionConverter,
@@ -306,8 +308,8 @@ public class MVBTree extends BPlusTree {
 		this.lifespanConverter=lifespanConverter();
 		Function getSplitMinRatio= new Constant(new Float((1+EPSILON)*minCapacityRatio));
 		Function getSplitMaxRatio= new Constant(new Float(1- EPSILON*minCapacityRatio));
-		Function newGetKey=	new AbstractFunction() {
-			public Object invoke(Object entry) {
+		java.util.function.Function newGetKey=	new java.util.function.Function() {
+			public Object apply(Object entry) {
 				if(entry instanceof LeafEntry) return getKey.invoke(((LeafEntry)entry).data());
 				return getKey.invoke(entry);	
 			}
@@ -328,12 +330,7 @@ public class MVBTree extends BPlusTree {
 			}
 		};
 		this.rootConverter=rootConverter(lifespanConverter);
-		roots.initialize(	new AbstractFunction() {
-								public Object invoke(Object object) {
-									// Roots have always bounded intervals
-									return ((Root)object).lifespan().endVersion();
-								}
-							},
+		roots.initialize(	( object -> /* Roots have always bounded intervals */ ((Root)object).lifespan().endVersion() ),
 							getRootsContainer,
 							determineRootsContainer,
 							//lifespanConverter,
@@ -794,7 +791,7 @@ public class MVBTree extends BPlusTree {
 	 */
 	public Object remove(Version removeVersion, Object data) {
 		setCurrentVersion(removeVersion);
-		Object key = getKey.invoke(data);
+		Object key = getKey.apply(data);
 		Stack path = pathToNode(key, currentVersion(), 0);
 		Iterator it = ((MVBTree.Node)node(path)).iterator();
 		LeafEntry removed = null;
@@ -899,7 +896,7 @@ public class MVBTree extends BPlusTree {
 		LeafEntry found = null;
 		while (it.hasNext()) {
 			LeafEntry obj = (LeafEntry)it.next();
-			if (getKey.invoke(obj.data()).equals(key)) {
+			if (getKey.apply(obj.data()).equals(key)) {
 				found = obj;
 				break;
 			}

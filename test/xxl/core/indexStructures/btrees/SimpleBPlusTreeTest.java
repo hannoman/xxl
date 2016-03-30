@@ -58,12 +58,7 @@ public class SimpleBPlusTreeTest {
 	private static BPlusTree createBPlusTree(String name) {	
 		System.out.println("Initialization of the B+ tree.");
 		BPlusTree tree = new BPlusTree(BLOCK_SIZE, MIN_RATIO, true);
-		Function<Object, Object> getKey = new AbstractFunction<Object, Object>() {
-			@Override
-			public Object invoke(Object argument) {
-				return argument;
-			}
-		};
+		java.util.function.Function<Object, Object> getKey = (o -> o);
 
 //		BufferedContainer treeContainer = new BufferedContainer(
 //				new ConverterContainer(

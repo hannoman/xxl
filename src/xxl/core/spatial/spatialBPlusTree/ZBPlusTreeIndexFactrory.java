@@ -206,7 +206,7 @@ public class ZBPlusTreeIndexFactrory {
 	 * @return
 	 */
 	public static <T> BPlusTree loadZBPlusTreeTupleByTuple(Iterator<T> inputData,
-			MeasuredConverter<T> dataConverter, Function<T,Long> getKeyFunction, Container container, int blockSize, Buffer buffer){
+			MeasuredConverter<T> dataConverter, java.util.function.Function<T,Long> getKeyFunction, Container container, int blockSize, Buffer buffer){
 		BPlusTree tree = new BPlusTree(blockSize, true);
 		Container treeContainer =  new ConverterContainer(container, tree.nodeConverter());
 		if (buffer != null){
@@ -238,7 +238,7 @@ public class ZBPlusTreeIndexFactrory {
 	 * @return
 	 */
 	public static <T> BPlusTree loadZBPlusTreeNonOptimized(Iterator<T> sortedData,
-			MeasuredConverter<T> dataConverter, Function<T,Long> getKeyFunction, Container container, final  int blockSize, Buffer buffer, final double spaceUtil){
+			MeasuredConverter<T> dataConverter, java.util.function.Function<T,Long> getKeyFunction, Container container, final  int blockSize, Buffer buffer, final double spaceUtil){
 		final int dataSize = dataConverter.getMaxObjectSize(); 
 		BPlusTree tree = new BPlusTree(blockSize, true);
 		Container treeContainer =  new ConverterContainer(container, tree.nodeConverter());
@@ -246,7 +246,7 @@ public class ZBPlusTreeIndexFactrory {
 			treeContainer = new BufferedContainer(treeContainer, buffer); 
 		}
 		tree.initialize(null, null, 
-				getKeyFunction, 
+				(java.util.function.Function) getKeyFunction, 
 				treeContainer, 
 				ZBPlusTreeIndexFactrory.longKeyMeasuredConverter, 
 				dataConverter,
@@ -280,7 +280,7 @@ public class ZBPlusTreeIndexFactrory {
 	 * @return
 	 */
 	public static <T> BPlusTree loadZBPlusTreeOptimizedGOP(Iterator<T> sortedData, MeasuredConverter<T> dataConverter, 
-			UnaryFunction<T,Long> getKeyFunction, 
+			java.util.function.Function<T,Long> getKeyFunction, 
 			Container container, String treePrefix,  final  int blockSize, Buffer buffer, final double spaceUtil, int dimension){
 		SingleLevelwiseOptimizedBulkloader<T> bulkloader = new SingleLevelwiseOptimizedBulkloader<T>(dataConverter, 
 						DEFAULT_PARTITION_SIZE, 

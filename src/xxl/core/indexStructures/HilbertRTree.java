@@ -222,14 +222,28 @@ public class HilbertRTree extends BPlusTree {
 				return new DoublePoint(pointArray);
 			}
 		}; // Edit
-		this.getKey = new AbstractFunction() {
-			public Object invoke(Object entry) {
+		
+//		this.getKey = new AbstractFunction() {
+//			public Object invoke(Object entry) {
+//				Rectangle rectangle = (Rectangle) getRectangle.invoke(entry);
+//				Point middlePoint = (Point) computeMiddlePoint
+//						.invoke(rectangle);
+//				return computeSFCurveValue.invoke(middlePoint);
+//			}
+//		};
+		
+		this.getKey = new java.util.function.Function() {
+			public Object apply(Object entry) {
 				Rectangle rectangle = (Rectangle) getRectangle.invoke(entry);
-				Point middlePoint = (Point) computeMiddlePoint
-						.invoke(rectangle);
+				Point middlePoint = (Point) computeMiddlePoint.invoke(rectangle);
 				return computeSFCurveValue.invoke(middlePoint);
 			}
 		};
+		
+		// reformulated with Java 8
+		// .. should look like this in the best case
+//		this.getKey = computeSFCurveValue.after(computeMiddlePoint.after(getRectangle));
+		
 		this.getDescriptor = new AbstractFunction() {
 			public Object invoke(Object entry) {
 				if (entry instanceof ORSeparator)

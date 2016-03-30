@@ -130,7 +130,7 @@ public class MVBT extends MVBTree {
 			Descriptor liveRootDescriptor, 
 			IndexEntry rootsRootEntry,	
 			Descriptor rootsRootDescriptor, 
-			final Function getKey,
+			final java.util.function.Function getKey,
 			final Container rootsContainer, 
 			final Container treeContainer, 
 			MeasuredConverter versionConverter, 
@@ -214,7 +214,7 @@ public class MVBT extends MVBTree {
 	@SuppressWarnings({ "unchecked", "rawtypes", "deprecation" })
 	public Object remove(Version removeVersion, Object data) {
 		setCurrentVersion(removeVersion);
-		Object key = getKey.invoke(data);
+		Object key = getKey.apply(data);
 		Stack path = pathToNodeLiveRemove(key, currentVersion(), 0);
 		Iterator it = ((MVBTree.Node)node(path)).iterator();
 		LeafEntry removed = null;
@@ -236,7 +236,7 @@ public class MVBT extends MVBTree {
 	 */
 	public void update (Version updateVersion, Object oldData, Object newData) {
 		setCurrentVersion(updateVersion);
-		Object key = getKey.invoke(newData);
+		Object key = getKey.apply(newData);
 		Stack path = pathToNodeLiveRemove(key, currentVersion(), 0);
 		Iterator it = ((MVBTree.Node)node(path)).iterator();
 		LeafEntry removed = null;

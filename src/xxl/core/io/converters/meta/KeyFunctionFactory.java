@@ -41,7 +41,7 @@ public abstract class KeyFunctionFactory {
   /**
    * @return The key function built up with the given information
    */
-  public abstract Function getKeyFunction();
+  public abstract java.util.function.Function getKeyFunction();
 
   /**
    * @return The KeyRange function built up with the given information

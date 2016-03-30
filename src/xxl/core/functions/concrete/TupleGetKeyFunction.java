@@ -32,8 +32,8 @@ import xxl.core.relational.tuples.ColumnComparableArrayTuple;
 
 @SuppressWarnings("serial")
 public class TupleGetKeyFunction<Tuple, ColumnComparableTuple>
-    extends
-    AbstractFunction<xxl.core.relational.tuples.Tuple, ColumnComparableTuple> {
+    implements
+    java.util.function.Function<xxl.core.relational.tuples.Tuple, ColumnComparableTuple> {
 
   /*
    * The indices of the columns which should be used as compounded key
@@ -49,7 +49,7 @@ public class TupleGetKeyFunction<Tuple, ColumnComparableTuple>
 
   @SuppressWarnings("unchecked")
   @Override
-  public ColumnComparableTuple invoke(xxl.core.relational.tuples.Tuple argument) {
+  public ColumnComparableTuple apply(xxl.core.relational.tuples.Tuple argument) {
     try {
       Object[] content = argument.toArray();
       Comparable[] comparableSubset = new Comparable[mColumnIndices.length];

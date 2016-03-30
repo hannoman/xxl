@@ -31,7 +31,7 @@ import xxl.core.relational.JavaType;
  */
 
 @SuppressWarnings("serial")
-public class PrimitivesGetKeyFunction extends AbstractFunction<Object, Object> {
+public class PrimitivesGetKeyFunction implements java.util.function.Function<Object, Object> {
 
   private JavaType mJavaType;
 
@@ -41,7 +41,7 @@ public class PrimitivesGetKeyFunction extends AbstractFunction<Object, Object> {
 
   @SuppressWarnings("unchecked")
   @Override
-  public Object invoke(Object argument) {
+  public Object apply(Object argument) {
     // Check if this realy works or if argument have to be cloned
     return argument;
   }
