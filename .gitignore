@@ -10,3 +10,4 @@ test-output/*
 .settings/*
 /bin
 /doc/
+/temp_data/
