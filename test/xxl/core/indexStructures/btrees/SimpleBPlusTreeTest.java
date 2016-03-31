@@ -34,8 +34,8 @@ import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Random;
 
-import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
+import xxl.core.collections.containers.io.BufferedContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.Cursors;
 import xxl.core.functions.AbstractFunction;
@@ -43,6 +43,7 @@ import xxl.core.functions.Function;
 import xxl.core.indexStructures.BPlusTree;
 import xxl.core.indexStructures.descriptors.BigIntegerKeyRange;
 import xxl.core.indexStructures.descriptors.BigIntegerSeparator;
+import xxl.core.io.LRUBuffer;
 import xxl.core.io.converters.BigIntegerConverter;
 import xxl.core.io.converters.MeasuredConverter;
 
@@ -65,20 +66,20 @@ public class SimpleBPlusTreeTest {
 			}
 		};
 
-//		BufferedContainer treeContainer = new BufferedContainer(
-//				new ConverterContainer(
-//					new BlockFileContainer(
-//						name,
-//						BLOCK_SIZE
-//					),
-//					tree.nodeConverter()
-//				),
-//				new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
-//				true
-//			);
+		BufferedContainer treeContainer = new BufferedContainer(
+				new ConverterContainer(
+					new BlockFileContainer(
+						name,
+						BLOCK_SIZE
+					),
+					tree.nodeConverter()
+				),
+				new LRUBuffer<Object, Object, Object>(BUFFER_SIZE),
+				true
+			);
 
 		// TODO: BufferedContainer macht Probleme hier!!
-		Container treeContainer = new ConverterContainer(new BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
+//		Container treeContainer = new ConverterContainer(new BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
 		
 		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
 			@Override
