@@ -69,16 +69,21 @@ public class WBPlusTree extends BPlusTree {
 
         public Object read(DataInput dataInput, Object object) throws IOException {
         	
-            int level = dataInput.readInt(); //- read level
+        	//- read level
+        	int level = dataInput.readInt();
+        	                                    
+            //- read number of entries 
+            int number = dataInput.readInt(); 
             
-            Node node = (Node) createNode(level); // indirect call of constructor: Node(int)
-                        
-            int number = dataInput.readInt(); //- read number of entries 
+            // create Node shell
+            //Node node = (Node) createNode(level); // indirect call of constructor: Node(int)
+            Node node = new Node(level);
             
             //-- read info about next neighbor if available
             boolean readNext = dataInput.readBoolean();
             if (readNext) {
                 node.nextNeighbor = (IndexEntry) createIndexEntry(level + 1); // indirect call of constructor: IndexEntry(level + 1)
+                // QUE: why is "level+1" used?
                 
                 // node.nextNeighbor.initialize(readID(dataInput)); // replaced by:
                 Object nextNeighborId = container().objectIdConverter().read(dataInput);
@@ -90,19 +95,40 @@ public class WBPlusTree extends BPlusTree {
             //-- read the content of the node
             readEntries(dataInput, node, number);
             
-            //-- init (?) 
-            if (node.level != 0) {
+            //-- init: reads the separators for the IndexEntries if we are in an inner node 
+            if (node.level != 0) { // if not leaf
             	for (int i = 0; i < node.number(); i++) {
-            		Comparable sepValue = (Comparable) keyConverter.read(
-            				dataInput, null);
-            		((IndexEntry) node.getEntry(i))
-            			.initialize(createSeparator(sepValue));
+            		Comparable sepValue = (Comparable) keyConverter.read(dataInput);
+            		((IndexEntry) node.getEntry(i)).initialize(createSeparator(sepValue));
             	}
             }
             return node;
+            
+            // Saveformat for Leafs:
+            // (0 = level :: int)(number of entries :: int)(hasNextNeighbor :: bool)(nextNeighborId :: ContainerID)?(leafEntry :: DataEntry){number}
+            // Saveformat for InnerNodes:
+            // (0 != level :: int)(number of entries :: int)(hasNextNeighbor :: bool)(nextNeighborId :: ContainerID)?(a :: ContainerID){number}(b :: Separator){number}
         }
         
-        public void write(DataOutput dataOutput, Object object)
+        // @Override // yep, that actually doesn't override anything, so shouldn't node.entries be visible?
+        protected void readEntries(DataInput input, Node node, int number) throws IOException 
+        {
+        	if(node.level == 0) { // if leaf
+        		for(int i=0; i < number; i++) {
+        			Object entry = dataConverter.read(input);
+        			node.entries.add(i, entry); // why is this not visible? check java visibility for inner classes..
+        		}
+        	} else { // index node
+        		for(int i=0; i < number; i++) {
+        			IndexEntry entry = new IndexEntry(node.level);
+        			Object entryId = container().objectIdConverter().read(input);
+                    entry.initialize(entryId);
+                    node.entries.add(i, entry); // why is this not visible? check java visibility for inner classes..
+        		}
+        	}
+        }
+
+		public void write(DataOutput dataOutput, Object object)
                 throws IOException {
             Node node = (Node) object;
             //2x Integer
@@ -121,19 +147,6 @@ public class WBPlusTree extends BPlusTree {
                     for (int i = 0; i < node.number(); i++)
                         keyConverter.write(dataOutput, separator(
                                 node.getEntry(i)).sepValue());
-        }
-        
-        // @Override // yep, that actually doesn't override anything, so shouldn't node.entries be visible?
-        protected void readEntries(DataInput input, Node node, int number) throws IOException 
-        {
-            for (int i = 0; i < number; i++) {
-                Object entry;
-                if (node.level == 0)
-                    entry = dataConverter.read(input, null);
-                else
-                    entry = readIndexEntry(input, node.level);
-                node.entries.add(i, entry); // why is this not visible?
-            }
         }
         
         protected void writeEntries(DataOutput output, Node node)
@@ -166,7 +179,7 @@ public class WBPlusTree extends BPlusTree {
         protected IndexEntry readIndexEntry(DataInput input, int parentLevel)
                 throws IOException {
             IndexEntry indexEntry = new IndexEntry(parentLevel);
-            Object id = readID(input);
+            Object id = container().objectIdConverter().read(input);
             indexEntry.initialize(id);
             return indexEntry;
         }
@@ -192,7 +205,23 @@ public class WBPlusTree extends BPlusTree {
 
 
 
-
+        // @Override // yep, that actually doesn't override anything, so shouldn't node.entries be visible?
+		//        protected void readEntries_old(DataInput input, Node node, int number) throws IOException 
+		//        {
+		//            for (int i = 0; i < number; i++) {
+		//                Object entry;
+		//                if (node.level == 0) // if is leaf 
+		//                    entry = dataConverter.read(input);
+		//                else {
+		//                	// entry = readIndexEntry(input, node.level); // function inlined:
+		//                   	entry = new IndexEntry(node.level);
+		//                    Object id = container().objectIdConverter().read(input);
+		//                    ((IndexEntry) entry).initialize(id);
+		//                }
+		//                    
+		//                node.entries.add(i, entry); // why is this not visible?
+		//            }
+		//        }
 
 
 
