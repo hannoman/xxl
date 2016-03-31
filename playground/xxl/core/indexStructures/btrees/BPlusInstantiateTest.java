@@ -1,4 +1,4 @@
-package xxl_dk;
+package xxl.core.indexStructures.btrees;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
