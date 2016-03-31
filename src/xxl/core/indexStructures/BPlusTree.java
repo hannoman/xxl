@@ -772,7 +772,10 @@ public class BPlusTree extends Tree {
      * @return the <tt>Container</tt> of the <tt>BPlusTree</tt>
      */
     public Container container() {
-        return (Container) this.getContainer.invoke(this);
+    	/* TODO: this call probably violates the contract for {@link BPlusTree#getContainer} which should have type 
+    	 * Function: {@link Tree.IndexEntry} &rarr; {@link Container}.
+    	 * It works here because getContainer is always initialised as a constant function which just swallows the given argument Object. */
+        return (Container) this.getContainer.invoke(this); 
     }
     /**
      * Checks whether the <tt>BPlusTree</tt> is empty. The <tt>BPlusTree</tt>
@@ -796,12 +799,12 @@ public class BPlusTree extends Tree {
     /**
      *
      * This method is used to remove a data object from the tree. It uses the
-     * method {@link BPlusTree#separator(Object)}to get the <tt>Separator</tt>
+     * method {@link BPlusTree#separator(Object)} to get the <tt>Separator</tt>
      * of the given object. Thereafter it searches in the tree for an Object
      * with the same <tt>Separator</tt>. The method
      * {Separator#equals{Object)} is used to check whether two Separators are
      * the same.
-     * NOTE: In duplicate mode the objects are compared with  o1.equals(o2) 
+     * NOTE: In duplicate mode the objects are compared with <tt>o1.equals(o2)</tt> 
      * 
      * @param data
      *            the object which has to be removed
@@ -809,11 +812,14 @@ public class BPlusTree extends Tree {
      *         <tt>null</tt> otherwise
      */
     public Object remove(final Object data) {
-    		return remove(data, new AbstractPredicate() {
-    			public boolean invoke(Object o1, Object o2) {
-    				return  (duplicate) ? o1.equals(o2) :  key(o1).compareTo(key(o2)) == 0;
-    			}
-    		});
+    	/* TODO: never actually uses {@link BPlusTree#separator(Object)} or Separator as opposed to doc.
+    	 * Just uses getKey which just yields Comparable values.
+    	 */
+		return remove(data, new AbstractPredicate() {
+			public boolean invoke(Object o1, Object o2) {
+				return  (duplicate) ? o1.equals(o2) :  key(o1).compareTo(key(o2)) == 0;
+			}
+		});
     }
     /** Calls {@link #remove(Descriptor, int, Predicate)} whereas 
 	 * the target level is set to zero. The used <tt>Descriptor</tt> is the result of
@@ -849,12 +855,12 @@ public class BPlusTree extends Tree {
 	 */ 
 	public Object remove (Descriptor descriptor, int targetLevel, Predicate test) {
 		Cursor objects = query(descriptor, targetLevel);
-		Object retValue=null;
+		Object retValue = null;
 		while (objects.hasNext()) {
 			Object object = objects.next();
 			if (test.invoke(object)) {
 				objects.remove();
-				retValue= object;
+				retValue = object;
 				break;
 			}
 		}
@@ -880,12 +886,15 @@ public class BPlusTree extends Tree {
             Comparable key = ((Separator) descriptor).sepValue();
             rootDescriptor = createKeyRange(key, key);
             grow(data);
-        } else{
-        	
+        } else {        	
             super.insert(data, descriptor, targetLevel);
-//            // test code 
+        	// test code 
+            /* TODO: unnecessary casts of rootEntry() */
+            /* TODO: what does this code actually do? 
+             * Adjusts the sepValue of the rootEntry to always be the maximum of all inserted "entry.sepValues". 
+             */
             Separator sep = ((IndexEntry)rootEntry()).separator();
-            Separator entrySep =  (Separator)descriptor; 
+            Separator entrySep = (Separator)descriptor; 
             if(sep.sepValue().compareTo(entrySep.sepValue()) < 0){
             	((IndexEntry)rootEntry()).separator().updateSepValue(entrySep.sepValue());
             }
@@ -896,7 +905,7 @@ public class BPlusTree extends Tree {
      * the given <tt>indexEntry</tt>. The path nodes are fixed in the
      * underlying buffer. If they are no longer required the caller has to unfix them.
      * If the given node is not a leaf node an
-     * {@link java.lang.UnsupportedOperationException}is thrown. The method
+     * {@link java.lang.UnsupportedOperationException} is thrown. The method
      * calls
      * {@link xxl.core.indexStructures.BPlusTree#pathToLeaf(xxl.core.indexStructures.BPlusTree.Node)}
      * where <tt>node</tt> is the leaf referred by <tt>indexEntry</tt>.
@@ -912,15 +921,14 @@ public class BPlusTree extends Tree {
     protected Stack pathToLeaf(IndexEntry indexEntry)
             throws UnsupportedOperationException {
         if (indexEntry.level() != 0)
-                throw new UnsupportedOperationException(
-                        "The node is not a leaf node.");
+                throw new UnsupportedOperationException("The node is not a leaf node.");
         Node node = (Node) indexEntry.get(false);
         return pathToLeaf(node);
     }
     /**
      * This method computes the path from the root to a leaf node. If the given
      * node is not a leaf node an
-     * {@link java.lang.UnsupportedOperationException}is thrown. The method
+     * {@link java.lang.UnsupportedOperationException} is thrown. The method
      * computes the key range of the leaf and then calls the method
      * {@link BPlusTree#pathToNode(BPlusTree.KeyRange, int)}(level=0). The path
      * nodes are fixed in the underlying buffer.
@@ -1051,7 +1059,7 @@ public class BPlusTree extends Tree {
         return query(range, 0);
     }
     /**
-     * This method calls {@link #query(IndexEntry subRootEntry, KeyRange queryInterval,int targetLevel)}
+     * This method calls {@link #query(IndexEntry subRootEntry, KeyRange queryInterval, int targetLevel)}
      * which uses an implementation of an efficient querying algorithm. The
      * result is a lazy <tt>Cursor</tt> pointing to all entries whose keys are
      * contained in <tt>queryDescriptor</tt>.
@@ -1136,7 +1144,7 @@ public class BPlusTree extends Tree {
     /**
      * This class describes the index entries of the <tt>BPlusTree</tt> (i.e.
      * the entries of the non-leaf nodes). Each <tt>IndexEntry</tt> refers to
-     * a {@link BPlusTree.Node Node}which is the root node of the subtree. Each
+     * a {@link BPlusTree.Node Node} which is the root node of the subtree. Each
      * <tt>IndexEntry</tt> has a <tt>Separator</tt> which describes the key
      * range of this subtree.
      * 
@@ -1312,7 +1320,7 @@ public class BPlusTree extends Tree {
         }
         
         /**
-         * This method can be used  for bulk loading or insertion
+         * This method can be used for bulk loading or insertion
          * @param level
          * @param entries
          * @return
@@ -1659,7 +1667,7 @@ public class BPlusTree extends Tree {
 		 * index-entries during the split.
 		 */
         protected Collection redressOverflow (Stack path, List newIndexEntries, boolean up) {
-        	boolean redistributed =  redistributeNode(path);
+        	boolean redistributed = redistributeNode(path);
         	if (!redistributed){
         		return super.redressOverflow(path, newIndexEntries, up);
         	}
@@ -2387,7 +2395,7 @@ public class BPlusTree extends Tree {
         }
         /**
          * Builds the union of this <tt>KeyRanges</tt> and a key. The union is
-         * the minimal extenstion of the current <tt>KeyRange</tt> which
+         * the minimal extension of the current <tt>KeyRange</tt> which
          * contains the given key. The current <tt>KeyRange</tt> will be
          * changed and returned.
          * 

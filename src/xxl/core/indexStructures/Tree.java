@@ -817,7 +817,7 @@ public abstract class Tree {
 	 * or <tt>null</tt> if path is empty
 	 */
 	protected IndexEntry indexEntry (Stack path) {
-		return path.isEmpty()? null: (IndexEntry)((Entry)path.peek()).getKey();
+		return path.isEmpty() ? null : (IndexEntry)((Entry)path.peek()).getKey();
 	}
 
 	/** Takes the next {@link java.util.Map.Entry Entry} of the Stack and gets its node.
@@ -832,7 +832,7 @@ public abstract class Tree {
 	 * @return the node of the next entry of path or <tt>null</tt> if path is empty
 	 */
 	protected Node node (Stack path) {
-		return path.isEmpty()? null: (Node)((Entry)path.peek()).getValue();
+		return path.isEmpty() ? null : (Node)((Entry)path.peek()).getValue();
 	}
 
 	/** Determines the depth of the given path. This is the height of the tree 
@@ -842,7 +842,7 @@ public abstract class Tree {
 	 * {@link Tree#height()} if the path is empty 
 	 */
 	protected int level (Stack path) {
-		return path.isEmpty()? height(): node(path).level;
+		return path.isEmpty() ? height() : node(path).level;
 	}
 
 	/** Adds the node to which <tt>indexEntry</tt> refers to the path. Let node be the
@@ -1202,9 +1202,9 @@ public abstract class Tree {
 				return Node.this;
 			}
 			
-			/** Determines the container which the new <tt>Node</tt> ist stored in.
+			/** Determines the container which the new <tt>Node</tt> is stored in.
 			 * 
-			 * @return the <tt>Container</tt> which the new <tt>Node</tt> ist stored in
+			 * @return the <tt>Container</tt> which the new <tt>Node</tt> is stored in
 			 */
 			public Container determineContainer () {
 				return (Container)Tree.this.determineContainer.invoke(this);

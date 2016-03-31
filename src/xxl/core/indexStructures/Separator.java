@@ -28,14 +28,14 @@ package xxl.core.indexStructures;
 import java.util.Comparator;
 
 	/**
-	 * This class describes the known separtors of the B+ tree. A <tt>Separtor</tt> is 
+	 * This class describes the known separators of the B+ tree. A <tt>Separator</tt> is 
 	 * a simple key (for example an Integer). The <tt>Separator</tt> of a query is 
-	 * a closed intervall [min, max]. With the contructors of the class Separator Separators of 
+	 * a closed intervall [min, max]. With the contructors of the class <tt>Separator</tt> separators of 
 	 * every type can be created.   
 	 * This class uses the interface {@link java.lang.Comparable} as a key class. Since 
 	 * the interface {@link java.lang.Comparable} does not support the method clone() we have
 	 * to let {@link Separator#clone() clone()} abstract here. 
-	 * To use this class you only have to extend it to a concret class and implement the abstract method 
+	 * To use this class you only have to extend it to a concrete class and implement the abstract method 
 	 * {@link Separator#clone()}.
 	 * For Example:
 	 * <pre><code>
@@ -45,9 +45,9 @@ import java.util.Comparator;
 	  				super(key);
 	  			} 
 	  			
-	 				public Object clone() {
-	 					return new IntSeparator(new Integer(((Integer)sepValue).intValue()));
-	 				}
+ 				public Object clone() {
+ 					return new IntSeparator(new Integer(((Integer)sepValue).intValue()));
+ 				}
 	  		}
 	 	 </code></pre>
 	 *	 
@@ -177,9 +177,9 @@ import java.util.Comparator;
 		 * @param descriptor has to be an instance of the class <tt>Separator</tt>
 		 */
 		public void union(Descriptor descriptor) {
-			if(!(descriptor instanceof Separator)|| !isDefinite()) return;
-			Separator sep=(Separator)descriptor;
-			if(!sep.isDefinite()|| sepValue.compareTo(sep.sepValue)>0) this.sepValue=sep.sepValue; 
+			if(!(descriptor instanceof Separator) || !isDefinite()) return;
+			Separator sep = (Separator)descriptor;
+			if(!sep.isDefinite() || sepValue.compareTo(sep.sepValue)>0) this.sepValue=sep.sepValue; 
 		}
 
 		/** Checks whether the current <tt>Separator</tt> equals the given object by using the method 
