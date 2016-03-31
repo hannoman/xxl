@@ -1233,7 +1233,7 @@ public class BPlusTree extends Tree {
      * objects or <tt>IndexEntries</tt>). All <tt>Nodes</tt> are stored in
      * <tt>Containers</tt>. 
      * NOTE: if the tree is running in non-duplicate mode, the indexEntry descriptor
-     * holds the value of the left most element. In duplicate mode it is the right most
+     * holds the value of the left most element. In duplicate mode it is the right most.
      */
     public class Node extends Tree.Node {	
         /**
@@ -1320,12 +1320,12 @@ public class BPlusTree extends Tree {
         }
         
         /**
-         * This method can be used for bulk loading or insertion
+         * This method can be used for bulk loading or insertion.
          * @param level
          * @param entries
          * @return
          */
-        public  Node initialize (final int level, List entries) {
+        public Node initialize (final int level, List entries) {
         	initialize(level, new AbstractFunction() {
                 public Object invoke() {
                     return new ArrayList(level == 0 ? (BPlusTree.this.B_LeafNode + 1) : (BPlusTree.this.B_IndexNode + 1));
