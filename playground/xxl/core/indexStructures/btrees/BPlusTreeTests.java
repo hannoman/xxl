@@ -40,6 +40,7 @@ import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.Cursors;
 import xxl.core.functions.AbstractFunction;
 import xxl.core.functions.Function;
+import xxl.core.functions.Identity;
 import xxl.core.indexStructures.BPlusNodeConverter;
 import xxl.core.indexStructures.BPlusTree;
 import xxl.core.indexStructures.descriptors.BigIntegerKeyRange;
@@ -62,7 +63,9 @@ public class BPlusTreeTests {
 	private static BPlusTree createTree(String testFile) {
 		System.out.println("Creating new BPlusTree on container files: \"" + testFile + "\" ...");
 		System.out.println("Initialization of the B+ tree.");
+		
 		BPlusTree tree = new BPlusTree(BLOCK_SIZE, MIN_RATIO, true);
+		
 		Function<Object, Object> getKey = new AbstractFunction<Object, Object>() {
 			@Override
 			public Object invoke(Object argument) {
@@ -77,42 +80,41 @@ public class BPlusTreeTests {
 		// Container treeContainer = new ConverterContainer(new
 		// BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
 
-		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
-			@Override
-			public int getMaxObjectSize() {
-				return MAX_OBJECT_SIZE;
-			}
+//		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
+//			@Override
+//			public int getMaxObjectSize() {
+//				return MAX_OBJECT_SIZE;
+//			}
+//
+//			@Override
+//			public BigInteger read(DataInput dataInput, BigInteger object) throws IOException {
+//				return BigIntegerConverter.DEFAULT_INSTANCE.read(dataInput, object);
+//			}
+//
+//			@Override
+//			public void write(DataOutput dataOutput, BigInteger object) throws IOException {
+//				BigIntegerConverter.DEFAULT_INSTANCE.write(dataOutput, object);
+//			}
+//		};
 
-			@Override
-			public BigInteger read(DataInput dataInput, BigInteger object) throws IOException {
-				return BigIntegerConverter.DEFAULT_INSTANCE.read(dataInput, object);
-			}
+		MeasuredConverter<BigInteger> measuredBigIntegerConverter = 
+				Converters.createMeasuredConverter(MAX_OBJECT_SIZE, BigIntegerConverter.DEFAULT_INSTANCE); 
 
-			@Override
-			public void write(DataOutput dataOutput, BigInteger object) throws IOException {
-				BigIntegerConverter.DEFAULT_INSTANCE.write(dataOutput, object);
-			}
-		};
 		tree.initialize(getKey, treeContainer, measuredBigIntegerConverter, measuredBigIntegerConverter,
 				BigIntegerSeparator.FACTORY_FUNCTION, BigIntegerKeyRange.FACTORY_FUNCTION);
+
 		System.out.println("Initialization of the B+ tree finished.");
-		System.out.println("BPlusTree has been created.");
+
 		return tree;
 	}
 
 	private static BPlusTree createTree_alternateConverter(String testFile) {
 		System.out.println("Creating new BPlusTree on container files: \"" + testFile + "\" ...");
-
 		System.out.println("Initialization of the B+ tree.");
-		BPlusTree tree = new BPlusTree(BLOCK_SIZE, MIN_RATIO, true);
-		Function<Object, Object> getKey = new AbstractFunction<Object, Object>() {
-			@Override
-			public Object invoke(Object argument) {
-				return argument;
-			}
-		};
 
-		// create the alternate NodeConverter
+		BPlusTree tree = new BPlusTree(BLOCK_SIZE, MIN_RATIO, true);
+
+		//-- create the alternate NodeConverter
 		Converter<BPlusTree.Node> nodeConverter = new BPlusNodeConverter(tree);
 
 		BufferedContainer treeContainer = new BufferedContainer(new ConverterContainer(new BlockFileContainer(testFile, BLOCK_SIZE),
@@ -122,36 +124,20 @@ public class BPlusTreeTests {
 		// Container treeContainer = new ConverterContainer(new
 		// BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
 
-		MeasuredConverter<BigInteger> measuredBigIntegerConverter = new MeasuredConverter<BigInteger>() {
-			@Override
-			public int getMaxObjectSize() {
-				return MAX_OBJECT_SIZE;
-			}
-
-			@Override
-			public BigInteger read(DataInput dataInput, BigInteger object) throws IOException {
-				return BigIntegerConverter.DEFAULT_INSTANCE.read(dataInput, object);
-			}
-
-			@Override
-			public void write(DataOutput dataOutput, BigInteger object) throws IOException {
-				BigIntegerConverter.DEFAULT_INSTANCE.write(dataOutput, object);
-			}
-		};
-
-		// MeasuredConverter<BigInteger> measuredBigIntegerConverter_v2 =
-		// Converters.createMeasuredConverter(MAX_OBJECT_SIZE,
-		// BigIntegerConverter.DEFAULT_INSTANCE);
+		Function<Object, Object> getKey = Identity.DEFAULT_INSTANCE;
+		
+		MeasuredConverter<BigInteger> measuredBigIntegerConverter = 
+			Converters.createMeasuredConverter(MAX_OBJECT_SIZE, BigIntegerConverter.DEFAULT_INSTANCE); 
 
 		tree.initialize(getKey, treeContainer, measuredBigIntegerConverter, measuredBigIntegerConverter,
 				BigIntegerSeparator.FACTORY_FUNCTION, BigIntegerKeyRange.FACTORY_FUNCTION);
 
 		System.out.println("Initialization of the B+ tree finished.");
-		System.out.println("BPlusTree has been created.");
+
 		return tree;
 	}
 
-	public static void testBPlusTree(BPlusTree bpTree) throws IOException {		
+	public static void testBPlusTree(BPlusTree bpTree) throws IOException {
 
 		// Generate test data
 		System.out.println();
@@ -208,22 +194,22 @@ public class BPlusTreeTests {
 
 		String fileName;
 		if (args.length > 0) { // custom container file
-			fileName = args[0];			
+			fileName = args[0];
 		} else { // std container file
 			String container_file_prefix = "simple_bplus_tree_test";
 			String test_data_dirname = "temp_data";
-			System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\"+ test_data_dirname +"\\"
+			System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + test_data_dirname + "\\"
 					+ container_file_prefix + "\"");
 
 			// and the whole thing in short
 			Path curpath = Paths.get("").toAbsolutePath();
 			if (!curpath.resolve(test_data_dirname).toFile().exists()) {
-				System.out.println("Error: Couldn't find \""+ test_data_dirname +"\" directory.");
+				System.out.println("Error: Couldn't find \"" + test_data_dirname + "\" directory.");
 				return;
 			}
 			fileName = curpath.resolve("temp_data").resolve(container_file_prefix).toString();
 			System.out.println("resolved to: \"" + fileName + "\".");
-			
+
 		}
 
 //		BPlusTree bpTree = createTree(fileName);
