@@ -226,8 +226,8 @@ public class BPlusTreeTests {
 			
 		}
 
-		BPlusTree bpTree = createTree(fileName);
-//		BPlusTree bpTree = createTree_alternateConverter(fileName);
+//		BPlusTree bpTree = createTree(fileName);
+		BPlusTree bpTree = createTree_alternateConverter(fileName);
 		testBPlusTree(bpTree);
 	}
 }

@@ -78,13 +78,7 @@ public class BPlusNodeConverter extends Converter<Node> {
 		// -- read info about next neighbor if available
 		boolean readNext = dataInput.readBoolean();
 		if (readNext) {
-			node.nextNeighbor = this.bPlusTree.new IndexEntry(level + 1); // indirect
-																			// call
-																			// of
-																			// constructor:
-																			// IndexEntry(level
-																			// +
-																			// 1)
+			node.nextNeighbor = this.bPlusTree.new IndexEntry(level + 1); // indirect call of constructor: IndexEntry(level + 1)
 			// QUE: why is "level+1" used?
 
 			Object nextNeighborId = this.bPlusTree.container().objectIdConverter().read(dataInput);
@@ -101,7 +95,7 @@ public class BPlusNodeConverter extends Converter<Node> {
 
 		// -- reads the Separators for the IndexEntries
 		Separator[] separators = new Separator[number];
-		for (int i = 0; i < node.number(); i++) {
+		for (int i = 0; i < number; i++) {
 			separators[i] = (Separator) this.bPlusTree.createSeparator.invoke(this.bPlusTree.keyConverter.read(dataInput));
 		}
 
