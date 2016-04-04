@@ -491,7 +491,7 @@ public class BPlusTree extends Tree {
                 getSplitMaxRatio);
     }
     /**
-     * Initializes the <tt>BPlusTree</tt>.It initializes
+     * Initializes the <tt>BPlusTree</tt>. It initializes
      * {@link xxl.core.indexStructures.Tree#getSplitMinRatio}and
      * {@link xxl.core.indexStructures.Tree#getSplitMaxRatio} in the following
      * manner: <code><pre>
@@ -1463,7 +1463,7 @@ public class BPlusTree extends Tree {
                     return separator(entry).sepValue();
                 }
             });
-            int minIndex =  Collections.binarySearch(sepValues, key);
+            int minIndex = Collections.binarySearch(sepValues, key);
             return (duplicate) ?  leftMostSearch(sepValues, minIndex, key ): minIndex ;
         }   
         /**
@@ -1949,11 +1949,13 @@ public class BPlusTree extends Tree {
             // Get the neighbor node with the most entries...
             Node parentNode = (Node) node(path);
             int index = parentNode.search(indexEntry);
-            index = Math.max(0, index);
+            index = Math.max(0, index); // TODO: what is this for?
+            
             IndexEntry rightSibling = null;
             Node rightNode = null;
             IndexEntry leftSibling = null;
             Node leftNode = null;
+            // TODO: always take the left sibling if it exists. Doesn't this violate the above comment?
             if (index > 0) {
                 leftSibling = (IndexEntry) parentNode.getEntry(index - 1);
                 leftNode = (Node) leftSibling.get(false);

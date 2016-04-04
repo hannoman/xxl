@@ -866,7 +866,7 @@ public class MVBTree extends BPlusTree {
 	 * @return the minimal number of entries which a new created <tt>Node</tt> may contain after a split.
 	 */	
 	protected int strongLowerBound(int level) {
-		float maxRatio= ((Float) getSplitMinRatio.invoke()).floatValue();
+		float maxRatio = ((Float) getSplitMinRatio.invoke()).floatValue();
 		return (int)(maxRatio*(level == 0 ? getLeafNodeB() : getIndexNodeB()));
 	}
 	
