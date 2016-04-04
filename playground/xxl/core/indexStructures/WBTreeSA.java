@@ -94,7 +94,8 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		@Override
 		public boolean isLeaf() {
 			return false;
-		}
+		}		
+		
 	}
 
 	public class LeafNode extends Node {
@@ -106,6 +107,14 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		}
 	}
 
+	public boolean weightOverflow(int weight, int level) {
+		return weight > 2 * HMaths.intPow(branchingParam, level);
+	}
+	
+	public boolean weightUnderflow(int weight, int level) {
+		return weight < HMaths.intPow(branchingParam, level) / 2;
+	}
+	
 	public void insert(V value) {
 		K key = getKey.apply(value);
 				
@@ -127,7 +136,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			
 			//-- doing stuff on downward traversal which can already be done
 			meta.weight++;
-			if(meta.weight > 2 * HMaths.intPow(branchingParam, level-1)) {
+			if(weightOverflow(meta.weight, level-1)) {
 				toSplit_ofWeight.push(containerID);
 			}
 			container.update(containerID, node); // tell container that this has changed
