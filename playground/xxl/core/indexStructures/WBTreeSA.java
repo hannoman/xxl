@@ -205,22 +205,26 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		 */
 		public SplitInfo split() {
 			LeafNode newode = new LeafNode();
+			int remLeft = values.size() / 2;
+			int remRight = values.size() - remLeft;
+			
 			newode.values = HUtil.splitOffRight(values, values.size() / 2, new ArrayList<V>());
 			K separator = getKey.apply(newode.values.get(0));
 			
 			//- put new node into Container
 			P newodeCID = container.insert(newode);			
 			
-			return new SplitInfo(newodeCID, separator);
+			return new SplitInfo(newodeCID, separator, remLeft, remRight);
 		}
 	}
 
 	/**
 	 * Own SplitInfo class (perhaps its similar to the one used in XXL?) to encapsulate
 	 * - the ContainerID of the generated Node
-	 * - a key used for the Separation of the nodes.
-	 *  
-	 * @author Dominik Krappel	 *
+	 * - a key used for the separation of the nodes.
+	 * - the weights of the resulting left and right node
+	 * 
+	 * @author Dominik Krappel
 	 */
 	class SplitInfo {
 		P newnodeCID;
