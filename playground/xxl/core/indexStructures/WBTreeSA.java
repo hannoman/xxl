@@ -11,22 +11,29 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
+import xxl.core.util.Triple;
 
 public class WBTreeSA<K extends Comparable<K>, V, P> {
 	/** Standalone version of a weight-balanced B+-Tree.
+	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
+	 *
+	 * TODO: this version tries to split the nodes already on downward traversal which should be slightly more performant
+	 * 		than splitting the nodes after the search has progressed to a leaf node in an additional upward run. (Afaik this technique is
+	 * 		usual on some B-Tree variants too).
+	 * 		Although this should not cause much danger the theorems from the paper should be reevaluated in this context.
+	 * 		And it's not even implemented properly as of now, as recursion still takes place before updating the directory. :/
 	 * 
+	 * TODO: B+-tree style level wise "Verpointerung" not yet implemented
+	 *   
 	 * @param K type of the keys
 	 * @param V type of the actual data
-	 * @param P type of the ContainerIDs
+	 * @param P type of the ContainerIDs (= CIDs)
 	 */
 
 	/** Number of entries in a leaf L e(L): leafParam <= e(L) < 2*leafParam */ 
 	int leafParam;
 
-	/**
-	 * Number of entries in a node N e(N): branchingParam / 4 <? e(N) <?
-	 * 4*branchingParam
-	 */
+	/** Number of entries in a node N e(N): branchingParam / 4 <? e(N) <? 4*branchingParam */
 	int branchingParam;
 
 	Node root;
@@ -42,7 +49,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	ChildMetaInfo rootMetaInfo;
 
 	/** ContainerID of the root. */
-	P rootContainerID;
+	P rootCID;
 
 	//-- Converters
 	public Converter<K> keyConverter;
@@ -57,6 +64,22 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		this.root = null;
 	}
 
+	public boolean weightUnderflow(int weight, int level) {
+		return weight < HUtil.intPow(branchingParam, level) / 2;
+	}
+
+	public boolean weightOverflow(int weight, int level) {
+		return weight > 2 * HUtil.intPow(branchingParam, level);
+	}
+
+	public boolean leafUnderflow(int weight) {
+		return weight < leafParam;
+	}
+
+	public boolean leafOverflow(int weight) {
+		return weight >= 2*leafParam;
+	}
+
 	/**
 	 * Class containing meta information about the child-nodes, which is kept in
 	 * the directory of the parent node for performance reasons.
@@ -67,6 +90,8 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	 */
 	public class ChildMetaInfo {
 		int weight;
+		
+		public ChildMetaInfo(int weight) { this.weight = weight; }
 	}
 
 	//-- Node class
@@ -112,17 +137,19 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		
 		/** Determines a feasible split position through linear search.
 		 * 
-		 * TODO: as of now only considers the quality of the left offspring node.
+		 * TODO: as of now only considers the quality of the left offspring node. Is this a problem?
 		 * 
 		 * @param targetWeight the weight per node which should be approached
 		 * @return the position of the node after which the child-list should be split
 		 */
-		public int determineSplitposition(int targetWeight) {
+		public Triple<Integer, Integer, Integer> determineSplitposition(int targetWeight) {
 			int curSum = 0;
 			int curSplitWeightMiss = 0;
 			
 			int bestSplitAfterPos = -1;
+			int bestRemLeftWeight = curSum;
 			int bestSplitWeightMiss = Math.abs(targetWeight - curSum);
+			
 			
 			for(int curSplitAfterPos = 0; curSplitAfterPos < pagePointers.size(); curSplitAfterPos++) {
 				curSum += metaInfo.get(curSplitAfterPos).weight;
@@ -131,14 +158,20 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 				if(curSplitWeightMiss < bestSplitWeightMiss) {
 					bestSplitWeightMiss = curSplitWeightMiss;
 					bestSplitAfterPos = curSplitAfterPos;
+					bestRemLeftWeight = curSum;
 				}				
 			}
 			
-			return bestSplitAfterPos;
+			int totalWeight = curSum;
+			
+			return new Triple<Integer, Integer, Integer>(bestSplitAfterPos, bestRemLeftWeight, totalWeight - bestRemLeftWeight);
 		}
 		
 		public SplitInfo split(int targetWeight) {
-			int splitPos = determineSplitposition(targetWeight);
+			Triple<Integer, Integer, Integer> splitPosInfo = determineSplitposition(targetWeight);
+			int splitPos = splitPosInfo.getElement1();
+			int remLeft = splitPosInfo.getElement2();
+			int remRight = splitPosInfo.getElement3();
 			
 			InnerNode newode = new InnerNode();
 			
@@ -154,7 +187,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			//- put new node into Container
 			P newodeCID = container.insert(newode);			
 			
-			return new SplitInfo(newodeCID, offspringSeparator);			
+			return new SplitInfo(newodeCID, offspringSeparator, remLeft, remRight);			
 		}
 		
 	}
@@ -182,25 +215,6 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		}
 	}
 
-	public boolean weightUnderflow(int weight, int level) {
-		return weight < HUtil.intPow(branchingParam, level) / 2;
-	}
-	
-	public boolean weightOverflow(int weight, int level) {
-		return weight > 2 * HUtil.intPow(branchingParam, level);
-	}		
-	
-	public boolean leafUnderflow(int weight) {
-		return weight < leafParam;
-	}
-	
-	public boolean leafOverflow(int weight) {
-		return weight >= 2*leafParam;
-	}
-	
-	
-	
-	
 	/**
 	 * Own SplitInfo class (perhaps its similar to the one used in XXL?) to encapsulate
 	 * - the ContainerID of the generated Node
@@ -211,10 +225,14 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	class SplitInfo {
 		P newnodeCID;
 		K separator;
+		int weightLeft;
+		int weightRight;		
 		
-		public SplitInfo(P newnodeCID, K separator) {		
+		public SplitInfo(P newnodeCID, K separator, int weightLeft, int weightRight) {		
 			this.newnodeCID = newnodeCID;
 			this.separator = separator;
+			this.weightLeft = weightLeft;
+			this.weightRight = weightRight;
 		}
 	}
 	
@@ -226,9 +244,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	 */
 	public SplitInfo insert(V value, P belowCID, int level) {
 		Node node = container.get(belowCID);
-		if(node.isLeaf()) {
-			insertLeaf(value, belowCID);
-		} 
+		if(node.isLeaf()) return insertLeaf(value, belowCID);
 		
 		InnerNode inode = (InnerNode) node;
 		K key = getKey.apply(value);
@@ -247,7 +263,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			}
 			
 			return splitInfo; // propagate splitInfo to parent
-		} else { // no split here			
+		} else { // no split in this node (or already done)			
 			//- determine next node
 			int pos = HUtil.findPos(inode.separators, key);
 			
@@ -258,13 +274,21 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			SplitInfo splitInfo = insert(value, nextCID, level-1); // recursion
 			if(splitInfo != null) { // a split occured in child and we need to update the directory
 				inode.separators.add(pos, splitInfo.separator);
-				inode.pagePointers.add(pos+1, splitInfo.newnodeCID);				
+				inode.pagePointers.add(pos+1, splitInfo.newnodeCID);
+				inode.metaInfo.get(pos).weight = splitInfo.weightLeft;
+				inode.metaInfo.add(pos+1, new ChildMetaInfo(splitInfo.weightRight));
 			}						
 			container.update(belowCID, inode); // update the container contents
 			
 			return null; // no splitInfo to propagate
 		}
 	}
+	
+	/** Trying a iterative version again. */
+	public void insertIter(V value) {
+		
+	}
+	
 	
 	public SplitInfo insertLeaf(V value, P belowCID) {
 		LeafNode lnode = (LeafNode) container.get(belowCID);
@@ -286,82 +310,44 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	}
 
 	
-	/** Naive (= without considerations regarding greater system design) implementation
-	 * of <tt>insert</tt>. Doing as much things directly as possible.
-	 *  
-	 * @param value data value to insert
-	 */
-	public void insert(V value) {
+	public void insertRoot(V value) {
 		K key = getKey.apply(value);
-				
-		// keep track of the nodes which have to split because of a weight violation
-		Stack<P> toSplit_ofWeight = new Stack<P>();
-		Stack<P> path = new Stack<P>();
-		// keeping track of parents during the descent as we don't keep that information in the nodes anymore
-		HashMap<P,P> parents = new HashMap<P,P>(); 
-		
-		
-		P containerID = rootContainerID;
-		Node node = root;
-		ChildMetaInfo meta = rootMetaInfo;
+		InnerNode rnode = (InnerNode) container.get(rootCID);
 		int level = rootHeight;
 		
-		// bookkeep information about parents
-		parents.put(containerID, !path.isEmpty() ? path.peek() : null);
-		path.push(containerID);
-		
-		// increase weight of root
-		meta.weight++;
-		if(weightOverflow(meta.weight, level-1)) {
-			toSplit_ofWeight.push(containerID);
+		// special treatment of root		
+		if(weightOverflow(rootMetaInfo.weight + 1, rootHeight)) {
+			// split root
+			int targetWeight = HUtil.intPow(branchingParam, level);
+			SplitInfo splitInfo = rnode.split(targetWeight);
+			
+			// create new root
+			InnerNode newroot = new InnerNode();
+			newroot.separators = new ArrayList<K>();
+			newroot.separators.add(splitInfo.separator);
+			
+			newroot.pagePointers = new ArrayList<P>();
+			newroot.pagePointers.add(rootCID);
+			newroot.pagePointers.add(splitInfo.newnodeCID);
+			
+			newroot.metaInfo = new ArrayList<ChildMetaInfo>();
+			newroot.metaInfo.add(new ChildMetaInfo(splitInfo.weightLeft));
+			newroot.metaInfo.add(new ChildMetaInfo(splitInfo.weightRight));
+			
+			// overwrite old root
+			P oldRootCID = rootCID;
+			rootCID = container.insert(newroot);
+			rootHeight++;
+			rootMetaInfo.weight++;
+						
+			// determine offspring node to continue with, which is guaranteed to not split again
+			if(key.compareTo(splitInfo.separator) <= 0)
+				insert(value, oldRootCID, level);
+			else insert(value, splitInfo.newnodeCID, level);
+		} else {
+			insert(value, rootCID, rootHeight);
 		}
 		
-		while(node.isInner()) {
-			//- we are in an inner node, so lets find the next node
-			InnerNode inode = (InnerNode) node;
-			int pos = Math.abs(Collections.binarySearch(inode.separators, key));
-			
-			containerID = inode.pagePointers.get(pos);
-			meta = inode.metaInfo.get(pos);
-			
-			//-- descend
-			node = container.get(containerID);
-			level--;
-			
-			//-- doing stuff on downward traversal which can already be done
-			meta.weight++;
-			if(weightOverflow(meta.weight, level-1)) {
-				toSplit_ofWeight.push(containerID);
-			}
-			container.update(containerID, node); // tell container that this has changed			
-		}
-		
-		assert(node.isLeaf());
-		
-		//-- actual insert value in leaf 
-		LeafNode lnode = (LeafNode) node;
-		P leafCID = containerID;
-		
-		// old version using helpers from XXL
-		int insertPos = Collections.binarySearch(new MappedList<V,K>(lnode.values, FunctionsJ8.toOldFunction(getKey)), key);
-		
-		// new version utilizing Java8 functional capabilities
-		// nvm, doesn't work that way and would probably be less efficient anyway
-		// int insertPos = Collections.binarySearch(lnode.values.stream().map(getKey), key); 
-				
-		lnode.values.add(Math.abs(insertPos), value);		
-		container.update(containerID, node); // tell container that this has changed		
-		
-		// check if leaf is overflowing
-		if(leafOverflow(meta.weight)) {
-			LeafNode newode = new LeafNode();
-			List<V> transferPart = lnode.values.subList(lnode.values.size() / 2, lnode.values.size());
-			newode.values = new ArrayList<V>(transferPart);
-			transferPart.clear();
-			
-			InnerNode pnode = (InnerNode) container.get(parents.get(leafCID));
-			// TODO
-		}
 		
 	}
 		
