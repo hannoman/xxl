@@ -2,9 +2,11 @@ package xxl.core.indexStructures;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Stack;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.TypeSafeContainer;
@@ -36,8 +38,6 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	/** Number of entries in a node N e(N): branchingParam / 4 <? e(N) <? 4*branchingParam */
 	int branchingParam;
 
-	Node root;
-
 	public java.util.function.Function<V, K> getKey; // TODO: set it somewhere
 
 	public TypeSafeContainer<P, Node> container; // TODO: set it somewhere
@@ -56,13 +56,35 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	public Converter<V> valueConverter;
 	public Converter<Node> nodeConverter;
 
-	//-- Constructors
-	public WBTreeSA(int leafParam, int branchingParam) {
-		// super();
+	//-- Constructors	
+	public WBTreeSA(
+			int leafParam, 
+			int branchingParam, 
+			Function<V, K> getKey, 
+			Converter<K> keyConverter, 
+			Converter<V> valueConverter) {
+		super();
 		this.leafParam = leafParam;
 		this.branchingParam = branchingParam;
-		this.root = null;
+		this.getKey = getKey;
+		this.keyConverter = keyConverter;
+		this.valueConverter = valueConverter;
 	}
+
+	public void initializeNew(	
+			TypeSafeContainer<P, Node> container) {
+		this.keyConverter = keyConverter;
+		this.valueConverter = valueConverter;
+		this.container = container;
+		
+	}
+	
+	public void initializeOld(
+			Converter<K> keyConverter, 
+			Converter<V> valueConverter, 
+			TypeSafeContainer<P, Node> container,
+			
+			)
 
 	public boolean weightUnderflow(int weight, int level) {
 		return weight < HUtil.intPow(branchingParam, level) / 2;
@@ -190,6 +212,17 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			return new SplitInfo(newodeCID, offspringSeparator, remLeft, remRight);			
 		}
 		
+		/**
+		 * Determine the following node's CID on key's search path.
+		 * @param key the key to look for
+		 * @return P containerID of the next node
+		 */
+		public P chooseSubtree(K key) {
+			int pos = HUtil.findPos(separators, key);			
+			return pagePointers.get(pos);
+		}
+		
+		
 	}
 
 	public class LeafNode extends Node {
@@ -215,6 +248,28 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			P newodeCID = container.insert(newode);			
 			
 			return new SplitInfo(newodeCID, separator, remLeft, remRight);
+		}
+		
+		/**
+		 * Returns the indices of the found values. 
+		 * @param key key to look for
+		 * @return list of indices i with "getKey(values[i]) == key" 
+		 */
+		public List<Integer> lookup(K key) {
+			List<Integer> idx = new LinkedList<Integer>();
+			
+			List<K> mappedList = new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey));
+			
+			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
+			
+			if(pos >= 0) { // key found
+				while(key.compareTo(getKey.apply(values.get(pos))) == 0) {
+					idx.add(pos);
+					pos++;
+				}				
+			}
+			
+			return idx;
 		}
 	}
 
@@ -246,7 +301,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	 * 
 	 * @return the containerID of the new generated Node if a split occured.
 	 */
-	public SplitInfo insert(V value, P belowCID, int level) {
+	protected SplitInfo insertInner(V value, P belowCID, int level) {
 		Node node = container.get(belowCID);
 		if(node.isLeaf()) return insertLeaf(value, belowCID);
 		
@@ -261,9 +316,9 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			// determine offspring node to continue with, which is guaranteed to not split again
 			if(key.compareTo(splitInfo.separator) <= 0) {
 				// stay in old node; this mainly just reenters this function 
-				insert(value, belowCID, level);
+				insertInner(value, belowCID, level);
 			} else {
-				insert(value, splitInfo.newnodeCID, level);
+				insertInner(value, splitInfo.newnodeCID, level);
 			}
 			
 			return splitInfo; // propagate splitInfo to parent
@@ -275,7 +330,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			ChildMetaInfo nextMeta = inode.metaInfo.get(pos);
 			nextMeta.weight++;
 			
-			SplitInfo splitInfo = insert(value, nextCID, level-1); // recursion
+			SplitInfo splitInfo = insertInner(value, nextCID, level-1); // recursion
 			if(splitInfo != null) { // a split occured in child and we need to update the directory
 				inode.separators.add(pos, splitInfo.separator);
 				inode.pagePointers.add(pos+1, splitInfo.newnodeCID);
@@ -288,13 +343,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		}
 	}
 	
-	/** Trying a iterative version again. */
-	public void insertIter(V value) {
-		
-	}
-	
-	
-	public SplitInfo insertLeaf(V value, P belowCID) {
+	protected SplitInfo insertLeaf(V value, P belowCID) {
 		LeafNode lnode = (LeafNode) container.get(belowCID);
 		
 		SplitInfo splitInfo = null;
@@ -314,15 +363,20 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	}
 
 	
-	public void insertRoot(V value) {
+	protected void insertRoot(V value) {
 		K key = getKey.apply(value);
+		// is tree empty?
+		if(rootCID == null) {
+			// TODO
+		}
+		
 		InnerNode rnode = (InnerNode) container.get(rootCID);
 		int level = rootHeight;
 		
 		// special treatment of root		
 		if(weightOverflow(rootMetaInfo.weight + 1, rootHeight)) {
 			// split root
-			int targetWeight = HUtil.intPow(branchingParam, level);
+			int targetWeight = HUtil.intPow(branchingParam, rootHeight);
 			SplitInfo splitInfo = rnode.split(targetWeight);
 			
 			// create new root
@@ -345,15 +399,46 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			rootMetaInfo.weight++;
 						
 			// determine offspring node to continue with, which is guaranteed to not split again
-			if(key.compareTo(splitInfo.separator) <= 0)
-				insert(value, oldRootCID, level);
-			else insert(value, splitInfo.newnodeCID, level);
-		} else {
-			insert(value, rootCID, rootHeight);
-		}
-		
+			if(key.compareTo(splitInfo.separator) <= 0)	
+				insertInner(value, oldRootCID, rootHeight-1);
+			else 										
+				insertInner(value, splitInfo.newnodeCID, rootHeight-1);
+		} else { 
+			insertInner(value, rootCID, rootHeight);
+		}		
 		
 	}
+	
+	
+	public void insert(V value) {
+		insertRoot(value);
+	}
+	
 		
+	/**
+	 * Lookup.
+	 * @param key
+	 * @return
+	 */
+	public List<V> get(K key) {
+		int level = rootHeight;
+		P nodeCID = rootCID;
+		while(level > 0) {
+			nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtree(key);
+			level--;
+		}		
+		LeafNode lnode = (LeafNode) container.get(nodeCID);
+		List<Integer> hitIdx = lnode.lookup(key);
+		Stream<V> results = hitIdx.stream().map(lnode.values::get);
+		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
+		
+		return resultsV;		
+	}
 
+	
+//	/** Trying an iterative version again. */
+//	public void insertIter(V value) {
+//		
+//	}
+	
 }
