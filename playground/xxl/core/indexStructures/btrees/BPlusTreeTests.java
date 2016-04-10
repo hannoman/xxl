@@ -196,10 +196,10 @@ public class BPlusTreeTests {
 		if (args.length > 0) { // custom container file
 			fileName = args[0];
 		} else { // std container file
-			String container_file_prefix = "simple_bplus_tree_test";
+			String CONTAINER_FILE_PREFIX = "simple_bplus_tree_test";
 			String test_data_dirname = "temp_data";
 			System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + test_data_dirname + "\\"
-					+ container_file_prefix + "\"");
+					+ CONTAINER_FILE_PREFIX + "\"");
 
 			// and the whole thing in short
 			Path curpath = Paths.get("").toAbsolutePath();
@@ -207,7 +207,7 @@ public class BPlusTreeTests {
 				System.out.println("Error: Couldn't find \"" + test_data_dirname + "\" directory.");
 				return;
 			}
-			fileName = curpath.resolve("temp_data").resolve(container_file_prefix).toString();
+			fileName = curpath.resolve("temp_data").resolve(CONTAINER_FILE_PREFIX).toString();
 			System.out.println("resolved to: \"" + fileName + "\".");
 
 		}

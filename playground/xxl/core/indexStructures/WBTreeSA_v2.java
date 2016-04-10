@@ -15,17 +15,16 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class WBTreeSA<K extends Comparable<K>, V, P> {
+public class WBTreeSA_v2<K extends Comparable<K>, V, P> {
 	/** Standalone version of a weight-balanced B+-Tree.
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *
-	 * TODO: this version tries to split the nodes already on downward traversal which should be slightly more performant
-	 * 		than splitting the nodes after the search has progressed to a leaf node in an additional upward run. (Afaik this technique is
-	 * 		usual on some B-Tree variants too).
-	 * 		Although this should not cause much danger the theorems from the paper should be reevaluated in this context.
-	 * 		-> And it's not even implemented properly as of now, as recursion still takes place before updating the directory. :/
+	 * Trying to implement a simpler version which doesn't do preemptive splitting. It instead splits 
+	 * the nodes during bottom-up back traversal. Therefore it also keeps the whole path in memory
+	 * and is thereby prone to the same error as the xxl BPlusTree implementation regarding buffers:
+	 * that the buffer size must always be greater or equal than the tree height.
 	 * 
-	 * TODO: B+-tree style level wise "Verpointerung" not yet implemented
+	 * - Mind that this is no real BPlusTree as there are no pointers between siblings and cousins. 
 	 *   
 	 * @param K type of the keys
 	 * @param V type of the actual data
@@ -46,7 +45,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 	int rootHeight;
 
 	/** Meta-information about the root. Root has no parent so it must be saved elsewhere. */
-	ChildMetaInfo rootMetaInfo;
+	int rootWeight;
 
 	/** ContainerID of the root. */
 	P rootCID;
@@ -62,7 +61,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		implement the <tt>NodeConverter</tt> functionality once again (like in xxl) as inner class of this tree class.
 	- Information about the root --> initialize
 	*/
-	public WBTreeSA(
+	public WBTreeSA_v2(
 			int leafParam, 
 			int branchingParam, 
 			Function<V, K> getKey, 
@@ -87,11 +86,11 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			TypeSafeContainer<P, Node> container, 
 			P rootCID, 
 			int rootHeight, 
-			ChildMetaInfo rootMetaInfo) {
+			int rootWeight) {
 		this.container = container;
 		this.rootCID = rootCID;
 		this.rootHeight = rootHeight;
-		this.rootMetaInfo = rootMetaInfo;
+		this.rootWeight = rootWeight;
 	}
 	
 	/** Initializes a new tree.
@@ -153,7 +152,10 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			return isLeaf() ? (LeafNode) this : null;
 		}		
 		
-		public abstract SplitInfo split();
+		// public abstract SplitInfo split();
+		
+		public abstract void insert(V value, InnerNode parent, P parentCID);		
+		 
 	}
 
 	public class InnerNode extends Node {
@@ -162,7 +164,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		/** weights are saved inside the parent to make it possible to determine a node's split without having to load all child-nodes from disk
 		 * to access the weight information.
 		 */
-		List<ChildMetaInfo> metaInfo;
+		List<Integer> childWeights;
 
 		
 		@Override
@@ -172,8 +174,8 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		
 		public int totalWeight() {
 			int summed = 0;
-			for(ChildMetaInfo childMet : metaInfo) {
-				summed += childMet.weight;
+			for(int w : childWeights) {
+				summed += w;
 			}
 			return summed;
 		}
@@ -186,7 +188,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		 * @param targetWeight the weight per node which should be approached
 		 * @return the position of the node after which the child-list should be split
 		 */
-		public Triple<Integer, Integer, Integer> determineSplitposition(int targetWeight) {
+		protected Triple<Integer, Integer, Integer> determineSplitposition(int targetWeight) {
 			int curSum = 0;
 			int curSplitWeightMiss = 0;
 			
@@ -196,7 +198,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			
 			
 			for(int curSplitAfterPos = 0; curSplitAfterPos < pagePointers.size(); curSplitAfterPos++) {
-				curSum += metaInfo.get(curSplitAfterPos).weight;
+				curSum += childWeights.get(curSplitAfterPos);
 				curSplitWeightMiss = Math.abs(targetWeight - curSum);
 				
 				if(curSplitWeightMiss < bestSplitWeightMiss) {
@@ -226,7 +228,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			
 			//- split other lists
 			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
-			newode.metaInfo = HUtil.splitOffRight(metaInfo, splitPos, new ArrayList<ChildMetaInfo>());
+			newode.childWeights = HUtil.splitOffRight(childWeights, splitPos, new ArrayList<Integer>());
 			
 			//- put new node into Container
 			P newodeCID = container.insert(newode);			
@@ -240,8 +242,48 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		 * @return P containerID of the next node
 		 */
 		public P chooseSubtree(K key) {
-			int pos = HUtil.findPos(separators, key);			
+			int pos = HUtil.findPos(separators, key);
 			return pagePointers.get(pos);
+		}
+		
+		public void insert(V value, InnerNode parent, P parentCID, int inParentPos, P thisCID) {
+			K key = getKey.apply(value);
+			
+			InnerNode inode = (InnerNode) node;			
+			
+			// check if this will need to split and if so do it now
+			if(weightOverflow(totalWeight() + 1, level)) {
+				int targetWeight = HUtil.intPow(branchingParam, level);
+				SplitInfo splitInfo = split(targetWeight);
+				
+				// determine offspring node to continue with, which is guaranteed to not split again
+				if(key.compareTo(splitInfo.separator) <= 0) {
+					// stay in old node; this mainly just reenters this function 
+					insertInner(value, belowCID, level);
+				} else {
+					insertInner(value, splitInfo.newnodeCID, level);
+				}
+				
+				return splitInfo; // propagate splitInfo to parent
+			} else { // no split in this node (or already done)			
+				//- determine next node
+				int pos = HUtil.findPos(separators, key);
+				
+				P nextCID = pagePointers.get(pos);
+				int nextWeight = childWeights.get(pos);
+				childWeights.set(pos, nextWeight+1); // ?
+				
+				SplitInfo splitInfo = insertInner(value, nextCID, level-1); // recursion
+				if(splitInfo != null) { // a split occured in child and we need to update the directory
+					inode.separators.add(pos, splitInfo.separator);
+					inode.pagePointers.add(pos+1, splitInfo.newnodeCID);
+					inode.childWeights.set(pos, splitInfo.weightLeft);
+					inode.childWeights.add(pos+1, splitInfo.weightRight);
+				}						
+				container.update(belowCID, inode); // update the container contents
+				
+				return null; // no splitInfo to propagate
+			}
 		}
 		
 		
@@ -292,6 +334,27 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			}
 			
 			return idx;
+		}
+
+		public void insert(V value, InnerNode parent, P parentCID, int inParentPos, P thisCID) {
+			K key = getKey.apply(value);
+			int insertPos = HUtil.findPos(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
+			values.add(insertPos, value);
+			
+			if(leafOverflow(values.size())) {
+				SplitInfo splitInfo = split();
+				// update parent
+				parent.separators.add(inParentPos+1, splitInfo.separator);
+				parent.pagePointers.add(inParentPos+1, splitInfo.newnodeCID);				
+				parent.childWeights.set(inParentPos, splitInfo.weightLeft);
+				parent.childWeights.add(inParentPos+1, splitInfo.weightRight);
+				
+				// update container contents of parent
+				container.update(parentCID, parent);
+			}
+			
+			// update container contents of self
+			container.update(thisCID, this);			
 		}
 	}
 
@@ -349,15 +412,15 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			int pos = HUtil.findPos(inode.separators, key);
 			
 			P nextCID = inode.pagePointers.get(pos);
-			ChildMetaInfo nextMeta = inode.metaInfo.get(pos);
-			nextMeta.weight++;
+			int nextWeight = inode.childWeights.get(pos);
+			inode.childWeights.set(pos, nextWeight+1);
 			
 			SplitInfo splitInfo = insertInner(value, nextCID, level-1); // recursion
 			if(splitInfo != null) { // a split occured in child and we need to update the directory
 				inode.separators.add(pos, splitInfo.separator);
 				inode.pagePointers.add(pos+1, splitInfo.newnodeCID);
-				inode.metaInfo.get(pos).weight = splitInfo.weightLeft;
-				inode.metaInfo.add(pos+1, new ChildMetaInfo(splitInfo.weightRight));
+				inode.childWeights.set(pos, splitInfo.weightLeft);
+				inode.childWeights.add(pos+1, splitInfo.weightRight);
 			}						
 			container.update(belowCID, inode); // update the container contents
 			
@@ -393,11 +456,11 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		if(rootCID == null) { // no root present == tree empty
 			// TODO
 			LeafNode newroot = new LeafNode();
-			newroot.values = ArrayList<V>();
-			values.add(value);			
+			newroot.values = new ArrayList<V>();
+			newroot.values.add(value);			
 			rootCID = container.insert(newroot);
 			rootHeight = 0;
-			rootMetaInfo = new ChildMetaInfo(1);
+			rootWeight = 1;
 		} else if(rootHeight == 0) { // root is just a leaf
 			
 		}
@@ -405,7 +468,7 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		rnode = (InnerNode) container.get(rootCID);		
 		
 		// root overflow?		
-		if(weightOverflow(rootMetaInfo.weight + 1, rootHeight)) {
+		if(weightOverflow(rootWeight + 1, rootHeight)) {
 			// split root
 			int targetWeight = HUtil.intPow(branchingParam, rootHeight);
 			SplitInfo splitInfo = rnode.split(targetWeight);
@@ -419,15 +482,15 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 			newroot.pagePointers.add(rootCID);
 			newroot.pagePointers.add(splitInfo.newnodeCID);
 			
-			newroot.metaInfo = new ArrayList<ChildMetaInfo>();
-			newroot.metaInfo.add(new ChildMetaInfo(splitInfo.weightLeft));
-			newroot.metaInfo.add(new ChildMetaInfo(splitInfo.weightRight));
+			newroot.childWeights = new ArrayList<Integer>();
+			newroot.childWeights.add(splitInfo.weightLeft);
+			newroot.childWeights.add(splitInfo.weightRight);
 			
 			// overwrite old root
 			P oldRootCID = rootCID;
 			rootCID = container.insert(newroot);
 			rootHeight++;
-			rootMetaInfo.weight++;
+			rootWeight++;
 						
 			// determine offspring node to continue with, which is guaranteed to not split again
 			if(key.compareTo(splitInfo.separator) <= 0)	
@@ -465,11 +528,5 @@ public class WBTreeSA<K extends Comparable<K>, V, P> {
 		
 		return resultsV;		
 	}
-
-	
-//	/** Trying an iterative version again. */
-//	public void insertIter(V value) {
-//		
-//	}
 	
 }
