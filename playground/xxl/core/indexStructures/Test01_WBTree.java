@@ -11,14 +11,13 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.indexStructures.WBTreeSA_v3.InnerNode;
-import xxl.core.indexStructures.WBTreeSA_v3.NodeConverter;
 import xxl.core.io.converters.IntegerConverter;
 
 public class Test01_WBTree {
 	
 	static final int BLOCK_SIZE = 1024;
 	
-	public static void testConverters(NodeConverter nodeConverter) {
+	public static void testConverters(WBTree_NodeConverter nodeConverter) {
 		ByteArrayOutputStream dataOut = new ByteArrayOutputStream();
 		
 		// create test node

@@ -71,7 +71,7 @@ public class Test02_WBTree {
 		//--- Lookup test
 		//-- positive lookups
 		
-		final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS;
+		final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
 		List<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
 		int errors_positiveLookup = 0;
 		for(int i=1; i <= LOOKUP_TESTS_POSITIVE; i++) {
@@ -83,13 +83,32 @@ public class Test02_WBTree {
 			if(!treeAnswers.contains(mapAnswer)) {
 				System.out.println("Didn't find value \""+ mapAnswer +"\" for key \""+ key +"\". Only: "+ treeAnswers.toString());
 				errors_positiveLookup++;
-			} else if(treeAnswers.size() > 1) {
+			} 
+			if(treeAnswers.size() > 1) {
 				System.out.println("Found multiple values for key \""+ key +"\": "+ treeAnswers.toString());
 			}
 		}
 		
 		System.out.println("Out of "+ LOOKUP_TESTS_POSITIVE +" (perhaps duplicate) positive lookups, failed on "+ errors_positiveLookup +" occasions.");
 		
+		//-- (mostly) negative (= random) lookups
+		final int LOOKUP_TESTS_RANDOM = NUMBER_OF_ELEMENTS / 2;
+		int errors_randomLookup = 0;
+		for(int i=1; i < LOOKUP_TESTS_RANDOM; i++) {
+			Integer key = random.nextInt();
+			
+			List<Integer> treeAnswers = tree.get(key);
+			if(!treeAnswers.isEmpty() && !containedKeys.contains(key)) {
+				System.out.println("False positive: \""+ key +"\"");
+				errors_randomLookup++;
+			}
+			else if(treeAnswers.isEmpty() && containedKeys.contains(key)) {
+				System.out.println("False negative: \""+ key +"\"");
+				errors_randomLookup++;
+			}
+		}
+		
+		System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");
 		
 //		//-- Delete test
 //		random = new Random(42);

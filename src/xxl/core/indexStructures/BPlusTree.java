@@ -2869,7 +2869,7 @@ public class BPlusTree extends Tree {
          * Read the entries of the given <tt>Node</tt> from the
          * <tt>DataInput</tt>. If the <tt>Node</tt> is a leaf the
          * <tt>dataConverter</tt> is used to read its data objects. Otherwise
-         * the method {@link #readIndexEntry(DataInput, int)}is used to read
+         * the method {@link #readIndexEntry(DataInput, int)} is used to read
          * its <tt>IndexEntries</tt>.
          * 
          * @param input

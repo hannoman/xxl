@@ -1,8 +1,5 @@
 package xxl.core.indexStructures;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -12,7 +9,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import xxl.core.collections.MappedList;
+import xxl.core.collections.containers.CastingContainer;
+import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
+import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.indexStructures.BPlusTree.IndexEntry;
 import xxl.core.indexStructures.BPlusTree.Node;
@@ -57,56 +57,44 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	/** ContainerID of the root. */
 	P rootCID;
 
-	//-- Converters
-	public Converter<K> keyConverter;
-	public Converter<V> valueConverter;
-	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in xxl) as inner class of this tree class.
-	- Information about the root --> initialize
 	*/
 	public WBTreeSA_v3(
 			int leafParam, 
 			int branchingParam, 
-			Function<V, K> getKey, 
-			Converter<K> keyConverter, 
-			Converter<V> valueConverter) {
+			Function<V, K> getKey) {
 		super();
 		this.leafParam = leafParam;
 		this.branchingParam = branchingParam;
-		this.getKey = getKey;
-		this.keyConverter = keyConverter;
-		this.valueConverter = valueConverter;
+		this.getKey = getKey;		
 	}	
 
-	/** Initialization from an existing tree.
+	/** Initialize the tree with a raw container (e.g. <tt>BlockFileContainer</tt>) and the needed converters.
+	 * We construct the usable node container from them ourselfes.
 	 * 
-	 * @param container container where the exisiting tree resides
-	 * @param rootCID containerID of the exisiting root
-	 * @param rootHeight height of the existing tree
-	 * @param rootMetaInfo weight of the existing tree
+	 * @param rawContainer container to store the data in
+	 * @param keyConverter converter for the key-type K 
+	 * @param valueConverter converter for the value type V
 	 */
-//	public void initializeOld(
-//			TypeSafeContainer<P, Node> container, 
-//			P rootCID, 
-//			int rootHeight, 
-//			int rootWeight) {
-//		this.container = container;
-//		this.rootCID = rootCID;
-//		this.rootHeight = rootHeight;
-//		this.rootWeight = rootWeight;
-//	}
-	
-	/** Initializes a new tree.
-	 * 
-	 * @param container the container to store the new tree in.
-	 */
-	public void initializeNew(
-			TypeSafeContainer<P, Node> container) {
-		this.container = container;		
+	public void initialize_buildContainer(Container rawContainer, Converter<K> keyConverter, Converter<V> valueConverter) {
+		WBTree_NodeConverter<K, V, P> nodeConverter = 
+				new WBTree_NodeConverter<K,V,P>(this, keyConverter, valueConverter, rawContainer.objectIdConverter());
+		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
+
+	/** Initialize the tree with a ready to use container.
+	 * The tree really only needs the container to store nodes. It doesn't need to know about
+	 * the Converters used.
+	 * 
+	 * @param container a ready-to-go container which maps P to Nodes. Has to be built elsewhere.
+	 */
+	public void initialize_withReadyContainer(TypeSafeContainer<P, Node> container) {
+		this.container = container;
+	}
+	
 
 	public boolean weightUnderflow(int weight, int level) {
 		return weight <= HUtil.intPow(branchingParam, level) / 2 * leafParam;
@@ -341,122 +329,6 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		}
 	}
 
-	public NodeConverter getNodeConverter() {
-		return new NodeConverter();
-	}
-	
-	public class NodeConverter extends Converter<Node> {
-
-		@Override
-		public Node read(DataInput dataInput, Node unused) throws IOException {
-			boolean isLeaf = dataInput.readBoolean();
-			if (isLeaf) {
-				return readLeafNode(dataInput);
-			} else {
-				return readInnerNode(dataInput);
-			}
-		}
-
-		LeafNode readLeafNode(DataInput dataInput) throws IOException {
-			// create Node shell
-			LeafNode node = new LeafNode();
-
-			// - read weight == number of entries
-			int nChildren = dataInput.readInt();
-
-			// -- read the content of the node
-			node.values = new LinkedList<V>();
-			for (int i = 0; i < nChildren; i++) {
-				node.values.add(valueConverter.read(dataInput));
-			}
-
-			return node;
-		}
-
-		InnerNode readInnerNode(DataInput dataInput) throws IOException {
-			InnerNode node = new InnerNode();
-			
-			// - read number of childs
-			int nChildren = dataInput.readInt();
-
-			// -- read separators
-			node.separators = new LinkedList<K>();
-			for(int i=0; i < nChildren-1; i++) { // only #childs-1 separators!
-				node.separators.add(keyConverter.read(dataInput));
-			}
-			
-			// -- read the ContainerIDs of the IndexEntries
-			node.pagePointers = new LinkedList<P>();			
-			for (int i = 0; i < nChildren; i++) {
-				node.pagePointers.add(container.objectIdConverter().read(dataInput));
-			}
-			
-			// -- read weights
-			node.childWeights = new LinkedList<Integer>();
-			for (int i = 0; i < nChildren; i++) {
-				node.childWeights.add(dataInput.readInt());
-			}
-
-			return node;
-		}
-
-		@Override
-		public void write(DataOutput dataOutput, Node node) throws IOException {			
-			if (node.isLeaf()) {
-				dataOutput.writeBoolean(true);
-				writeRemainingLeafNode(dataOutput, (LeafNode) node);
-			} else {
-				dataOutput.writeBoolean(false);
-				writeRemainingInnerNode(dataOutput, (InnerNode) node);
-			}
-		}
-
-		void writeRemainingLeafNode(DataOutput dataOutput, LeafNode node) throws IOException {
-			// - write number of children
-			dataOutput.writeInt(node.values.size());
-			
-			// - write values
-			for(V value : node.values) {
-				valueConverter.write(dataOutput, value);
-			}
-		}
-
-		void writeRemainingInnerNode(DataOutput dataOutput, InnerNode node) throws IOException {
-			// - write number of children
-			dataOutput.writeInt(node.pagePointers.size());
-
-			// -- write separators
-			for (K key : node.separators) {
-				keyConverter.write(dataOutput, key);
-			}
-
-			// -- write ContainerIDs
-			for (P childCID : node.pagePointers) {
-				container.objectIdConverter().write(dataOutput, childCID);
-			}
-			
-			// -- write weights
-			for(int w : node.childWeights) {
-				dataOutput.writeInt(w);
-			}
-
-		}
-
-//		protected int indexEntrySize() {
-//			// return BPlusTree.this.container().getIdSize()
-//			// + keyConverter.getMaxObjectSize();
-//			return this.bPlusTree.container().getIdSize() + this.bPlusTree.keyConverter.getMaxObjectSize();
-//		}
-//
-//		protected int leafEntrySize() {
-//			return this.bPlusTree.dataConverter.getMaxObjectSize();
-//		}
-//
-//		protected int headerSize() {
-//			return 2 * IntegerConverter.SIZE + BooleanConverter.SIZE + this.bPlusTree.container().getIdSize();
-//		}
-	}
-	
 	public void insert(V value) {
 		
 		if(rootCID == null) { // tree empty
