@@ -13,6 +13,7 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
 
 public class Test02_WBTree {
@@ -29,21 +30,27 @@ public class Test02_WBTree {
 		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
 				10, 										// leafParam
 				5, 											// branchingParam
-				(x -> x), 									// getKey
-				IntegerConverter.DEFAULT_INSTANCE, 			// keyConverter 
-				IntegerConverter.DEFAULT_INSTANCE);			// valueConverter
+				(x -> x)); 									// getKey
 
+		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+		Converter<Integer> valueConverter = IntegerConverter.DEFAULT_INSTANCE;
+		
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
 		
-		TypeSafeContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node> treeContainer = 
-				new CastingContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node>(
-//						new DebugContainer(
-								new ConverterContainer(treeRawContainer, tree.getNodeConverter())
-//								)
-						); 
-		
-		tree.initializeNew(treeContainer);
+		//-- Initialization with externally built Container
+//		Converter<WBTreeSA_v3<Integer, Integer, Long>.Node> nodeConverter = 
+//				tree.new NodeConverter(keyConverter, valueConverter, treeRawContainer.objectIdConverter());
+//		
+//		TypeSafeContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node> treeContainer = 
+//				new CastingContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node>(
+//					new ConverterContainer(treeRawContainer, nodeConverter)
+//				); 
+//		
+//		tree.initialize_withReadyContainer(treeContainer);
 
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		
 		System.out.println("Initialization of the tree finished.");
 
 		return tree;

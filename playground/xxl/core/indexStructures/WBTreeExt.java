@@ -8,8 +8,11 @@ package xxl.core.indexStructures;
  * For implementing deletions see also "global rebuilding technique" in:
  * "The Design of Dynamic Data Structures" by M.H. Overmars
  * 
+ * - This version tries to subclass BPlusTree.
+ * 
+ * TODO: not implemented
  */
-public class WBPlusTree extends BPlusTree {
+public class WBTreeExt extends BPlusTree {
 
 	/**
      * Creates a new <tt>WBPlusTree</tt>. 
@@ -19,7 +22,7 @@ public class WBPlusTree extends BPlusTree {
      * @param blockSize
      *            the block size of the underlying storage.
      */
-	public WBPlusTree(int blockSize) {		
+	public WBTreeExt(int blockSize) {		
 		super(blockSize, 0.5f, false); // set minCapacityRatio to 0.5 although this doesn't make much sense
 	}
 

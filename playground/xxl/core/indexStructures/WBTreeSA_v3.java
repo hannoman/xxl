@@ -1,5 +1,8 @@
 package xxl.core.indexStructures;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -14,11 +17,7 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.functions.FunctionsJ8;
-import xxl.core.indexStructures.BPlusTree.IndexEntry;
-import xxl.core.indexStructures.BPlusTree.Node;
-import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.Converter;
-import xxl.core.io.converters.IntegerConverter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
@@ -27,31 +26,45 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *
 	 * Trying to implement a simpler version which doesn't do preemptive splitting. It instead splits 
-	 * the nodes during bottom-up back traversal. Therefore it also keeps the whole path in memory
-	 * and is thereby prone to the same error as the xxl BPlusTree implementation regarding buffers:
-	 * that the buffer size must always be greater or equal than the tree height.
+	 * the nodes during bottom-up back traversal. Therefore it would also be beneficial to fix the whole
+	 * path in memory. Although this implementation doesn't fix any pages, thereby circumventing the handicap 
+	 * <tt>BPlusTree</tt>s have on <tt>BufferedContainer</tt>s (that the buffer size must always be greater or equal
+	 * than the tree height).
 	 * 
-	 * - Mind that this is no real BPlusTree as there are no pointers between siblings and cousins. 
+	 * - Mind that this is no real BPlusTree as there are no pointers between siblings and cousins.  
 	 *   
 	 * @param K type of the keys
 	 * @param V type of the actual data
 	 * @param P type of the ContainerIDs (= CIDs)
 	 */
 
-	/** Number of entries in a leaf L e(L): leafParam <= e(L) < 2*leafParam */ 
-	int leafParam;
+	/** The leaf parameter <b>tK</b>, determining the amount of entries a leaf can contain.	<br>
+	 * Following inequalities hold:									<br>
+ * 																	<br>
+	 * Number of entries in a leaf L =: e(L): 						<br>
+	 * 		tK <= e(L) < 2*tK 										<br>
+	 */ 
+	final int tK;
+	
+	/** The branching parameter <b>tA</b>.							<br> 
+	 * Following inequalities hold:									<br>
+	 *																<br>
+	 * Weight of an inner node N =: w(N) on level l:				<br>
+	 * 		1/2 * tK * (tA ** l) < w(N) < 2 * tK * (tA ** l)		<br>
+	 *																<br>
+	 * Number of entries in an inner node N =: e(N) on level l: 	<br>
+	 * 		1/4 * tA < e(N) < 4 * tA 
+	 */
+	final int tA;
 
-	/** Number of entries in a node N e(N): branchingParam / 4 <? e(N) <? 4*branchingParam */
-	int branchingParam;
+	public java.util.function.Function<V, K> getKey;
 
-	public java.util.function.Function<V, K> getKey; // TODO: set it somewhere
-
-	public TypeSafeContainer<P, Node> container; // TODO: set it somewhere
+	public TypeSafeContainer<P, Node> container;
 
 	/** Remember how high the tree is... */
 	int rootHeight;
 
-	/** Meta-information about the root. Root has no parent so it must be saved elsewhere. */
+	/** Weight-information about the root. Root has no parent so it must be saved elsewhere. */
 	int rootWeight;
 
 	/** ContainerID of the root. */
@@ -67,8 +80,8 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			int branchingParam, 
 			Function<V, K> getKey) {
 		super();
-		this.leafParam = leafParam;
-		this.branchingParam = branchingParam;
+		this.tK = leafParam;
+		this.tA = branchingParam;
 		this.getKey = getKey;		
 	}	
 
@@ -80,15 +93,16 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	 * @param valueConverter converter for the value type V
 	 */
 	public void initialize_buildContainer(Container rawContainer, Converter<K> keyConverter, Converter<V> valueConverter) {
-		WBTree_NodeConverter<K, V, P> nodeConverter = 
-				new WBTree_NodeConverter<K,V,P>(this, keyConverter, valueConverter, rawContainer.objectIdConverter());
+		NodeConverter nodeConverter = 
+				new NodeConverter(keyConverter, valueConverter, rawContainer.objectIdConverter());
 		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
 
-	/** Initialize the tree with a ready to use container.
-	 * The tree really only needs the container to store nodes. It doesn't need to know about
+	/** Initialize the tree with a ready-to-use container.
+	 * The tree really only needs the (converting) container to store nodes. It doesn't need to know about
 	 * the Converters used.
 	 * 
+	 * @see {@link NodeConverter#NodeConverter(Converter, Converter, Converter)}
 	 * @param container a ready-to-go container which maps P to Nodes. Has to be built elsewhere.
 	 */
 	public void initialize_withReadyContainer(TypeSafeContainer<P, Node> container) {
@@ -97,19 +111,19 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	
 
 	public boolean weightUnderflow(int weight, int level) {
-		return weight <= HUtil.intPow(branchingParam, level) / 2 * leafParam;
+		return weight <= HUtil.intPow(tA, level) / 2 * tK;
 	}
 
 	public boolean weightOverflow(int weight, int level) {
-		return weight >= 2 * HUtil.intPow(branchingParam, level) * leafParam;
+		return weight >= 2 * HUtil.intPow(tA, level) * tK;
 	}
 
 	public boolean leafUnderflow(int weight) {
-		return weight < leafParam;
+		return weight < tK;
 	}
 
 	public boolean leafOverflow(int weight) {
-		return weight >= 2*leafParam;
+		return weight >= 2*tK;
 	}
 
 	/**
@@ -245,7 +259,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			//- check for split here
 			SplitInfo splitInfo = null;
 			if(weightOverflow(totalWeight(), level)) {
-				int targetWeight = HUtil.intPow(branchingParam, level) * leafParam;
+				int targetWeight = HUtil.intPow(tA, level) * tK;
 				splitInfo = split(targetWeight);
 			}
 			container.update(thisCID, this);
@@ -328,7 +342,143 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			return splitInfo;
 		}
 	}
+	
+	
+	/**
+	 * Converter for the nodes of a weight-balanced B+-tree.
+	 * Altough it is implemented as nested class it does not depend <b>directly</b> on any instance variables.
+	 * (Only the created <tt>Node</tt> instances have an - again indirect - depency on the enclosing instance.)
+	 * Instead it encapsulates all needed converters and hides them from the tree class (as the tree actually has 
+	 * no use for calling them directly.<br>
+	 * If one wants finer control over the constructed <tt>ConverterContainer</tt>, this class can be instantiated
+	 * by <tt>WBTreeSA_v3<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
+	 * 
+	 * @see WBTreeSA_v3#initialize_withReadyContainer(TypeSafeContainer)
+	 * @author Dominik Krappel
+	 */
+	public class NodeConverter extends Converter<Node> {
 
+		Converter<K> keyConverter;
+		Converter<V> valueConverter;
+		Converter<P> cidConverter;
+		
+		public NodeConverter(Converter<K> keyConverter, Converter<V> valueConverter, Converter<P> cidConverter) {
+			super();
+			this.keyConverter = keyConverter;
+			this.valueConverter = valueConverter;
+			this.cidConverter = cidConverter;
+		}
+
+		@Override
+		public Node read(DataInput dataInput, Node unused) throws IOException {
+			boolean isLeaf = dataInput.readBoolean();
+			if (isLeaf) {
+				return readLeafNode(dataInput);
+			} else {
+				return readInnerNode(dataInput);
+			}
+		}
+
+		LeafNode readLeafNode(DataInput dataInput) throws IOException {
+			// create Node shell
+			LeafNode node = new LeafNode();
+
+			// - read weight == number of entries
+			int nChildren = dataInput.readInt();
+
+			// -- read the content of the node
+			node.values = new LinkedList<V>();
+			for (int i = 0; i < nChildren; i++) {
+				node.values.add(valueConverter.read(dataInput));
+			}
+
+			return node;
+		}
+
+		InnerNode readInnerNode(DataInput dataInput) throws IOException {
+			InnerNode node = new InnerNode();
+			
+			// - read number of childs
+			int nChildren = dataInput.readInt();
+
+			// -- read separators
+			node.separators = new LinkedList<K>();
+			for(int i=0; i < nChildren-1; i++) { // only #childs-1 separators!
+				node.separators.add(keyConverter.read(dataInput));
+			}
+			
+			// -- read the ContainerIDs of the IndexEntries
+			node.pagePointers = new LinkedList<P>();			
+			for (int i = 0; i < nChildren; i++) {
+				node.pagePointers.add(container.objectIdConverter().read(dataInput));
+			}
+			
+			// -- read weights
+			node.childWeights = new LinkedList<Integer>();
+			for (int i = 0; i < nChildren; i++) {
+				node.childWeights.add(dataInput.readInt());
+			}
+
+			return node;
+		}
+
+		@Override
+		public void write(DataOutput dataOutput, Node node) throws IOException {			
+			if (node.isLeaf()) {
+				dataOutput.writeBoolean(true);
+				writeRemainingLeafNode(dataOutput, (LeafNode) node);
+			} else {
+				dataOutput.writeBoolean(false);
+				writeRemainingInnerNode(dataOutput, (InnerNode) node);
+			}
+		}
+
+		void writeRemainingLeafNode(DataOutput dataOutput, LeafNode node) throws IOException {
+			// - write number of children
+			dataOutput.writeInt(node.values.size());
+			
+			// - write values
+			for(V value : node.values) {
+				valueConverter.write(dataOutput, value);
+			}
+		}
+
+		void writeRemainingInnerNode(DataOutput dataOutput, InnerNode node) throws IOException {
+			// - write number of children
+			dataOutput.writeInt(node.pagePointers.size());
+
+			// -- write separators
+			for (K key : node.separators) {
+				keyConverter.write(dataOutput, key);
+			}
+
+			// -- write ContainerIDs
+			for (P childCID : node.pagePointers) {
+				container.objectIdConverter().write(dataOutput, childCID);
+			}
+			
+			// -- write weights
+			for(int w : node.childWeights) {
+				dataOutput.writeInt(w);
+			}
+
+		}
+
+//		protected int indexEntrySize() {
+//			// return BPlusTree.this.container().getIdSize()
+//			// + keyConverter.getMaxObjectSize();
+//			return this.bPlusTree.container().getIdSize() + this.bPlusTree.keyConverter.getMaxObjectSize();
+//		}
+//
+//		protected int leafEntrySize() {
+//			return this.bPlusTree.dataConverter.getMaxObjectSize();
+//		}
+//
+//		protected int headerSize() {
+//			return 2 * IntegerConverter.SIZE + BooleanConverter.SIZE + this.bPlusTree.container().getIdSize();
+//		}
+	}
+	
 	public void insert(V value) {
 		
 		if(rootCID == null) { // tree empty
