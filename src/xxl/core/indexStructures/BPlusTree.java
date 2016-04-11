@@ -1576,7 +1576,7 @@ public class BPlusTree extends Tree {
             	subTreeEntry.separator.sepValue =  ((Separator)((descriptor).clone())).sepValue;
     			BPlusTree.this.update(path);
             }
-            return  subTreeEntry;
+            return subTreeEntry;
         }
         /**
          * Posts the <tt>SplitInfo</tt> from the child <tt>Nodes</tt> to the
