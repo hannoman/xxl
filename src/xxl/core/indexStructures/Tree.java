@@ -1208,6 +1208,7 @@ public abstract class Tree {
 			 */
 			public Container determineContainer () {
 				return (Container)Tree.this.determineContainer.invoke(this);
+				// TODO: isn't this a bug? determineContainer gets invoked on SplitInfo, but shouldn't it be Node? 
 			}
 		}// class SplitInfo
 
@@ -1237,7 +1238,7 @@ public abstract class Tree {
 		 * It splits the overflowing node in new nodes and creates new index-entries for 
 		 * the new nodes. These index-entries will be returned as a <tt>Collection</tt>. 
 		 * The top <tt>Node</tt> on stack will be written into the storage and unfixed from 
-		 * the underlaying buffer. The method {@link Tree.Node#post(Tree.Node.SplitInfo, Tree.IndexEntry)} will 
+		 * the underlying buffer. The method {@link Tree.Node#post(Tree.Node.SplitInfo, Tree.IndexEntry)} will 
 		 * be used to post the created index-entries into the parent node. 
 		 * @param path the path from the root to the overflowing node
 		 * @return a Collection containing all index-entries created by the split

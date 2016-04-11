@@ -372,11 +372,8 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		@Override
 		public Node read(DataInput dataInput, Node unused) throws IOException {
 			boolean isLeaf = dataInput.readBoolean();
-			if (isLeaf) {
-				return readLeafNode(dataInput);
-			} else {
-				return readInnerNode(dataInput);
-			}
+			if (isLeaf) return readLeafNode(dataInput);
+			else 		return readInnerNode(dataInput);			
 		}
 
 		LeafNode readLeafNode(DataInput dataInput) throws IOException {
@@ -528,6 +525,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			level--;
 		}		
 		LeafNode lnode = (LeafNode) container.get(nodeCID);
+		
 		List<Integer> hitIdx = lnode.lookup(key);
 		Stream<V> results = hitIdx.stream().map(lnode.values::get);
 		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
