@@ -785,7 +785,7 @@ public abstract class Tree {
 	}
 
 	/** This method is called when the root node overflows. In this case 
-	 * the root node has to be splitted and a new root node has to be created.
+	 * the root node has to be split and a new root node has to be created.
 	 * The tree's height increases by one. Also the new root node is written into 
 	 * the container.
 	 * @param entry the entry which should be inserted to the new root node.
@@ -1285,7 +1285,7 @@ public abstract class Tree {
 		 * @param path the path from the root to the overflowing node
 		 * @param parentNode the parent node of the overflowing node
 		 * @param newIndexEntries a <tt>List</tt> to carry the new index-entries created by the split
-		 * @return a <tt>SplitInfo</tt> containing requiered information about the split
+		 * @return a <tt>SplitInfo</tt> containing required information about the split
 		 */
 		protected SplitInfo redressOverflow (Stack path, Node parentNode, List newIndexEntries) {
 			IndexEntry indexEntry = indexEntry(path);
@@ -1446,7 +1446,7 @@ public abstract class Tree {
 		 * The current node should be the empty new <tt>Node</tt>. 
 		 * The method distributes the entries of the overflowing <tt>Node</tt> to the both nodes.
 		 * @param path the nodes already visited during this insert
-		 * @return a SplitInfo containig all needed information about the split
+		 * @return a SplitInfo containing all needed information about the split
 		*/
 		protected abstract SplitInfo split (Stack path);
 

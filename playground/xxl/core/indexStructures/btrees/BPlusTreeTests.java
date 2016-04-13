@@ -136,6 +136,54 @@ public class BPlusTreeTests {
 
 		return tree;
 	}
+	
+	private static BPlusTree createTree_explicitSplitRatioFunctions(String testFile) {
+		System.out.println("Creating new BPlusTree on container files: \"" + testFile + "\" ...");
+		System.out.println("Initialization of the B+ tree.");
+
+		BPlusTree tree = new BPlusTree(BLOCK_SIZE, MIN_RATIO, true);
+
+		//-- create the alternate NodeConverter
+		Converter<BPlusTree.Node> nodeConverter = new BPlusNodeConverter(tree);
+
+		BufferedContainer treeContainer = new BufferedContainer(new ConverterContainer(new BlockFileContainer(testFile, BLOCK_SIZE),
+				nodeConverter), new LRUBuffer<Object, Object, Object>(BUFFER_SIZE), true);
+
+		// TODO: BufferedContainer macht Probleme hier!!
+		// Container treeContainer = new ConverterContainer(new
+		// BlockFileContainer(name, BLOCK_SIZE), tree.nodeConverter());
+
+		Function<Object, Object> getKey = Identity.DEFAULT_INSTANCE;
+		
+		MeasuredConverter<BigInteger> measuredBigIntegerConverter = 
+			Converters.createMeasuredConverter(MAX_OBJECT_SIZE, BigIntegerConverter.DEFAULT_INSTANCE); 
+		
+		// explicit definition of getSplit(Min/Max)Ratio functions to be able to set breakpoints
+		Function<BPlusTree.Node, Float> getSplitMinRatio = new AbstractFunction<BPlusTree.Node, Float>() {
+			public Float invoke(BPlusTree.Node node) {
+				System.out.println("HURZ splitMinRatio");
+				return MIN_RATIO;
+			}
+		};
+		
+		Function<BPlusTree.Node, Float> getSplitMaxRatio = new AbstractFunction<BPlusTree.Node, Float>() {
+			public Float invoke(BPlusTree.Node node) {
+				System.out.println("HURZ splitMaxRatio");
+				return 1.0f;
+			}
+		};
+		
+		//---> ok, the splitRatio functions never get called from BPlusTree
+		
+		tree.initialize(getKey, treeContainer, measuredBigIntegerConverter, measuredBigIntegerConverter,
+				BigIntegerSeparator.FACTORY_FUNCTION, BigIntegerKeyRange.FACTORY_FUNCTION,
+				getSplitMinRatio, getSplitMaxRatio);		
+		
+		System.out.println("Initialization of the B+ tree finished.");
+
+		return tree;
+	}
+
 
 	public static void testBPlusTree(BPlusTree bpTree) throws IOException {
 
@@ -213,7 +261,8 @@ public class BPlusTreeTests {
 		}
 
 //		BPlusTree bpTree = createTree(fileName);
-		BPlusTree bpTree = createTree_alternateConverter(fileName);
+//		BPlusTree bpTree = createTree_alternateConverter(fileName);
+		BPlusTree bpTree = createTree_explicitSplitRatioFunctions(fileName);
 		testBPlusTree(bpTree);
 	}
 }

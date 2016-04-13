@@ -325,7 +325,7 @@ public class BPlusTree extends Tree {
      *            a factory <tt>Function</tt> to create <tt>KeyRanges</tt>
      * @param getSplitMinRatio
      *            a <tt>Function</tt> to determine the minimal relative number
-     *            of entries which the node maycontain after a split
+     *            of entries which the node may contain after a split
      * @param getSplitMaxRatio
      *            a <tt>Function</tt> to determine the maximal relative number
      *            of entries which the node may contain after a split
@@ -511,7 +511,7 @@ public class BPlusTree extends Tree {
      *            the Container that is used to store the nodes of the tree
      * @param keyConverter
      *            the <tt>Converter</tt> for the keys used by the tree
-     * @param  dataConverter
+     * @param dataConverter
      *            the <tt>Converter</tt> for data objects stored in the tree
      * @param createSeparator
      *            a factory <tt>Function</tt> to create <tt>Separators</tt>
@@ -1722,10 +1722,10 @@ public class BPlusTree extends Tree {
         }
         /**
          * Splits the overflowed node. In non duplicate mode both the leaf and index nodes 
-         * are splited in the middle. In duplicate mode the leaf nodes are splited 
+         * are split in the middle. In duplicate mode the leaf nodes are split 
          * according following strategy:  
          * with leaf nodes the last element is selected and checked against 
-         * the the element at 75% position, when both are equal search for further duplicates until 25% reached
+         * the element at 75% position, when both are equal search for further duplicates until 25% reached
          * or no more duplicates exists, then split at found index position, otherwise split in the middle.
          * 
          * @param path
