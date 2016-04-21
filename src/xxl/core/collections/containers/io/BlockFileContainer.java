@@ -293,7 +293,7 @@ public class BlockFileContainer extends AbstractContainer {
 	protected int size;
 
 	/**
-	 * Determines the type of the identifyers which are produced:
+	 * Determines the type of the identifiers which are produced:
 	 * 1: Byte, 2: Short, 3: Integer, 4: Long (default).
 	 */
 	protected byte idType=4;

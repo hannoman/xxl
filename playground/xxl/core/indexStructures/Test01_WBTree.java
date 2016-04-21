@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+
 
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
@@ -10,41 +10,65 @@ import xxl.core.collections.containers.DebugContainer;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.indexStructures.WBTreeSA_v3;
 import xxl.core.indexStructures.WBTreeSA_v3.InnerNode;
+import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
 
+
+/**
+ * Should test the NodeConverter of a WB-tree separately and is therefore abandoned, as we need
+ * an enclosing instance.
+ *  
+ * --> DELETE
+ */
 public class Test01_WBTree {
 	
 	static final int BLOCK_SIZE = 1024;
 	
-	public static void testConverters(WBTree_NodeConverter nodeConverter) {
-		ByteArrayOutputStream dataOut = new ByteArrayOutputStream();
-		
-		// create test node
-		WBTreeSA_v3<Integer, String, Short>.InnerNode node = new InnerNode();
-		// TODO: doesn't work without enclosing tree instance
-		
-	}
+//	public static void testConverters(WBTree_NodeConverter nodeConverter) {
+//		ByteArrayOutputStream dataOut = new ByteArrayOutputStream();
+//		
+//		// create test node
+//		WBTreeSA_v3<Integer, String, Short>.InnerNode node = new InnerNode();
+//		// TODO: doesn't work without enclosing tree instance
+//		
+//	}
 	
 	private static WBTreeSA_v3<Integer, Integer, Long> createTree(String testFile) {
 		
-		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
-				60, 										// leafParam
-				10, 										// branchingParam
-				(x -> x), 									// getKey
-				IntegerConverter.DEFAULT_INSTANCE, 			// keyConverter 
-				IntegerConverter.DEFAULT_INSTANCE);			// valueConverter
-
+		// obsolete as all converter-issues are now handled by the initialisator
+//		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
+//				60, 										// leafParam
+//				10, 										// branchingParam
+//				(x -> x), 									// getKey
+//				IntegerConverter.DEFAULT_INSTANCE, 			// keyConverter 
+//				IntegerConverter.DEFAULT_INSTANCE);			// valueConverter
+		
+		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(60,10,(x -> x));
+		
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
+		
+//		TypeSafeContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node> treeContainer = 
+//				new CastingContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node>(
+//						new DebugContainer(
+//								new ConverterContainer(treeRawContainer, tree.getNodeConverter())
+//								)
+//						); 
+		
+		WBTreeSA_v3<Integer, Integer, Long>.NodeConverter nodeConverter = 
+				tree.new NodeConverter(IntegerConverter.DEFAULT_INSTANCE, 
+						IntegerConverter.DEFAULT_INSTANCE, 
+						treeRawContainer.objectIdConverter());
 		
 		TypeSafeContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node> treeContainer = 
 				new CastingContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node>(
 						new DebugContainer(
-								new ConverterContainer(treeRawContainer, tree.getNodeConverter())
+								new ConverterContainer(treeRawContainer, nodeConverter)
 								)
-						); 
+						);
 		
-		tree.initializeNew(treeContainer);
+		tree.initialize_withReadyContainer(treeContainer);
 
 		System.out.println("Initialization of the tree finished.");
 
@@ -74,7 +98,7 @@ public class Test01_WBTree {
 		}
 
 		WBTreeSA_v3<Integer, Integer, Long> wbTree = createTree(fileName);		
-		testConverters(wbTree.getNodeConverter());
+		//testConverters(wbTree.getNodeConverter());
 	}
 
 }
