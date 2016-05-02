@@ -27,7 +27,7 @@ public class HUtil {
 	
 	/** Shortcut to convert the result of Collections.binarySearch to a more usable format.
 	 *  
-	 * @return the position where key should be inserted to keep list sorted. 
+	 * @return the position where key should be inserted to keep the list sorted. 
 	 * Lowest <tt>i</tt> with key <= list[i].   
 	 */
 	public static <T> int findPos(List<? extends Comparable<? super T>> list, T key) {

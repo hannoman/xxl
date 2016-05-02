@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Stack;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -16,6 +18,7 @@ import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
@@ -534,6 +537,138 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
 		
 		return resultsV;		
+	}
+	
+	public Cursor rangeQuery(K lo, K hi){
+		return new QueryCursor(lo, hi)();
+	}
+	
+	// public class QueryCursor extends xxl.core.indexStructures.QueryCursor {
+	/* we won't subclass xxl.core.indexStructures.QueryCursor here as it is supposed for queries over trees which inherit 
+	 	from xxl.core.indexStructures.Tree */
+	
+	public class QueryCursor implements Cursor<V> {
+		final K lo;
+		final K hi;
+		final int targetHeight;
+		
+		Stack<P> stackNodes;
+		// container.get(stackNodes.peek()) =: curNode 
+		Stack<Integer> stackIndices;
+		// stackIndices.peek() =: curIndex
+		int curHeight;
+		
+		
+		
+		public QueryCursor(K lo, K hi, int targetHeight, P startNode, int startHeight) {
+			super();
+			this.lo = lo;
+			this.hi = hi;
+			this.targetHeight = targetHeight;
+			
+			stackNodes = new Stack<P>();
+			stackNodes.push(startNode);
+			curHeight = startHeight;
+			
+			stackIndices = new Stack<Integer>();
+		}
+
+		@Override
+		public void open() {
+			while(curHeight > targetHeight) {
+				// get the current node and lock it in the buffer
+				InnerNode curNode = (InnerNode) container.get(stackNodes.peek(), false); 
+				
+				// find the index of the next childnode
+				int nextPos = HUtil.findPos(curNode.separators, lo);
+				stackIndices.push(nextPos);
+				
+				// descend to next node
+				P nextPID = curNode.pagePointers.get(nextPos);
+				stackNodes.push(nextPID);
+				curHeight--;
+			}
+			
+			// load last node in the buffer and find the starting index
+			Node curNode = container.get(stackNodes.peek(), false);
+			
+			// TODO
+			List<K> mappedList = new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey));
+			
+			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
+		}
+
+		@Override
+		public void close() {
+			// TODO: release locked path
+			
+		}
+
+		@Override
+		public boolean hasNext() throws IllegalStateException {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public V next() throws IllegalStateException, NoSuchElementException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public V peek() throws IllegalStateException, NoSuchElementException, UnsupportedOperationException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean supportsPeek() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public void remove() throws IllegalStateException, UnsupportedOperationException {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public boolean supportsRemove() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public void update(V object) throws IllegalStateException, UnsupportedOperationException {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public boolean supportsUpdate() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public void reset() throws UnsupportedOperationException {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public boolean supportsReset() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+		
+		
+		
+		
+		
+		
 	}
 	
 }
