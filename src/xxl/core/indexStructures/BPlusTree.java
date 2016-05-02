@@ -1067,7 +1067,7 @@ public class BPlusTree extends Tree {
      * 
      * @param queryDescriptor
      *            describes the query in terms of a <tt>Descriptor</tt>. In
-     *            this case it has to an instance of <tt>Separator</tt> oder
+     *            this case it has to be an instance of <tt>Separator</tt> or
      *            <tt>KeyRange</tt>
      * @param targetLevel
      *            the tree-level to provide the answer-objects

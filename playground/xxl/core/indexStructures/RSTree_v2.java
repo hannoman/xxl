@@ -21,45 +21,24 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
-	/** Standalone version of a weight-balanced B+-Tree.
-	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
-	 *
-	 * Trying to implement a simpler version which doesn't do preemptive splitting. It instead splits 
-	 * the nodes during bottom-up back traversal. Therefore it would also be beneficial to fix the whole
-	 * path in memory. Although this implementation doesn't fix any pages, thereby circumventing the handicap 
-	 * <tt>BPlusTree</tt>s have on <tt>BufferedContainer</tt>s (that the buffer size must always be greater or equal
-	 * than the tree height).
+public class RSTree_v2<K extends Comparable<K>, V, P> {
+	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
-	 * - Mind that this is no real BPlusTree as there are no pointers between siblings and cousins.  
-	 * - Working version.
+	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes. 
 	 *   
 	 * @param K type of the keys
 	 * @param V type of the actual data
 	 * @param P type of the ContainerIDs (= CIDs)
 	 */
 
-	/** The leaf parameter <b>tK</b>, determining the amount of entries a leaf can contain.	<br>
-	 * Following inequalities hold:									<br>
- * 																	<br>
-	 * Number of entries in a leaf L =: e(L): 						<br>
-	 * 		tK <= e(L) < 2*tK 										<br>
-	 */ 
-	final int tK;
+	/** How many samples per node should be kept = parameter s. */
+	final int samplesPerNode;
 	
-	/** The branching parameter <b>tA</b>.							<br> 
-	 * Following inequalities hold:									<br>
-	 *																<br>
-	 * Weight of an inner node N =: w(N) on level l:				<br>
-	 * 		1/2 * tK * (tA ** l) < w(N) < 2 * tK * (tA ** l)		<br>
-	 *																<br>
-	 * Number of entries in an inner node N =: e(N) on level l: 	<br>
-	 * 		1/4 * tA < e(N) < 4 * tA 
-	 */
-	final int tA;
-
+	/** The branching parameter == the fanout. */
+	final int branchingParam;
+	
 	/** Ubiquitious getKey function which maps from values (V) to keys (K). */
-	public java.util.function.Function<V, K> getKey;
+	public Function<V, K> getKey;
 
 	/** Container of the tree (and everything). */
 	public TypeSafeContainer<P, Node> container;
@@ -78,13 +57,13 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in xxl) as inner class of this tree class.
 	*/
-	public WBTreeSA_v3(
-			int leafParam, 
+	public RSTree_v2(
+			int samplesPerNode, 
 			int branchingParam, 
 			Function<V, K> getKey) {
 		super();
-		this.tK = leafParam;
-		this.tA = branchingParam;
+		this.samplesPerNode = samplesPerNode;
+		this.branchingParam = branchingParam;
 		this.getKey = getKey;		
 	}	
 
@@ -112,30 +91,28 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		this.container = container;
 	}
 	
-
-	public boolean weightUnderflow(int weight, int level) {
-		return weight <= HUtil.intPow(tA, level) / 2 * tK;
-	}
-
-	public boolean weightOverflow(int weight, int level) {
-		return weight >= 2 * HUtil.intPow(tA, level) * tK;
-	}
-
-	public boolean leafUnderflow(int weight) {
-		return weight < tK;
-	}
-
-	public boolean leafOverflow(int weight) {
-		return weight >= 2*tK;
-	}
+//
+//	public boolean weightUnderflow(int weight, int level) {
+//		return weight <= HUtil.intPow(branchingParam, level) / 2 * tK;
+//	}
+//
+//	public boolean weightOverflow(int weight, int level) {
+//		return weight >= 2 * HUtil.intPow(branchingParam, level) * tK;
+//	}
+//
+//	public boolean leafUnderflow(int weight) {
+//		return weight < tK;
+//	}
+//
+//	public boolean leafOverflow(int weight) {
+//		return weight >= 2*tK;
+//	}
 
 	/**
 	 * Own SplitInfo class (perhaps its similar to the one used in XXL?) to encapsulate
 	 * - the ContainerID of the generated Node
 	 * - a key used for the separation of the nodes.
 	 * - the weights of the resulting left and right node
-	 * 
-	 * @author Dominik Krappel
 	 */
 	class SplitInfo {
 		P newnodeCID;
@@ -167,6 +144,8 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	public class InnerNode extends Node {
 		List<K> separators;
 		List<P> pagePointers;
+		List<V> samples;
+		
 		/** weights are saved inside the parent to make it possible to determine a node's split without having to load all child-nodes from disk
 		 * to access the weight information.
 		 */
@@ -262,7 +241,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			//- check for split here
 			SplitInfo splitInfo = null;
 			if(weightOverflow(totalWeight(), level)) {
-				int targetWeight = HUtil.intPow(tA, level) * tK;
+				int targetWeight = HUtil.intPow(branchingParam, level) * tK;
 				splitInfo = split(targetWeight);
 			}
 			container.update(thisCID, this);
