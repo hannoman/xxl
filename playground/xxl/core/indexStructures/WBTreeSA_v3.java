@@ -18,6 +18,7 @@ import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.io.converters.Converter;
@@ -539,136 +540,146 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		return resultsV;		
 	}
 	
-	public Cursor rangeQuery(K lo, K hi){
-		return new QueryCursor(lo, hi)();
+	public Cursor<V> rangeQuery(K lo, K hi){
+		return new QueryCursor(lo, hi);
 	}
 	
 	// public class QueryCursor extends xxl.core.indexStructures.QueryCursor {
 	/* we won't subclass xxl.core.indexStructures.QueryCursor here as it is supposed for queries over trees which inherit 
 	 	from xxl.core.indexStructures.Tree */
 	
-	public class QueryCursor implements Cursor<V> {
+	/**
+	 * A query cursor for simple range queries. 
+	 */
+	public class QueryCursor extends AbstractCursor<V> {
 		final K lo;
-		final K hi;
-		final int targetHeight;
+		final K hi;		
+
 		
-		Stack<P> stackNodes;
-		// container.get(stackNodes.peek()) =: curNode 
-		Stack<Integer> stackIndices;
-		// stackIndices.peek() =: curIndex
-		int curHeight;
+		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node		
+		Stack<Integer> sIdx; // sIdx.peek() =: current index
 		
+		V precomputed;
 		
-		
-		public QueryCursor(K lo, K hi, int targetHeight, P startNode, int startHeight) {
+		public QueryCursor(K lo, K hi, P startNode) {
 			super();
 			this.lo = lo;
 			this.hi = hi;
-			this.targetHeight = targetHeight;
 			
-			stackNodes = new Stack<P>();
-			stackNodes.push(startNode);
-			curHeight = startHeight;
+			sNodes = new Stack<P>();
+			sNodes.push(startNode);
 			
-			stackIndices = new Stack<Integer>();
+			sIdx = new Stack<Integer>();			
+						
+			precomputed = null; // the next value to spit out
+		}
+		
+		public QueryCursor(K lo, K hi) {
+			this(lo, hi, rootCID);
 		}
 
+		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
 		@Override
 		public void open() {
-			while(curHeight > targetHeight) {
-				// get the current node and lock it in the buffer
-				InnerNode curNode = (InnerNode) container.get(stackNodes.peek(), false); 
+			// get the current node and lock it in the buffer
+			Node curNode = container.get(sNodes.peek(), false);
+			
+			while(curNode.isInner()) {
+				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-				int nextPos = HUtil.findPos(curNode.separators, lo);
-				stackIndices.push(nextPos);
+				int nextPos = HUtil.findPos(curINode.separators, lo);
+				sIdx.push(nextPos);
 				
 				// descend to next node
-				P nextPID = curNode.pagePointers.get(nextPos);
-				stackNodes.push(nextPID);
-				curHeight--;
+				P nextPID = curINode.pagePointers.get(nextPos);
+				sNodes.push(nextPID);
+				curNode = container.get(sNodes.peek(), false);
 			}
 			
-			// load last node in the buffer and find the starting index
-			Node curNode = container.get(stackNodes.peek(), false);
+			// now our node is a leaf and we just need to find the starting position			
+			LeafNode curLNode = (LeafNode) curNode;
 			
-			// TODO
-			List<K> mappedList = new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey));
+			// find starting position
+			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunctionsJ8.toOldFunction(getKey));			
+			int pos = HUtil.findPos(mappedList, lo);
+			sIdx.push(pos);
 			
-			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
+			//- sets the open flag
+			super.open();
 		}
 
 		@Override
-		public void close() {
-			// TODO: release locked path
-			
-		}
-
-		@Override
-		public boolean hasNext() throws IllegalStateException {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public V next() throws IllegalStateException, NoSuchElementException {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public V peek() throws IllegalStateException, NoSuchElementException, UnsupportedOperationException {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public boolean supportsPeek() {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public void remove() throws IllegalStateException, UnsupportedOperationException {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public boolean supportsRemove() {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public void update(V object) throws IllegalStateException, UnsupportedOperationException {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public boolean supportsUpdate() {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public void reset() throws UnsupportedOperationException {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public boolean supportsReset() {
-			// TODO Auto-generated method stub
-			return false;
+		public void close() {			
+			// release locked path
+			while(!sNodes.empty())
+				container.unfix(sNodes.pop());
+			super.close();
 		}
 		
+		private void descendToSmallest() {
+			// get the current node and fix it in the buffer
+			Node curNode = container.get(sNodes.peek(), false);			
+			
+			while(curNode.isInner()) {				
+				InnerNode curINode = (InnerNode) curNode;
+				// set the index of the current node
+				sIdx.push(0);
+				
+				P nextPID = curINode.pagePointers.get(sIdx.peek());
+				sNodes.push(nextPID);
+				curNode = container.get(sNodes.peek(), false);
+			}
+			
+			// set the index in the leaf node too
+			sIdx.push(0);
+		}
 		
-		
-		
-		
-		
+		private boolean switchToNextNode() {
+			// release the active node and index and unfix from the buffer 
+			container.unfix(sNodes.pop()); 
+			sIdx.pop();
+			
+			if(sNodes.empty()) // recursion exit, no value-next node can be found
+				return false;
+			
+			// get the right brother from the parent node if present..
+			InnerNode pNode = (InnerNode) container.get(sNodes.peek());
+			sIdx.push(sIdx.pop() + 1); // increment counter		
+			if(sIdx.peek() < pNode.pagePointers.size()) {
+				sNodes.push(pNode.pagePointers.get(sIdx.peek()));
+				descendToSmallest();
+				return true;
+			} else { // ..if not call myself recursively				
+				return switchToNextNode();
+			}
+		}
+
+		/** We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
+		public boolean hasNextObject() {		
+			LeafNode curLNode = (LeafNode) container.get(sNodes.peek());
+			sIdx.push(sIdx.pop() + 1); // = increment counter			
+	
+			if(sIdx.peek() >= curLNode.values.size()) { // we need to switch to the node which has the next values
+				if(switchToNextNode())
+					// fetch the updated leaf node again // TODO separate tail of stack from the rest
+					curLNode = (LeafNode) container.get(sNodes.peek());
+				else  
+					return false; // hit the right border of the index structure				
+			}
+			
+			precomputed = curLNode.values.get(sIdx.peek());
+			if(getKey.apply(precomputed).compareTo(hi) > 0) 
+				return false; // hit the high border
+			
+			return true;
+		}
+
+		@Override
+		protected V nextObject() {
+			return precomputed;
+		}
+
 	}
 	
 }
