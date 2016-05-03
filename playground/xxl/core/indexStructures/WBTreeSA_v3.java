@@ -605,6 +605,10 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			int pos = HUtil.findPos(mappedList, lo);
 			sIdx.push(pos);
 			
+			// regarding first computation of hasNext:
+			// we decrement the position here so that the following call of hasNext computes the right element
+			sIdx.push(sIdx.pop() - 1); 			
+			
 			//- sets the open flag
 			super.open();
 		}

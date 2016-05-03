@@ -28,7 +28,8 @@ public class LangTests {
 		System.out.println("Position (old) for x = "+ x +" in "+ ll.toString() + ": "+ Collections.binarySearch(ll, x));
 		System.out.println("Position (new) for x = "+ x +" in "+ ll.toString() + ": "+ HUtil.findPos(ll, x));
 		
-		
-		
+		// KEEP IN MIND
+		Integer a = new Integer(42); Integer b = new Integer(42);
+		System.out.println("a == b: "+ (a == b) +"; a.equals(b): "+ (a.equals(b)));
 	}
 }
