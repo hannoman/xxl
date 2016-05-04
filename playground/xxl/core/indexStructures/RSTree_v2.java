@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -19,6 +20,7 @@ import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
+import xxl.core.util.Randoms;
 import xxl.core.util.Triple;
 
 public class RSTree_v2<K extends Comparable<K>, V, P> {
@@ -35,10 +37,13 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 	 * The buffers must have between s/2 and 2*s items at all times. */
 	final int samplesPerNode;
 	
+	/** RNG used for drawing samples and such. */
+	Random rng;
+	
 	/** The branching parameter == the fanout. */
 	final int branchingParam;
 	final int branchingLo, branchingHi;	
-	final int leafLo, leafHi;
+	final int leafLo, leafHi;	
 	
 	/** Ubiquitious getKey function which maps from values (V) to keys (K). */
 	public Function<V, K> getKey;
@@ -140,7 +145,9 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 			return !isLeaf();
 		}
 		
-		public abstract SplitInfo insert(V value, P thisCID, int level);		 
+		public abstract SplitInfo insert(V value, P thisCID, int level);
+		
+		public abstract List<V> redrawSamples(int d);
 	}
 	
 	
@@ -293,35 +300,31 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 		 * --> Q: What number of samples should we aim for? 
 		 * 			avg = s, min = s / 2 or max = s * 2
 		 *		  Or should we make it dependant on how many "excess" samples are readily available in the child nodes?
+		 *		--> Algorithm description 
 		 * --> Q: Draw how much from which child?
 		 * 			Imo, we can only draw accordingly to the subtree sizes of the childs to get a correct sample.
-		 * 			--> is this exactly determined or do we have to draw probabilistic?
+		 * 			We must do this probabilistic to get a correct sample for the subtree.
 		 * 
 		 * @param d amount of excess samples we want to generate for parent nodes.
 		 */
 		public List<V> redrawSamples(int d) {
-			if(samples.size() < samplesPerNode) { // buffer is so empty we want to fill it
+			if(samples.size() < samplesPerNode) { // buffer is so empty we want to fill it too
 				d += 2*samplesPerNode - samples.size(); 
 			}
 			
-			int myWeight = totalWeight();
-			LinkedList<V> newSamples = new LinkedList<V>();
-			
 			//-- determing how much samples we need from each child
-			/* TODO: this is wrong as it does not lead to a uniform sample over the whole subtree
-			 * as only those samples are considered, whose partitions (built from the boundaries of the subtrees)
-			 * have sizes according to the expected case.
-			 * Instead we have to generate newsamplesPerChild probabilistic (through a binomial distribution).   
-			 */
-			int[] newsamplesPerChild = HUtil.distributeByAbsoluteWeights(d, childWeights);
+			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, rng);
+			
+			//-- fetch samples
+			LinkedList<V> newSamples = new LinkedList<V>();
+			for (int i = 0; i < pagePointers.size(); i++) {
+				Node child = container.get(pagePointers.get(i));
+				List<V> gotSamples = child.redrawSamples(nSamplesPerChild.get(i))
+			}
 			
 			
-			
-			
-			
-			return excessSamples;
 			// TODO
-			// pass
+			return excessSamples;
 		}
 	}
 
