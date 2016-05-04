@@ -299,7 +299,7 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 		 * Ok, so what are we supposed to do here exactly?
 		 * --> Q: What number of samples should we aim for? 
 		 * 			avg = s, min = s / 2 or max = s * 2
-		 *		  Or should we make it dependant on how many "excess" samples are readily available in the child nodes?
+		 *		  Or should we make it dependent on how many "excess" samples are readily available in the child nodes?
 		 *		--> Algorithm description 
 		 * --> Q: Draw how much from which child?
 		 * 			Imo, we can only draw accordingly to the subtree sizes of the childs to get a correct sample.
@@ -312,7 +312,7 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 				d += 2*samplesPerNode - samples.size(); 
 			}
 			
-			//-- determing how much samples we need from each child
+			//-- determining how much samples we need from each child
 			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, rng);
 			
 			//-- fetch samples
@@ -523,6 +523,12 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 		
 		public boolean underflow() {
 			return values.size() < leafLo;
+		}
+
+		@Override
+		public List<V> redrawSamples(int d) {
+			// TODO Auto-generated method stub
+			return null;
 		}
 	}
 	
