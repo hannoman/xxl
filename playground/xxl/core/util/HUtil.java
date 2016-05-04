@@ -3,6 +3,8 @@ package xxl.core.util;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalInt;
+import java.util.Arrays;
 
 public class HUtil {
 	/** Shortcut for int-based exponentiation. 
@@ -25,18 +27,82 @@ public class HUtil {
 		return targetList;
 	}
 	
-	/** Shortcut to convert the result of Collections.binarySearch to a more usable format.
-	 *  
-	 * @return the position where key should be inserted to keep the list sorted. 
-	 * Lowest <tt>i</tt> with key <= list[i].   
+	/** Finds the position <tt>i</tt> so that <tt>A[i-1] <= key < A[i]</tt>.
+	 * 
+	 * @param list sorted list A
+	 * @param key key to insert, respectively lookup.
+	 * @return position <tt>i</tt>
 	 */
-	public static <T> int findPos(List<? extends Comparable<? super T>> list, T key) {
-		int rawpos = Collections.binarySearch(list, key);
-		
-		if(rawpos < 0) {
+	public static <T> int binFindL(List<? extends Comparable<? super T>> list, T key) {
+		int rawpos = Collections.binarySearch(list, key);		
+		if(rawpos < 0)
 			return -(rawpos + 1);
-		} else {
+		else
 			return rawpos;
-		}		
 	}
+	
+	/** Finds the position <tt>i</tt> so that <tt>A[i-1] < key <= A[i]</tt>.
+	 * 
+	 * @param list sorted list
+	 * @param key key to insert, respectively lookup.
+	 * @return position <tt>i</tt>
+	 */
+	public static <T> int binFindR(List<? extends Comparable<? super T>> list, T key) {
+		int pos = binFindL(list, key);
+		while(pos >= 1 && list.get(pos-1).equals(key))
+			pos--;
+		return pos;
+	}
+	
+	public static <T, C extends Comparable<? super T>> int binFindL(C[] arr, T key) {
+		return binFindL(Arrays.asList(arr), key);
+	}
+	
+	public static <T, C extends Comparable<? super T>> int binFindR(C[] arr, T key) {
+		return binFindR(Arrays.asList(arr), key);
+	}
+	
+	public static int[] distributeByAbsoluteWeights(int toDistribute, List<Integer> weights) {
+		int remaining = toDistribute;
+		
+		//-- compute total weight
+		long totalWeight = 0;
+		for(int w : weights) totalWeight += w;
+		
+		//-- distribute
+		int[] assigned = new int[weights.size()];
+		for(int i=0; i < weights.size(); i++) {
+			int curAssign = (int) Math.round(remaining * (double) weights.get(i) / (double) totalWeight);
+			assigned[i] = curAssign;
+			remaining -= curAssign;
+			totalWeight -= weights.get(i);
+		}
+		
+		//-- verify
+		int distributed = Arrays.stream(assigned).reduce(0, (x, y) -> x+y); 
+		assert distributed == toDistribute;
+		
+		return assigned;		
+	}
+	
+	public static int[] distributeByRelativeWeights(int toDistribute, List<Double> weights) {
+		int remaining = toDistribute;
+		double remWeight = 1.0;
+		
+		int[] assigned = new int[weights.size()];
+		for(int i=0; i < weights.size(); i++) {
+			int curAssign = (int) Math.round(remaining * weights.get(i) / remWeight);
+			assigned[i] = curAssign;
+			remaining -= curAssign;
+			remWeight -= weights.get(i);			
+		}
+		
+		//-- verify
+		int distributed = Arrays.stream(assigned).reduce(0, (x, y) -> x+y); 
+		assert distributed == toDistribute;
+		
+		return assigned;
+	}
+	
+	
 }

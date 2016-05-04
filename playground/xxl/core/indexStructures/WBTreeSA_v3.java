@@ -245,7 +245,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			K key = getKey.apply(value);
 			
 			//- insert in sublevel
-			int pos = HUtil.findPos(separators, key);
+			int pos = HUtil.binFindL(separators, key);
 			
 			P nextCID = pagePointers.get(pos);			
 			childWeights.set(pos, childWeights.get(pos)+1); // update weight of child
@@ -281,7 +281,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		 * @return P containerID of the next node
 		 */
 		public P chooseSubtree(K key) {
-			int pos = HUtil.findPos(separators, key);
+			int pos = HUtil.binFindL(separators, key);
 			return pagePointers.get(pos);
 		}
 		
@@ -335,7 +335,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 
 		public SplitInfo insert(V value, P thisCID, int levelUnused) {
 			K key = getKey.apply(value);
-			int insertPos = HUtil.findPos(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
+			int insertPos = HUtil.binFindL(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
 			values.add(insertPos, value);
 			
 			SplitInfo splitInfo = null;
@@ -588,7 +588,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-				int nextPos = HUtil.findPos(curINode.separators, lo);
+				int nextPos = HUtil.binFindL(curINode.separators, lo);
 				sIdx.push(nextPos);
 				
 				// descend to next node
@@ -602,7 +602,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 			
 			// find starting position
 			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunctionsJ8.toOldFunction(getKey));			
-			int pos = HUtil.findPos(mappedList, lo);
+			int pos = HUtil.binFindL(mappedList, lo);
 			sIdx.push(pos);
 			
 			// regarding first computation of hasNext:
@@ -640,6 +640,8 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		}
 		
 		private boolean switchToNextNode() {
+			// TODO: would be clearer if not recursive.
+			
 			// release the active node and index and unfix from the buffer 
 			container.unfix(sNodes.pop()); 
 			sIdx.pop();

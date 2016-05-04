@@ -39,7 +39,7 @@ import xxl.core.math.functions.RealFunction;
  * {@link RejectionDistributionBasedPRNG Rejection-Based} algorithm could be used.
  */
 
-public class InversionDistributionBasedPRNG implements ContinuousRandomWrapper{
+public class InversionDistributionBasedPRNG implements ContinuousRandomWrapper {
 
 	/** the inversal function of the cdf G */
 	protected RealFunction inverseCDF;

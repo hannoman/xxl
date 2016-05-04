@@ -20,7 +20,7 @@ import xxl.core.util.HUtil;
 import xxl.core.util.Pair;
 import xxl.core.util.Triple;
 
-public class Test02_WBTree {
+public class Test_WBTree {
 
 	public static final int BLOCK_SIZE = 1024;
 //	public static final float MIN_RATIO = 0.5f;
@@ -66,9 +66,9 @@ public class Test02_WBTree {
 
 	public static void suite1(WBTreeSA_v3<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
-		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
-		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 2);
 		random = new Random(55);
+		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
+		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 2);		
 		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
 	}
 	
@@ -316,8 +316,8 @@ public class Test02_WBTree {
 				if(!compmap.containsKey(tVal)) e_positives++;
 	
 			//--- Computing the comparison-result
-			int compLoIdx = HUtil.findPos(containedKeys, lo);
-			int compHiIdx = HUtil.findPos(containedKeys, hi);
+			int compLoIdx = HUtil.binFindL(containedKeys, lo);
+			int compHiIdx = HUtil.binFindL(containedKeys, hi);
 			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
 			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
 			
@@ -343,6 +343,9 @@ public class Test02_WBTree {
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
+	/**
+	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
+	 */
 	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTreeSA_v3<Integer, Integer, Long> tree) {
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
@@ -393,8 +396,8 @@ public class Test02_WBTree {
 				if(!compmap.containsKey(tVal)) e_positives++;
 
 			//--- Computing the comparison-result
-			int compLoIdx = HUtil.findPos(containedKeys, lo);
-			int compHiIdx = HUtil.findPos(containedKeys, hi);
+			int compLoIdx = HUtil.binFindL(containedKeys, lo);
+			int compHiIdx = HUtil.binFindL(containedKeys, hi);
 			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
 			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx+1);
 			

@@ -15,7 +15,7 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class RSTree<K,V,P> {
+public class RSTree_v1<K,V,P> {
 
 	/** How many samples per node should be kept = parameter s. */
 	int samplesPerNode;

@@ -2,7 +2,7 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="test"/>
-	<classpathentry excluding="xxl/core/indexStructures/WBTreeSA.java|xxl/core/indexStructures/WBTreeSA_v2.java|xxl/core/indexStructures/WBTreeSA_v1_preemptive.java|xxl/core/indexStructures/WBTreeExt.java|xxl/core/indexStructures/Test01_WBTree.java" kind="src" path="playground"/>
+	<classpathentry excluding="xxl/core/indexStructures/WBTreeSA.java|xxl/core/indexStructures/WBTreeSA_v2.java|xxl/core/indexStructures/WBTreeSA_v1_preemptive.java|xxl/core/indexStructures/WBTreeExt.java|xxl/core/indexStructures/Test01_WBTree.java|xxl/core/indexStructures/RSTree_v1.java|xxl/core/indexStructures/WBTree_ExtBPlusTree.java|xxl/core/indexStructures/WBTree_ExtTree.java" kind="src" path="playground"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="con" path="org.testng.TESTNG_CONTAINER"/>
 	<classpathentry kind="output" path="bin"/>

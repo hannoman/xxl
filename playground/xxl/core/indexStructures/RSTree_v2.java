@@ -31,11 +31,14 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 	 * @param P type of the ContainerIDs (= CIDs)
 	 */
 
-	/** How many samples per node should be kept = parameter s. */
+	/** How many samples per node should be kept = parameter s. 
+	 * The buffers must have between s/2 and 2*s items at all times. */
 	final int samplesPerNode;
 	
 	/** The branching parameter == the fanout. */
 	final int branchingParam;
+	final int branchingLo, branchingHi;	
+	final int leafLo, leafHi;
 	
 	/** Ubiquitious getKey function which maps from values (V) to keys (K). */
 	public Function<V, K> getKey;
@@ -144,6 +147,8 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 	public class InnerNode extends Node {
 		List<K> separators;
 		List<P> pagePointers;
+		
+		/** The list of samples kept in this node. */
 		List<V> samples;
 		
 		/** weights are saved inside the parent to make it possible to determine a node's split without having to load all child-nodes from disk
@@ -151,6 +156,184 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 		 */
 		List<Integer> childWeights;
 
+		public boolean isLeaf() { return false; }
+		
+		public int totalWeight() {
+			int summed = 0;
+			for(int w : childWeights) {
+				summed += w;
+			}
+			return summed;
+		}
+		
+		
+		/** Determines a feasible split position through linear search.
+		 * 
+		 * TODO: as of now only considers the quality of the left offspring node. Is this a problem?
+		 * 
+		 * @param targetWeight the weight per node which should be approached
+		 * @return the position of the node after which the child-list should be split
+		 */
+		protected Triple<Integer, Integer, Integer> determineSplitposition(int targetWeight) {
+			int curSum = 0;
+			int curSplitWeightMiss = 0;
+			
+			int bestSplitAfterPos = -1;
+			int bestRemLeftWeight = curSum;
+			int bestSplitWeightMiss = Math.abs(targetWeight - curSum);			
+			
+			for(int curSplitAfterPos = 0; curSplitAfterPos < pagePointers.size(); curSplitAfterPos++) {
+				curSum += childWeights.get(curSplitAfterPos);
+				curSplitWeightMiss = Math.abs(targetWeight - curSum);
+				
+				if(curSplitWeightMiss < bestSplitWeightMiss) {
+					bestSplitWeightMiss = curSplitWeightMiss;
+					bestSplitAfterPos = curSplitAfterPos;
+					bestRemLeftWeight = curSum;
+				}				
+			}
+			
+			int totalWeight = curSum;
+			
+			return new Triple<Integer, Integer, Integer>(bestSplitAfterPos, bestRemLeftWeight, totalWeight - bestRemLeftWeight);
+		}
+		
+		public SplitInfo split() {			
+			int splitPos = pagePointers.size() / 2; // as we now work with B-Tree splitting just split in the middle.
+			
+			InnerNode newode = new InnerNode();
+			
+			//- split separators
+			// separators[splitPos] becomes the separator between the offspring 
+			newode.separators = HUtil.splitOffRight(separators, splitPos, new ArrayList<K>());
+			K offspringSeparator = separators.remove(splitPos);
+			
+			//- split pointers and weights
+			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
+			newode.childWeights = HUtil.splitOffRight(childWeights, splitPos, new ArrayList<Integer>());
+			//-- recalculate resulting weights again
+			int remLeft = 0;
+			for(int w : childWeights) remLeft += w;
+			int remRight = 0;
+			for(int w : newode.childWeights) remRight += w;
+			
+			//-- split samples
+			int keepSamples = samples.size() / 2;
+			newode.samples = HUtil.splitOffRight(samples, keepSamples, new ArrayList<V>());
+			//-- replenish samples if underflown
+			if(sampleUnderflow())
+				redrawSamples();
+			if(newode.sampleUnderflow())
+				newode.redrawSamples();			
+			
+			//- put new node into Container
+			P newodeCID = container.insert(newode);
+			
+			return new SplitInfo(newodeCID, offspringSeparator, remLeft, remRight);			
+		}
+		
+		public SplitInfo insert(V value, P thisCID, int level) {
+			K key = getKey.apply(value);
+			
+			//- insert in sublevel
+			int pos = HUtil.binFindL(separators, key);
+			
+			P nextCID = pagePointers.get(pos);			
+			childWeights.set(pos, childWeights.get(pos)+1); // update weight of child
+			
+			Node nextNode = container.get(nextCID);
+			
+			SplitInfo childSplitInfo = nextNode.insert(value, nextCID, level-1); // recursion
+			
+			if(childSplitInfo != null) { // a split occured in child and we need to update the directory
+				separators.add  (pos  , childSplitInfo.separator);
+				pagePointers.add(pos+1, childSplitInfo.newnodeCID);
+				childWeights.set(pos  , childSplitInfo.weightLeft);
+				childWeights.add(pos+1, childSplitInfo.weightRight);
+			}
+			
+			// container.unfix(nextCID); // release lock on the childs memory			
+			
+			//- check for split here
+			SplitInfo splitInfo = null;
+			if(overflow()) {
+				splitInfo = split();
+			}
+			container.update(thisCID, this);
+			
+			return splitInfo;
+		}
+
+
+		/**
+		 * Determine the following node's CID on key's search path.
+		 * @param key the key to look for
+		 * @return P containerID of the next node
+		 */
+		public P chooseSubtree(K key) {
+			int pos = HUtil.binFindL(separators, key);
+			return pagePointers.get(pos);
+		}
+
+		public boolean overflow() {
+			return pagePointers.size() > branchingHi;
+		}
+
+		public boolean underflow() {
+			return pagePointers.size() < branchingLo;
+		}
+		
+		public boolean sampleUnderflow() {
+			return samples.size() < samplesPerNode / 2;			
+		}
+		
+		/** Replenishing of a sample buffer by draining from the childs' buffers. Might invoke recursive replenishing.
+		 * 
+		 * Ok, so what are we supposed to do here exactly?
+		 * --> Q: What number of samples should we aim for? 
+		 * 			avg = s, min = s / 2 or max = s * 2
+		 *		  Or should we make it dependant on how many "excess" samples are readily available in the child nodes?
+		 * --> Q: Draw how much from which child?
+		 * 			Imo, we can only draw accordingly to the subtree sizes of the childs to get a correct sample.
+		 * 			--> is this exactly determined or do we have to draw probabilistic?
+		 * 
+		 * @param d amount of excess samples we want to generate for parent nodes.
+		 */
+		public List<V> redrawSamples(int d) {
+			if(samples.size() < samplesPerNode) { // buffer is so empty we want to fill it
+				d += 2*samplesPerNode - samples.size(); 
+			}
+			
+			int myWeight = totalWeight();
+			LinkedList<V> newSamples = new LinkedList<V>();
+			
+			//-- determing how much samples we need from each child
+			/* TODO: this is wrong as it does not lead to a uniform sample over the whole subtree
+			 * as only those samples are considered, whose partitions (built from the boundaries of the subtrees)
+			 * have sizes according to the expected case.
+			 * Instead we have to generate newsamplesPerChild probabilistic (through a binomial distribution).   
+			 */
+			int[] newsamplesPerChild = HUtil.distributeByAbsoluteWeights(d, childWeights);
+			
+			
+			
+			
+			
+			return excessSamples;
+			// TODO
+			// pass
+		}
+	}
+
+	public class NearLeafNode extends Node {
+		List<K> separators;
+		List<P> pagePointers;
+		
+		/** weights are saved inside the parent to make it possible to determine a node's split without having to load all child-nodes from disk
+		 * to access the weight information.
+		 */
+		List<Integer> childWeights;
+	
 		public boolean isLeaf() { return false; }
 		
 		public int totalWeight() {
@@ -220,7 +403,7 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 			K key = getKey.apply(value);
 			
 			//- insert in sublevel
-			int pos = HUtil.findPos(separators, key);
+			int pos = HUtil.binFindL(separators, key);
 			
 			P nextCID = pagePointers.get(pos);			
 			childWeights.set(pos, childWeights.get(pos)+1); // update weight of child
@@ -240,7 +423,8 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 			
 			//- check for split here
 			SplitInfo splitInfo = null;
-			if(weightOverflow(totalWeight(), level)) {
+			if(overflow()) {
+				// TODO
 				int targetWeight = HUtil.intPow(branchingParam, level) * tK;
 				splitInfo = split(targetWeight);
 			}
@@ -248,19 +432,25 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 			
 			return splitInfo;
 		}
-
-
+	
+	
 		/**
 		 * Determine the following node's CID on key's search path.
 		 * @param key the key to look for
 		 * @return P containerID of the next node
 		 */
 		public P chooseSubtree(K key) {
-			int pos = HUtil.findPos(separators, key);
+			int pos = HUtil.binFindL(separators, key);
 			return pagePointers.get(pos);
 		}
-		
-		
+	
+		public boolean overflow() {
+			return pagePointers.size() > branchingHi;
+		}
+
+		public boolean underflow() {
+			return pagePointers.size() < branchingLo;
+		}
 	}
 
 	public class LeafNode extends Node {
@@ -310,11 +500,11 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 
 		public SplitInfo insert(V value, P thisCID, int levelUnused) {
 			K key = getKey.apply(value);
-			int insertPos = HUtil.findPos(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
+			int insertPos = HUtil.binFindL(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
 			values.add(insertPos, value);
 			
 			SplitInfo splitInfo = null;
-			if(leafOverflow(values.size())) {
+			if(overflow()) {
 				splitInfo = split();
 			}
 			
@@ -322,6 +512,14 @@ public class RSTree_v2<K extends Comparable<K>, V, P> {
 			container.update(thisCID, this);
 			container.unfix(thisCID);
 			return splitInfo;
+		}
+		
+		public boolean overflow() {
+			return values.size() > leafHi;
+		}
+		
+		public boolean underflow() {
+			return values.size() < leafLo;
 		}
 	}
 	
