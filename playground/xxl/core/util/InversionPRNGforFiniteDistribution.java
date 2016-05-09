@@ -25,7 +25,7 @@ public class InversionPRNGforFiniteDistribution implements DiscreteRandomWrapper
 	@Override
 	public int nextInt() {
 		double quantile = rng.nextDouble();		
-		int pos = HUtil.binFindR(cdf, quantile);
+		int pos = HUtil.binFindSE(cdf, quantile);
 		return pos;
 	}
 	

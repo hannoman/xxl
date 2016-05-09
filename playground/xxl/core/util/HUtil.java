@@ -33,7 +33,7 @@ public class HUtil {
 	 * @param key key to insert, respectively lookup.
 	 * @return position <tt>i</tt>
 	 */
-	public static <T> int binFindL(List<? extends Comparable<? super T>> list, T key) {
+	public static <T> int binFindES(List<? extends Comparable<? super T>> list, T key) {
 		int rawpos = Collections.binarySearch(list, key);		
 		if(rawpos < 0)
 			return -(rawpos + 1);
@@ -47,19 +47,19 @@ public class HUtil {
 	 * @param key key to insert, respectively lookup.
 	 * @return position <tt>i</tt>
 	 */
-	public static <T> int binFindR(List<? extends Comparable<? super T>> list, T key) {
-		int pos = binFindL(list, key);
+	public static <T> int binFindSE(List<? extends Comparable<? super T>> list, T key) {
+		int pos = binFindES(list, key);
 		while(pos >= 1 && list.get(pos-1).equals(key))
 			pos--;
 		return pos;
 	}
 	
 	public static <T, C extends Comparable<? super T>> int binFindL(C[] arr, T key) {
-		return binFindL(Arrays.asList(arr), key);
+		return binFindES(Arrays.asList(arr), key);
 	}
 	
 	public static <T, C extends Comparable<? super T>> int binFindR(C[] arr, T key) {
-		return binFindR(Arrays.asList(arr), key);
+		return binFindSE(Arrays.asList(arr), key);
 	}
 	
 	public static int[] distributeByAbsoluteWeights(int toDistribute, List<Integer> weights) {
@@ -103,6 +103,8 @@ public class HUtil {
 		
 		return assigned;
 	}
+	
+	
 	
 	
 }

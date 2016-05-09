@@ -316,8 +316,8 @@ public class Test_WBTree {
 				if(!compmap.containsKey(tVal)) e_positives++;
 	
 			//--- Computing the comparison-result
-			int compLoIdx = HUtil.binFindL(containedKeys, lo);
-			int compHiIdx = HUtil.binFindL(containedKeys, hi);
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
 			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
 			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
 			
@@ -396,8 +396,8 @@ public class Test_WBTree {
 				if(!compmap.containsKey(tVal)) e_positives++;
 
 			//--- Computing the comparison-result
-			int compLoIdx = HUtil.binFindL(containedKeys, lo);
-			int compHiIdx = HUtil.binFindL(containedKeys, hi);
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
 			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
 			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx+1);
 			

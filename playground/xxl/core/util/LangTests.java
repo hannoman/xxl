@@ -23,10 +23,10 @@ public class LangTests {
 //		System.out.println("Position for x = "+ x +" in "+ ll.toString() + ": "+ Collections.binarySearch(ll, x));
 		
 		x = 1;
-		int mypos = HUtil.binFindL(ll, x);
+		int mypos = HUtil.binFindES(ll, x);
 		
 		System.out.println("Position (old) for x = "+ x +" in "+ ll.toString() + ": "+ Collections.binarySearch(ll, x));
-		System.out.println("Position (new) for x = "+ x +" in "+ ll.toString() + ": "+ HUtil.binFindL(ll, x));
+		System.out.println("Position (new) for x = "+ x +" in "+ ll.toString() + ": "+ HUtil.binFindES(ll, x));
 		
 		// KEEP IN MIND
 		Integer a = new Integer(42); Integer b = new Integer(42);

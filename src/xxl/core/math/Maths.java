@@ -849,7 +849,7 @@ public class Maths {
 	
 	/**
 	 * This method provides a multidimensional aggregation function, that is
-	 * initialized with an arry of aggregation functions.
+	 * initialized with an array of aggregation functions.
 	 * 
 	 * @param <P> the type of the values to be aggregated.
 	 * @param <A> the type of the aggragate.
