@@ -19,19 +19,23 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.functions.FunctionsJ8;
-import xxl.core.io.Convertable;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
-import xxl.core.util.Triple;
 
-public class RSTree_v3<K extends Comparable<K>, V, P> {
+public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V, P> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
 	 * 
-	 *   TODO Mini-Milestone 1: Implement sample buffer maintenance for insertions.
+	 * Q: perhaps roll InsertionInfo back to SplitInfo and always do a lookup before a modificating operation
+	 * 		path to node should then be buffered and therefore not incur any additional IOs.
+	 * 		-> nope, keep it that way, since it might be beneficial for bacthed operations in expansions,
+	 * 			and removals of multiple values wouldn't benefit from it.
+	 * 
+	 *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
+	 *   TODO Mini-Milestone 1.5: Implement QueryCursor for range queries.
 	 *   TODO Mini-Milestone 2: Implement lazy sampling query cursor
 	 *   
 	 * @param K type of the keys
@@ -67,7 +71,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 	int rootHeight;
 
 	/** Weight-information about the root. Root has no parent so it must be saved elsewhere. */
-	int rootWeight;
+//	int rootWeight; // for now don't track this information
 
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
@@ -92,7 +96,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 	}
 
 
-
 	/** Initialize the tree with a raw container (e.g. <tt>BlockFileContainer</tt>) and the needed converters.
 	 * We construct the usable node container from them ourselfes.
 	 * 
@@ -100,57 +103,17 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 	 * @param keyConverter converter for the key-type K 
 	 * @param valueConverter converter for the value type V
 	 */
+	@Override
 	public void initialize_buildContainer(Container rawContainer, Converter<K> keyConverter, Converter<V> valueConverter) {
 		NodeConverter nodeConverter = 
 				new NodeConverter(keyConverter, valueConverter, rawContainer.objectIdConverter());
 		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
 
-	/** Initialize the tree with a ready-to-use container.
-	 * The tree really only needs the (converting) container to store nodes. It doesn't need to know about
-	 * the Converters used.
-	 * 
-	 * @see {@link NodeConverter#NodeConverter(Converter, Converter, Converter)}
-	 * @param container a ready-to-go container which maps P to Nodes. Has to be built elsewhere.
-	 */
 	public void initialize_withReadyContainer(TypeSafeContainer<P, Node> container) {
 		this.container = container;
 	}
-	
-//
-//	public boolean weightUnderflow(int weight, int level) {
-//		return weight <= HUtil.intPow(branchingParam, level) / 2 * tK;
-//	}
-//
-//	public boolean weightOverflow(int weight, int level) {
-//		return weight >= 2 * HUtil.intPow(branchingParam, level) * tK;
-//	}
-//
-//	public boolean leafUnderflow(int weight) {
-//		return weight < tK;
-//	}
-//
-//	public boolean leafOverflow(int weight) {
-//		return weight >= 2*tK;
-//	}
 
-	//
-	//	public boolean weightUnderflow(int weight, int level) {
-	//		return weight <= HUtil.intPow(branchingParam, level) / 2 * tK;
-	//	}
-	//
-	//	public boolean weightOverflow(int weight, int level) {
-	//		return weight >= 2 * HUtil.intPow(branchingParam, level) * tK;
-	//	}
-	//
-	//	public boolean leafUnderflow(int weight) {
-	//		return weight < tK;
-	//	}
-	//
-	//	public boolean leafOverflow(int weight) {
-	//		return weight >= 2*tK;
-	//	}
-	
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
 	 * operation in a subtree. This can either be the information that and how the child has split (~ SplitInfo),
@@ -160,6 +123,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 	class InsertionInfo {
 		boolean isSplit = false;
 		int weightNew = 0;
+		// TODO: for single insertions we don't need the new weight, but only the info if it was
+//		boolean insertionSuccessful = true;  
 		
 		P newnodeCID = null;
 		K separator = null;
@@ -192,6 +157,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 		public abstract InsertionInfo insert(V value, P thisCID, int level);
 
 		public abstract List<V> drainSamples(int amount);
+
+		public abstract int totalWeight();
 
 //		public abstract List<V> buildSampleBuffer(int d);
 	}
@@ -234,7 +201,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 			return pagePointers.get(pos);
 		}
 
+		@Override
 		public int totalWeight() {
+			// OPT somehow prevent recalculation every time.
 			return childWeights.stream().reduce(0, (x,y) -> x+y);			
 		}
 
@@ -245,7 +214,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 			int pos = HUtil.binFindES(separators, key);			
 			P nextCID = pagePointers.get(pos);
 			Node nextNode = container.get(nextCID);
-			
+			int oldWeight = totalWeight(); 
+					
 			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, level-1); //== RECURSION ==
 			
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
@@ -259,6 +229,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 			}
 			
 			// container.unfix(nextCID); // release lock on the childs memory			
+			
+			//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
+			int curWeight = totalWeight();
+			if(hasSampleBuffer() && curWeight - oldWeight > 0) { // insertion actually took place 
+				/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
+				 * with the newly inserted item.
+				 * This is like it is described in the paper, but perhaps we can improve on this? // QUE
+				 */
+				double p = 1.0 / (double)curWeight;
+				for (int i = 0; i < samples.size(); i++)
+					if(rng.nextDouble() < p)
+						samples.set(i, value);
+			}
 			
 			//- check for split here
 			InsertionInfo insertionInfo = null;
@@ -280,7 +263,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 			//- split separators
 			// separators[splitPos] becomes the separator between the offspring 
 			newode.separators = HUtil.splitOffRight(separators, splitPos, new ArrayList<K>());
-			K offspringSeparator = separators.remove(splitPos);
+			K offspringSeparator = separators.remove(splitPos-1);
 			
 			//- split pointers and weights
 			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
@@ -484,6 +467,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 			return Sample.wrKeep(values, amount, rng);
 		}
 
+		public int totalWeight() {
+			return values.size();
+		}
+
 	}
 	
 	
@@ -626,44 +613,48 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 	}
 	
 	
+	/**
+	 * Insertion. 
+	 */
+	@Override
 	public void insert(V value) {
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
 			root.values = new ArrayList<V>();
 			root.values.add(value);
-			rootWeight = 1;
+//			rootWeight = 1;
 			rootHeight = 0;
 			rootCID = container.insert(root);
 			return;
 		} else {
-			InsertionInfo splitInfo = container.get(rootCID).insert(value, rootCID, rootHeight);
-			rootWeight++;
+			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
 			
-			if(splitInfo != null) { // new root
+			if(insertionInfo.isSplit) { // new root
 				InnerNode newroot = new InnerNode();
 				
 				newroot.separators = new ArrayList<K>();
-				newroot.separators.add(splitInfo.separator);
+				newroot.separators.add(insertionInfo.separator);
 				
 				newroot.pagePointers = new ArrayList<P>();
 				newroot.pagePointers.add(rootCID);
-				newroot.pagePointers.add(splitInfo.newnodeCID);
+				newroot.pagePointers.add(insertionInfo.newnodeCID);
 				
 				newroot.childWeights = new ArrayList<Integer>();
-				newroot.childWeights.add(splitInfo.weightLeft);
-				newroot.childWeights.add(splitInfo.weightRight);
+				newroot.childWeights.add(insertionInfo.weightLeft);
+				newroot.childWeights.add(insertionInfo.weightRight);
 				
 				rootCID = container.insert(newroot);
 				rootHeight++;
+			} else {
+//				rootWeight++;
 			}
 		}		
 	}
 			
 	/**
 	 * Lookup.
-	 * @param key
-	 * @return
 	 */
+	@Override
 	public List<V> get(K key) {
 		int level = rootHeight;
 		P nodeCID = rootCID;
@@ -679,5 +670,16 @@ public class RSTree_v3<K extends Comparable<K>, V, P> {
 		
 		return resultsV;		
 	}
+
+	//-------------------------------------------------------------------------------
+	//--- stupid stuff for interfaces
+	//-------------------------------------------------------------------------------
+	@Override
+	public int height() { return rootHeight; }
+
+	@Override
+	public Function<V, K> getGetKey() {
+		return getKey;
+	} 
 	
 }

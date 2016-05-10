@@ -25,7 +25,7 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
+public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V, P> {
 	/** Standalone version of a weight-balanced B+-Tree.
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *
@@ -38,6 +38,8 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	 * - Mind that this is no real BPlusTree as there are no pointers between siblings and cousins.  
 	 * - Working version.
 	 *   
+	 * TODO: generalize SplitInfo to InsertionInfo as in RSTree
+	 *  
 	 * @param K type of the keys
 	 * @param V type of the actual data
 	 * @param P type of the ContainerIDs (= CIDs)
@@ -547,7 +549,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 	// public class QueryCursor extends xxl.core.indexStructures.QueryCursor {
 	/* we won't subclass xxl.core.indexStructures.QueryCursor here as it is supposed for queries over trees which inherit 
 	 	from xxl.core.indexStructures.Tree */
-	
+
 	/**
 	 * A query cursor for simple range queries. 
 	 */
@@ -687,5 +689,17 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> {
 		}
 
 	}
+	
+	//-------------------------------------------------------------------------------
+	//--- stupid stuff for interfaces
+	//-------------------------------------------------------------------------------
+	@Override
+	public int height() { return rootHeight; }
+
+
+	@Override
+	public Function<V, K> getGetKey() {
+		return getKey;
+	} 
 	
 }
