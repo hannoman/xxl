@@ -4,11 +4,15 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
+import java.util.Queue;
 import java.util.Random;
+import java.util.Stack;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -18,6 +22,9 @@ import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.cursors.AbstractCursor;
+import xxl.core.cursors.Cursor;
+import xxl.core.cursors.sources.InfiniteSampler;
 import xxl.core.functions.FunctionsJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
@@ -35,7 +42,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * 			and removals of multiple values wouldn't benefit from it.
 	 * 
 	 *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
-	 *   TODO Mini-Milestone 1.5: Implement QueryCursor for range queries.
+	 *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
 	 *   TODO Mini-Milestone 2: Implement lazy sampling query cursor
 	 *   
 	 * @param K type of the keys
@@ -93,6 +100,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.samplesPerNodeLo = samplesPerNode / 2;
 		this.samplesPerNodeHi = samplesPerNode * 2;
 		this.samplesPerNodeReplenishTarget = samplesPerNode;		
+		this.rng = new Random();
 	}
 
 
@@ -114,6 +122,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.container = container;
 	}
 
+	public void setRNG(Random rng) {
+		this.rng = rng;
+	}
+	
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
 	 * operation in a subtree. This can either be the information that and how the child has split (~ SplitInfo),
@@ -159,6 +171,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public abstract List<V> drainSamples(int amount);
 
 		public abstract int totalWeight();
+
+		protected abstract List<V> relevantValues(K lo, K hi);
 
 //		public abstract List<V> buildSampleBuffer(int d);
 	}
@@ -306,6 +320,37 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			return new InsertionInfo(newodeCID, offspringSeparator, weightLeft, weightRight);			
 		}
 		
+		/**
+		 * Returns all values relevant for a given query in this' node subtree. 
+		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
+		 */
+		protected List<V> relevantValues(K lo, K hi) {
+			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) joins
+			for(int i : relevantChilds(lo, hi)) {
+				Node child = container.get(pagePointers.get(i));
+				allValues.addAll(child.relevantValues(lo,hi));
+			}
+			return allValues;
+		}
+		
+		/**
+		 * Returns the indices of all childs relevant for a given query. 
+		 */
+		protected List<Integer> relevantChilds(K lo, K hi) {
+			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) joins
+			
+			// TODO: use general format for queries, unspecific to the 1-dimensional case.
+			int startPos = HUtil.binFindES(separators, lo);
+			int endPos = HUtil.binFindES(separators, hi);
+			for(int i=startPos; i <= endPos; i++) {
+				relChilds.add(i);
+			}
+			return relChilds;
+		}
+		
+		protected List<P> relevantChildCIDs(K lo, K hi) {
+			return HUtil.getAll(relevantChilds(lo, hi), pagePointers);
+		}
 		
 		
 		
@@ -471,6 +516,21 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			return values.size();
 		}
 
+		/**
+		 * Returns all values relevant for a given query in this' node subtree. 
+		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
+		 */
+		@Override
+		protected List<V> relevantValues(K lo, K hi) {
+			List<V> allValues = new LinkedList<V>();
+						
+			for(V value : values) {
+				K key = getKey.apply(value);
+				if(key.compareTo(lo) >= 0 && key.compareTo(hi) <= 0) // TODO: use general format for queries, unspecific to the 1-dimensional case.
+					allValues.add(value);
+			}
+			return allValues;
+		}
 	}
 	
 	
@@ -486,7 +546,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * @see WBTreeSA_v3#initialize_withReadyContainer(TypeSafeContainer)
 	 * @author Dominik Krappel
 	 */
-	// FIXME: serialize sample buffers, too.
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
 
@@ -508,7 +567,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			else 		return readInnerNode(dataInput);			
 		}
 
-		LeafNode readLeafNode(DataInput dataInput) throws IOException {
+		Node readLeafNode(DataInput dataInput) throws IOException {
 			// create Node shell
 			LeafNode node = new LeafNode();
 
@@ -613,6 +672,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 	
 	
+	// public class QueryCursor extends xxl.core.indexStructures.QueryCursor {
+	/* we won't subclass xxl.core.indexStructures.QueryCursor here as it is supposed for queries over trees which inherit 
+	 	from xxl.core.indexStructures.Tree */
+	
 	/**
 	 * Insertion. 
 	 */
@@ -669,6 +732,336 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
 		
 		return resultsV;		
+	}
+
+	// public class QueryCursor extends xxl.core.indexStructures.QueryCursor {
+	/* we won't subclass xxl.core.indexStructures.QueryCursor here as it is supposed for queries over trees which inherit 
+	 	from xxl.core.indexStructures.Tree */
+	
+	@Override
+	public Cursor<V> rangeQuery(K lo, K hi){
+		return new QueryCursor(lo, hi);
+	}
+	
+	/**
+	 * A query cursor for simple range queries. 
+	 */
+	public class QueryCursor extends AbstractCursor<V> {
+		final K lo;
+		final K hi;			
+		
+		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node		
+		Stack<Integer> sIdx; // sIdx.peek() =: current index
+		
+		V precomputed;
+		
+		public QueryCursor(K lo, K hi, P startNode) {
+			super();
+			this.lo = lo;
+			this.hi = hi;
+			
+			sNodes = new Stack<P>();
+			sNodes.push(startNode);
+			
+			sIdx = new Stack<Integer>();			
+						
+			precomputed = null; // the next value to spit out
+		}
+		
+		public QueryCursor(K lo, K hi) {
+			this(lo, hi, rootCID);
+		}
+	
+		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
+		@Override
+		public void open() {
+			// get the current node and lock it in the buffer
+			Node curNode = container.get(sNodes.peek(), false);
+			
+			while(curNode.isInner()) {
+				InnerNode curINode = (InnerNode) curNode;  
+				
+				// find the index of the next childnode
+				int nextPos = HUtil.binFindES(curINode.separators, lo);
+				sIdx.push(nextPos);
+				
+				// descend to next node
+				P nextPID = curINode.pagePointers.get(nextPos);
+				sNodes.push(nextPID);
+				curNode = container.get(sNodes.peek(), false);
+			}
+			
+			// now our node is a leaf and we just need to find the starting position			
+			LeafNode curLNode = (LeafNode) curNode;
+			
+			// find starting position
+			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunctionsJ8.toOldFunction(getKey));			
+			int pos = HUtil.binFindES(mappedList, lo);
+			sIdx.push(pos);
+			
+			// regarding first computation of hasNext:
+			// we decrement the position here so that the following call of hasNext computes the right element
+			sIdx.push(sIdx.pop() - 1); 			
+			
+			//- sets the open flag
+			super.open();
+		}
+	
+		@Override
+		public void close() {			
+			// release locked path
+			while(!sNodes.empty())
+				container.unfix(sNodes.pop());
+			super.close();
+		}
+		
+		private void descendToSmallest() {
+			// get the current node and fix it in the buffer
+			Node curNode = container.get(sNodes.peek(), false);			
+			
+			while(curNode.isInner()) {				
+				InnerNode curINode = (InnerNode) curNode;
+				// set the index of the current node
+				sIdx.push(0);
+				
+				P nextPID = curINode.pagePointers.get(sIdx.peek());
+				sNodes.push(nextPID);
+				curNode = container.get(sNodes.peek(), false);
+			}
+			
+			// set the index in the leaf node too
+			sIdx.push(0);
+		}
+		
+		private boolean switchToNextNode() {
+			// TODO: would be clearer if not recursive.
+			
+			// release the active node and index and unfix from the buffer 
+			container.unfix(sNodes.pop()); 
+			sIdx.pop();
+			
+			if(sNodes.empty()) // recursion exit, no value-next node can be found
+				return false;
+			
+			// get the right brother from the parent node if present..
+			InnerNode pNode = (InnerNode) container.get(sNodes.peek());
+			sIdx.push(sIdx.pop() + 1); // increment counter		
+			if(sIdx.peek() < pNode.pagePointers.size()) {
+				sNodes.push(pNode.pagePointers.get(sIdx.peek()));
+				descendToSmallest();
+				return true;
+			} else { // ..if not call myself recursively				
+				return switchToNextNode();
+			}
+		}
+	
+		/** We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
+		protected boolean hasNextObject() {		
+			LeafNode curLNode = (LeafNode) container.get(sNodes.peek());
+			sIdx.push(sIdx.pop() + 1); // = increment counter			
+	
+			if(sIdx.peek() >= curLNode.values.size()) { // we need to switch to the node which has the next values
+				if(switchToNextNode())
+					// fetch the updated leaf node again // TODO separate tail of stack from the rest
+					curLNode = (LeafNode) container.get(sNodes.peek());
+				else  
+					return false; // hit the right border of the index structure				
+			}
+			
+			precomputed = curLNode.values.get(sIdx.peek());
+			if(getKey.apply(precomputed).compareTo(hi) > 0) 
+				return false; // hit the high border
+			
+			return true;
+		}
+	
+		@Override
+		protected V nextObject() {
+			return precomputed;
+		}
+	
+	}
+	
+	
+	public Cursor<V> samplingRangeQuery(K lo, K hi){
+		return new SamplingCursor(lo, hi);
+	}
+
+	/**
+	 * A cursor which produces continually samples from the given query.
+	 * See algorithm 1 in the paper.
+	 * Note that this doesn't correspond to the exact query if run till the end, 
+	 * as there is no end, as this cursor produces values infinitely 
+	 * (and reports values multiple times, even before all unique values are exhausted).  
+	 */
+	public class SamplingCursor extends AbstractCursor<V> {
+		// the query // TODO: generalize from 1-dimensional case
+		final K lo;
+		final K hi;			
+		
+		/** Whether the cursor fixes the frontier nodes in the buffer. Mind that this cursor will eventually load
+		 * the whole base relation that way.. */
+		boolean fixing;
+		
+		/** Temporary variable to store nodes to inspect between construction and call to open() 
+		 * as we only want to reserve ressources after open().
+		 */
+		List<P> initialCIDs; 
+		
+		List<P> frontierCIDs;
+		// we need something like weighted cursors/iterators
+		List<Integer> weights;
+		List<Integer> accWeights;
+		int totalWeight;
+		
+		List<Iterator<V>> samplers;
+		
+		Queue<V> precomputed;
+		
+		public SamplingCursor(K lo, K hi) {
+			this(lo, hi, false);
+		}		
+		public SamplingCursor(K lo, K hi, boolean fixing) {
+			this(lo, hi, Arrays.asList(rootCID), fixing);
+		}		
+		public SamplingCursor(K lo, K hi, List<P> initialCIDs, boolean fixing) {
+			super();
+			// query
+			this.lo = lo;
+			this.hi = hi;
+			// nodes to inspect
+			this.initialCIDs = initialCIDs;
+			// config
+			this.fixing = fixing;
+			// state
+			frontierCIDs = new LinkedList<P>();
+			weights = new LinkedList<Integer>();
+			accWeights = new ArrayList<Integer>(); // as accesses should outnumber modifications use ArrayList
+			totalWeight = 0;
+			samplers = new ArrayList<Iterator<V>>();
+			// next values to spit out
+			precomputed = new LinkedList<V>(); 
+		}
+	
+		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
+		@Override
+		public void open() {
+			for(P iniCID : initialCIDs)
+				addToFrontier(iniCID);			
+			//- sets the open flag
+			super.open();
+		}
+		
+		/**
+		 * Only called from open().
+		 */
+		private void addToFrontier(P nodeCID) {
+			Node node = container.get(nodeCID, !fixing); // fix
+			
+			frontierCIDs.add(nodeCID);
+			
+			if(node.isInner()) {
+				InnerNode innerNode = (InnerNode) node;
+				if(innerNode.hasSampleBuffer()) { //a
+					samplers.add(innerNode.samples.iterator());
+					addWeight(innerNode.totalWeight());
+				} else { // inner node without attached sample buffer
+					// QUE: this is in opposition to the paper evaluated eagerly (see algorithm 1, lines 7-11)
+					List<V> relevantSamples = innerNode.relevantValues(lo, hi);
+					samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
+					addWeight(relevantSamples.size());
+				}
+			} else {
+				// FIXME: this shouldn't be reached as we extract all values from leaves in the InnerNodes without sample buffer 
+				LeafNode leafNode = (LeafNode) node;
+				List<V> relevantSamples = leafNode.relevantValues(lo, hi);
+				samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
+				addWeight(relevantSamples.size());
+			}			
+		}
+		
+		private void removeFromFrontier(int idx) {
+			container.unfix(frontierCIDs.remove(idx)); // unfix and remove from CID list // TODO: is this a problem if already unfixed?
+			removeWeight(idx);
+			samplers.remove(idx);			
+		}
+		
+		private void addWeight(int w) {
+			weights.add(w);
+			if(accWeights.isEmpty()) {
+				accWeights.add(w);
+			} else {
+				accWeights.add(accWeights.get(accWeights.size() - 1) + w);
+			}			
+			totalWeight += w;
+		}
+		
+		private void removeWeight(int idx) {
+			int w = weights.remove(idx);
+			
+			ListIterator<Integer> awIter = accWeights.listIterator(idx);
+			awIter.next();
+			awIter.remove();
+			while(awIter.hasNext())				
+				awIter.set(awIter.next() - w);
+		}
+	
+		@Override
+		public void close() {			
+			// release all nodes which are still in frontier from the buffer
+			for(P cid : frontierCIDs)
+				container.unfix(cid);
+			super.close();
+		}
+		
+		/** We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
+		protected boolean hasNextObject() {		
+			if(precomputed.isEmpty()) { // compute new values // single run here
+				//-- determine Iterator (== Node) to draw from
+				int r = rng.nextInt(totalWeight);
+				int idx = HUtil.binFindES(accWeights, r);
+				if(!samplers.get(idx).hasNext()) { // replace with children and draw _only_ from them
+					InnerNode innerNode = (InnerNode) container.get(frontierCIDs.get(idx)); // should only happen for InnerNodes (those with sample buffers, which are finite).
+					removeFromFrontier(idx);
+					List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
+					SamplingCursor subCursor = new SamplingCursor(lo, hi, relChildCIDs, fixing);
+					precomputed.addAll(subCursor.nextN(1));
+					join(subCursor);
+				} else {
+					precomputed.add(samplers.get(idx).next());
+				}
+			}
+			
+			return true;
+		}
+	
+		@Override
+		protected V nextObject() {
+			return precomputed.remove();
+		}
+		
+		/** Batched iteration. */
+		public List<V> nextN(int n) {
+			// OPT: actually _do_ some optimization. xD
+			List<V> sampled = new LinkedList<V>();
+			for(int i=0; i < n; i++)
+				sampled.add(this.next());
+			return sampled;
+		}
+	
+		/** Joins a previously generated subcursor back into the parent. The other cursor is then invalid.
+		 * TODO: Ugh, but we must not close() it, as this would unfix the pages.
+		 */
+		private void join(SamplingCursor other) {
+			frontierCIDs.addAll(other.frontierCIDs);
+			samplers.addAll(other.samplers);
+			for (int i = 0; i < other.accWeights.size(); i++)
+				other.accWeights.set(i, other.accWeights.get(i) + totalWeight);
+			accWeights.addAll(other.accWeights);
+			totalWeight += other.totalWeight;
+			// other.close(); // Don't! Would break fixing = true behaviour.
+		}
+		
 	}
 
 	//-------------------------------------------------------------------------------

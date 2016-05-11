@@ -2,8 +2,11 @@
 package xxl.core.util;
 
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.OptionalInt;
+import java.util.RandomAccess;
 import java.util.Arrays;
 
 public class HUtil {
@@ -104,7 +107,44 @@ public class HUtil {
 		return assigned;
 	}
 	
+	/**
+	 * Takes all values specified by the given <tt>idxs</tt> (which must be in ascending order) 
+	 * from <tt>values</tt> through the use of a ListIterator.
+	 */
+	public static <V> LinkedList<V> getAll_SequentialAccess(List<Integer> idxs, List<V> values) {
+		LinkedList<V> taken = new LinkedList<V>();
+		ListIterator<V> valueIter = values.listIterator();
+		for(int idx : idxs) {
+			for (int i = 0; i < idx; i++) 
+				valueIter.next();
+			taken.add(valueIter.next());
+		}
+		return taken;		
+	}
+
+	
+	/**
+	 * Takes all values specified by the given <tt>idxs</tt> 
+	 * from <tt>values</tt> through random access.
+	 */
+	public static <V> LinkedList<V> getAll_RandomAccess(List<Integer> idxs, List<V> values) {
+		LinkedList<V> taken = new LinkedList<V>();		
+		for(int idx : idxs)
+			taken.add(values.get(idx));
+		return taken;		
+	}
+	
+	/**
+	 * Takes all values specified by the given <tt>idxs</tt> from <tt>values</tt>.
+	 */
+	public static <V> LinkedList<V> getAll(List<Integer> idxs, List<V> values) {
+		if(values instanceof RandomAccess)
+			return getAll_RandomAccess(idxs, values);
+		else
+			return getAll_SequentialAccess(idxs, values);
+	}
 	
 	
+
 	
 }

@@ -664,7 +664,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 		}
 
 		/** We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
-		public boolean hasNextObject() {		
+		protected boolean hasNextObject() {		
 			LeafNode curLNode = (LeafNode) container.get(sNodes.peek());
 			sIdx.push(sIdx.pop() + 1); // = increment counter			
 	
