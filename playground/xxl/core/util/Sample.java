@@ -1,6 +1,7 @@
 package xxl.core.util;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -71,15 +72,16 @@ public class Sample {
 	}
 	
 	/**
-	 * Draws <tt>k</tt> values at random without replacement from the range {0, ..., n-1}.
+	 * Draws <tt>k</tt> values at random without replacement from the range <tt>{0, ..., n-1}</tt>.
 	 * This implementation doesn't use Fisher-Yates shuffle, but uses a {@link Set} to identify already generated
 	 * values and reject them. It's therefore probabilistic. Should be more efficient if k << n. 
-	 * 
+	 * <br>
 	 * Note: This could also be achieved using a {@link Taker} cursor after a {@link Permutator} cursor on an array
 	 * containing the indices (using Fisher-Yates shuffle in that case).
 	 *   
 	 * @param n specifying the range {0, ... , n-1}
 	 * @param k amount of samples to draw
+	 * @param rng random number generator
 	 */
 	public static List<Integer> worIdx(int n, int k, Random rng) {
 		TreeSet<Integer> set = new TreeSet<Integer>();		
@@ -90,11 +92,27 @@ public class Sample {
 				set.add(next);
 		}
 		
-		// give result in sorted order
-		List<Integer> generated = new ArrayList<Integer>(set.size());
-		for(Integer x : set)
-			generated.add(x);
-		return generated;		
+		// TreeSet implements SortedSet, therefore the order of the drawn elements is kept
+		return new ArrayList<Integer>(set); // cast to ArrayList
 	}
+	
+//	public List<Integer> drawWithDecreasingWeights(List<Integer> weights, int k) {
+//		List<Integer> partIdxs = new LinkedList<Integer>();
+//		
+//		
+//	}
+	
+	public static <E> E[] permute(List<E> ls, Random rng) {
+		E[] values = ls.toArray((E[]) new Object[ls.size()]);
+		
+		for (int i = 0; i < values.length; i++) {
+			int swapIdx = rng.nextInt(values.length - i);
+			E tmp = values[i]; values[i] = values[swapIdx]; values[swapIdx] = tmp;			
+		}
+		return values;		
+	}
+	
+	
+	
 	
 }

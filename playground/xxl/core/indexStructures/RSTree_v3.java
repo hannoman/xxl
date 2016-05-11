@@ -38,12 +38,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * 
 	 * Q: perhaps roll InsertionInfo back to SplitInfo and always do a lookup before a modificating operation
 	 * 		path to node should then be buffered and therefore not incur any additional IOs.
-	 * 		-> nope, keep it that way, since it might be beneficial for bacthed operations in expansions,
+	 * 		-> nope, keep it that way, since it might be beneficial for batched operations in expansions,
 	 * 			and removals of multiple values wouldn't benefit from it.
 	 * 
 	 *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
 	 *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
-	 *   TODO Mini-Milestone 2: Implement lazy sampling query cursor
+	 *   DONE Mini-Milestone 2: Implement lazy sampling query cursor
+	 *   Mini-Milestone: Do real tests.
+	 *   Mini-Milestone: Generalize Query-Types
+	 *   Mini-Milestone: Support removals   
 	 *   
 	 * @param K type of the keys
 	 * @param V type of the actual data
@@ -122,6 +125,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.container = container;
 	}
 
+	/** For repeatable results in testing. */
 	public void setRNG(Random rng) {
 		this.rng = rng;
 	}
@@ -129,14 +133,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
 	 * operation in a subtree. This can either be the information that and how the child has split (~ SplitInfo),
-	 * or the count of the entries that got changed (think of removals or insertions in duplicate free trees) which
+	 * or the count of the entries that got changed (think of removals, or insertions in duplicate free trees) which
 	 * is needed to maintain aggregate meta-information. 
 	 */
 	class InsertionInfo {
 		boolean isSplit = false;
 		int weightNew = 0;
 		// TODO: for single insertions we don't need the new weight, but only the info if it was
-//		boolean insertionSuccessful = true;  
+		// boolean insertionSuccessful = true;  
 		
 		P newnodeCID = null;
 		K separator = null;
@@ -168,7 +172,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		public abstract InsertionInfo insert(V value, P thisCID, int level);
 
-		public abstract List<V> drainSamples(int amount);
+		protected abstract List<V> drainSamples(int amount);
 
 		public abstract int totalWeight();
 
@@ -217,7 +221,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 
 		@Override
 		public int totalWeight() {
-			// OPT somehow prevent recalculation every time.
+			// OPT: somehow prevent recalculation every time.
 			return childWeights.stream().reduce(0, (x,y) -> x+y);			
 		}
 
@@ -252,7 +256,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				 * This is like it is described in the paper, but perhaps we can improve on this? // QUE
 				 */
 				double p = 1.0 / (double)curWeight;
-				for (int i = 0; i < samples.size(); i++)
+				for(int i = 0; i < samples.size(); i++)
 					if(rng.nextDouble() < p)
 						samples.set(i, value);
 			}
@@ -270,7 +274,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		public InsertionInfo split() {			
-			int splitPos = pagePointers.size() / 2; // as we now work with B-Tree splitting just split in the middle.
+			int splitPos = pagePointers.size() / 2; // B-Tree splitting == just split in the middle.
 			
 			InnerNode newode = new InnerNode();
 			
@@ -288,7 +292,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			int weightRight = newode.childWeights.stream().reduce(0, (x,y) -> x+y);
 			
 			//-- distribute samples among the resulting nodes
-			// this is more complicated now as we have to distinguish whether the resulting nodes still have buffers attached
+			// we have to distinguish whether the resulting nodes still have buffers attached
 			if(this.samples != null) {
 				List<V> samplesLeft = new LinkedList<V>();
 				List<V> samplesRight = new LinkedList<V>();
@@ -323,10 +327,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/**
 		 * Returns all values relevant for a given query in this' node subtree. 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
+		 * TODO: only called from xxl.core.indexStructures.RSTree_v3.SamplingCursor.addToFrontier(P)
 		 */
 		protected List<V> relevantValues(K lo, K hi) {
 			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) joins
-			for(int i : relevantChilds(lo, hi)) {
+			for(int i : relevantChildIdxs(lo, hi)) {
 				Node child = container.get(pagePointers.get(i));
 				allValues.addAll(child.relevantValues(lo,hi));
 			}
@@ -336,7 +341,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/**
 		 * Returns the indices of all childs relevant for a given query. 
 		 */
-		protected List<Integer> relevantChilds(K lo, K hi) {
+		protected List<Integer> relevantChildIdxs(K lo, K hi) {
 			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) joins
 			
 			// TODO: use general format for queries, unspecific to the 1-dimensional case.
@@ -349,7 +354,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 		
 		protected List<P> relevantChildCIDs(K lo, K hi) {
-			return HUtil.getAll(relevantChilds(lo, hi), pagePointers);
+			return HUtil.getAll(relevantChildIdxs(lo, hi), pagePointers);
 		}
 		
 		
@@ -371,65 +376,66 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * 
 		 * @param d amount of excess samples we want to generate for parent nodes.
 		 */
-//		public List<V> buildSampleBuffer(int toYield) {
-//			int toDraw = toYield;
-//			if(samples.size() < samplesPerNode) { // buffer is so empty we want to fill it too
-//				toDraw += 2*samplesPerNode - samples.size(); 
-//			}
-//			
-//			//-- determining how much samples we need from each child
-//			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, d, rng);
-//			
-//			//-- fetch samples
-//			LinkedList<V> newSamples = new LinkedList<V>();
-//			for (int i = 0; i < pagePointers.size(); i++) {
-//				Node child = container.get(pagePointers.get(i));
-//				List<V> gotSamples = child.buildSampleBuffer(nSamplesPerChild.get(i));
-//			}
-//			
-//			//-- yield some and save some in buffer
-//			// this amounts to a WoR sample of all the available samples here
-//			// TODO
-//			return excessSamples;
-//		}
-		
-		
-		/**
-		 * Checks for a underflow in the sample buffer and repairs it.
-		 * Repairing for InnerNodes is done by draining samples from the child nodes.
-		 */
-		public void repairSampleBuffer() {
-			if(sampleUnderflow()) {				
-				int toDraw = samplesPerNodeReplenishTarget - samples.size();
-				samples.addAll(fetchSamplesFromChildren(toDraw)); 
+		/* public List<V> buildSampleBuffer(int toYield) {
+			int toDraw = toYield;
+			if(samples.size() < samplesPerNode) { // buffer is so empty we want to fill it too
+				toDraw += 2*samplesPerNode - samples.size(); 
 			}
-		}
-		
-		@Override
-		public List<V> drainSamples(int amount) {
-			if(samples.size() - amount < samplesPerNodeLo) { // we have to refill, this includes the case where amount > samples.size()
-				int toRedraw = amount + samplesPerNodeReplenishTarget - samples.size();
-				samples.addAll(fetchSamplesFromChildren(toRedraw));				
-			}
-			List<V> toYield = Sample.worRemove(samples, amount, rng); // this does the permutation needed
-			return toYield;
-		}
-		
-		public List<V> fetchSamplesFromChildren(int amount) {
-			List<V> fetched = new LinkedList<V>();
+			
 			//-- determining how much samples we need from each child
-			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, amount, rng);
+			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, d, rng);
 			
 			//-- fetch samples
 			LinkedList<V> newSamples = new LinkedList<V>();
 			for (int i = 0; i < pagePointers.size(); i++) {
 				Node child = container.get(pagePointers.get(i));
-				List<V> fetchedFromChild = child.drainSamples(nSamplesPerChild.get(i));
-				// .. and put them in sample buffer
-				fetched.addAll(fetchedFromChild);
+				List<V> gotSamples = child.buildSampleBuffer(nSamplesPerChild.get(i));
 			}
 			
-			return fetched;
+			//-- yield some and save some in buffer
+			// this amounts to a WoR sample of all the available samples here
+			// TODO
+			return excessSamples;
+		}
+		*/
+		
+		/**
+		 * Checks for a underflow in the sample buffer and repairs it.
+		 * Repairing for InnerNodes is done by draining samples from the child nodes.
+		 */
+		protected void repairSampleBuffer() {
+			if(sampleUnderflow()) {				
+				int toDraw = samplesPerNodeReplenishTarget - samples.size();
+				refillSamplesFromChildren(toDraw); 
+			}
+		}
+		
+		@Override
+		protected List<V> drainSamples(int amount) {
+			if(samples.size() - amount < samplesPerNodeLo) { // we have to refill, this includes the case where amount > samples.size()
+				int toRedraw = amount + samplesPerNodeReplenishTarget - samples.size();
+				refillSamplesFromChildren(toRedraw);				
+			}
+			
+//			List<V> toYield = Sample.worRemove(samples, amount, rng); // this does the permutation needed
+			// as refillSamplesFromChildren now does the permutation we can return the first elements
+			List<V> toYield = HUtil.splitOffRight(inList, remLeft, targetList)
+			return toYield;
+		}
+		
+		protected void refillSamplesFromChildren(int amount) {
+			//-- determining how much samples we need from each child
+			ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, amount, rng);
+			
+			//-- fetch samples from children
+			LinkedList<V> newSamples = new LinkedList<V>();
+			for (int i = 0; i < pagePointers.size(); i++) {
+				Node child = container.get(pagePointers.get(i));
+				List<V> fetchedFromChild = child.drainSamples(nSamplesPerChild.get(i));
+				// .. and put them in sample buffer
+				samples.addAll(fetchedFromChild);
+			}
+			Sample.permute(samples, rng);
 		}
 		
 	}
@@ -508,7 +514,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		/** Draws a WR-sample (with replacement (!)) from the underlying values. */
-		public List<V> drainSamples(int amount) {
+		protected List<V> drainSamples(int amount) {
 			return Sample.wrKeep(values, amount, rng);
 		}
 
