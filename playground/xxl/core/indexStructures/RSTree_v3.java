@@ -202,7 +202,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		public boolean sampleUnderflow() {
-			return samples.size() < samplesPerNode / 2;			
+			return samples.size() < samplesPerNodeLo;			
 		}
 
 		/**
@@ -401,7 +401,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public void repairSampleBuffer() {
 			if(sampleUnderflow()) {				
 				int toDraw = samplesPerNodeReplenishTarget - samples.size();
-				samples.addAll(fetchSamplesFromChildren(toDraw));
+				samples.addAll(fetchSamplesFromChildren(toDraw)); 
 			}
 		}
 		
@@ -411,7 +411,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				int toRedraw = amount + samplesPerNodeReplenishTarget - samples.size();
 				samples.addAll(fetchSamplesFromChildren(toRedraw));				
 			}
-			List<V> toYield = Sample.worRemove(samples, amount, rng);
+			List<V> toYield = Sample.worRemove(samples, amount, rng); // this does the permutation needed
 			return toYield;
 		}
 		
@@ -426,7 +426,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				Node child = container.get(pagePointers.get(i));
 				List<V> fetchedFromChild = child.drainSamples(nSamplesPerChild.get(i));
 				// .. and put them in sample buffer
-				fetched.addAll(fetchedFromChild); // OPT perhaps do random permutation here
+				fetched.addAll(fetchedFromChild);
 			}
 			
 			return fetched;
@@ -909,12 +909,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		List<P> initialCIDs; 
 		
 		List<P> frontierCIDs;
-		// we need something like weighted cursors/iterators
+		// .. we could use something like weighted cursors/iterators
 		List<Integer> weights;
 		List<Integer> accWeights;
 		int totalWeight;
 		
-		List<Iterator<V>> samplers;
+		List<Iterator<V>> samplers; // FIXME: we still have to permute the iterators of the sample buffers 
 		
 		Queue<V> precomputed;
 		
