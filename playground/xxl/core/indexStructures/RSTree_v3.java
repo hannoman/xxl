@@ -187,7 +187,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		protected List<Integer> childWeights;
 		
 		/** The list of samples kept in this node. */
-		List<V> samples;
+		LinkedList<V> samples;
 		
 		public boolean isLeaf() { return false; }
 		
@@ -253,12 +253,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			if(hasSampleBuffer() && curWeight - oldWeight > 0) { // insertion actually took place 
 				/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
 				 * with the newly inserted item.
-				 * This is like it is described in the paper, but perhaps we can improve on this? // QUE
-				 */
-				double p = 1.0 / (double)curWeight;
-				for(int i = 0; i < samples.size(); i++)
+				 * QUE: This is like it is described in the paper, but perhaps we can improve on this? */ 
+				double p = 1.0 / (double)curWeight;				
+				// optimized using list iteration
+				for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); sampleIter.next())
 					if(rng.nextDouble() < p)
-						samples.set(i, value);
+						sampleIter.set(value);
 			}
 			
 			//- check for split here
@@ -280,7 +280,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			
 			//- split separators
 			// separators[splitPos] becomes the separator between the offspring 
-			newode.separators = HUtil.splitOffRight(separators, splitPos, new ArrayList<K>());
+			newode.separators = HUtil.splitOffRight(separators, splitPos, new ArrayList<K>()); // CHECK LinkedList seems to make more sense here
 			K offspringSeparator = separators.remove(splitPos-1);
 			
 			//- split pointers and weights
@@ -294,8 +294,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			//-- distribute samples among the resulting nodes
 			// we have to distinguish whether the resulting nodes still have buffers attached
 			if(this.samples != null) {
-				List<V> samplesLeft = new LinkedList<V>();
-				List<V> samplesRight = new LinkedList<V>();
+				LinkedList<V> samplesLeft = new LinkedList<V>();
+				LinkedList<V> samplesRight = new LinkedList<V>();
 				for(V sample : samples) {
 					if(getKey.apply(sample).compareTo(offspringSeparator) >= 0)
 						samplesRight.add(sample);
@@ -417,9 +417,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				refillSamplesFromChildren(toRedraw);				
 			}
 			
-//			List<V> toYield = Sample.worRemove(samples, amount, rng); // this does the permutation needed
 			// as refillSamplesFromChildren now does the permutation we can return the first elements
-			List<V> toYield = HUtil.splitOffRight(inList, remLeft, targetList)
+			List<V> toYield = HUtil.splitOffLeft(samples, amount, new LinkedList<V>());
 			return toYield;
 		}
 		

@@ -31,10 +31,14 @@ public class HUtil {
 	}
 	
 	/** Splits off the left part of a list and appends it to another given list.
-	 * TODO: doc CHECK
+	 * 
+	 * @param inList the list to split
+	 * @param takeLeft number of elements to take into targetList. inList keeps the elements a[takeLeft], ..., a[#inList-1].
+	 * @param targetList the (already instanciated list) where the split off elements should be added to
+	 * @return the modified <tt>targetList</tt>
 	 */
-	public static <E, O extends List<E>> O splitOffLeft(List<E> inList, int remLeft, O targetList) {
-		List<E> transferPart = inList.subList(0, remLeft);
+	public static <E, O extends List<E>> O splitOffLeft(List<E> inList, int takeLeft, O targetList) {
+		List<E> transferPart = inList.subList(0, takeLeft);
 		targetList.addAll(transferPart);
 		transferPart.clear();
 		return targetList;
