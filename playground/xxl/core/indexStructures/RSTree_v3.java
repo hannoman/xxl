@@ -274,9 +274,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				 * with the newly inserted item.
 				 * QUE: This is like it is described in the paper, but perhaps we can improve on this? */ 
 				double p = 1.0 / (double)curWeight;				
-				for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); sampleIter.next())
+				for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); ) {
+					sampleIter.next();
 					if(rng.nextDouble() < p)
 						sampleIter.set(value);
+				}
 			}
 			
 			//- check for split here
@@ -361,6 +363,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 */
 		protected List<Integer> relevantChildIdxs(K lo, K hi) {
 			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) concatenation
+			
+			// CHECK whether this correctly uses all nodes in the canonical set
 			
 			// TODO: use general format for queries, unspecific to the 1-dimensional case.
 			int startPos = HUtil.binFindES(separators, lo);
@@ -681,6 +685,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				newroot.childWeights.add(insertionInfo.weightLeft);
 				newroot.childWeights.add(insertionInfo.weightRight);
 				
+				// FIX: we forgot to fill the root node with samples again
+				if(newroot.totalWeight() > samplesPerNodeHi) {
+					newroot.samples = new LinkedList<V>();
+					newroot.repairSampleBuffer();
+				}
+				
 				rootCID = container.insert(newroot);
 				rootHeight++;
 			} else {
@@ -947,16 +957,18 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			if(node.isInner()) {
 				InnerNode innerNode = (InnerNode) node;
 				if(innerNode.hasSampleBuffer()) { // inner node with attached sample buffer
-					samplers.add(innerNode.samples.iterator());
+					// FIXME!!! we probably erronously yield samples from the sample buffers of canonical set nodes which aren't in the query
+					samplers.add(innerNode.samples.iterator()); // FIXME!!!
 					addWeight(innerNode.totalWeight());
 				} else { // inner node without attached sample buffer
 					// QUE: this is in opposition to the paper evaluated eagerly (see algorithm 1, lines 7-11)
 					List<V> relevantSamples = innerNode.relevantValues(lo, hi);
+					// FIXME: don't add empty relevantValues to list
 					samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
 					addWeight(relevantSamples.size());
 				}
 			} else {
-				// this shouldn't be reached as we extract all values from leaves in the InnerNodes without sample buffer
+				// this shouldn't be reached (for sufficiently large trees) as we extract all values from leaves in the InnerNodes without sample buffer
 				assert false;
 //				LeafNode leafNode = (LeafNode) node;
 //				List<V> relevantSamples = leafNode.relevantValues(lo, hi);
@@ -986,6 +998,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 */
 		private void removeWeight(int idx) {
 			int w = weights.remove(idx);
+			totalWeight -= w;
 			
 			ListIterator<Integer> awIter = accWeights.listIterator(idx);
 			awIter.next();
@@ -1015,29 +1028,96 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					removeFromFrontier(idx);
 					List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
 					SamplingCursor subCursor = new SamplingCursor(lo, hi, relChildCIDs, fixing);
-					precomputed.addAll(subCursor.nextN(1)); // TODO: permute <precomputed> if we go over to batched sampling 
+					precomputed.addAll(subCursor.nextN_internal(1)); // TODO: permute <precomputed> if we go over to batched sampling 
 					join(subCursor);
 				} else {
-					precomputed.add(samplers.get(idx).next());
+					precomputed.add(samplers.get(idx).next()); // FIXME: we need to check if it lies in the query first
 				}
 			}
 			
 			return true;
 		}
-	
+		
+//		
+//		/** Prepares the n next samples - in a batched style. */ 
+//		protected boolean hasNextObjectN(int n) {		
+//			if(precomputed.isEmpty()) { // compute new values // single run here
+//				//-- determine Iterator (== Node) to draw from
+//				int r = rng.nextInt(totalWeight);
+//				int idx = HUtil.binFindES(accWeights, r);
+//				if(!samplers.get(idx).hasNext()) { // replace node with children and draw _only_ from them
+//					// should only happen for InnerNodes (those with sample buffers, which are finite).
+//					InnerNode innerNode = (InnerNode) container.get(frontierCIDs.get(idx));
+//					
+//					removeFromFrontier(idx);
+//					List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
+//					SamplingCursor subCursor = new SamplingCursor(lo, hi, relChildCIDs, fixing);
+//					precomputed.addAll(subCursor.nextN_internal(1)); // TODO: permute <precomputed> if we go over to batched sampling 
+//					join(subCursor);
+//				} else {
+//					precomputed.add(samplers.get(idx).next());
+//				}
+//			}
+//			
+//			return true;
+//		}
+//	
 		@Override
 		protected V nextObject() {
 			return precomputed.remove();
 		}
 		
 		/** Batched iteration. */
-		public List<V> nextN(int n) {
+		public List<V> nextN_internal(int n) {
 			// OPT: actually _do_ some optimization. xD
 			List<V> sampled = new LinkedList<V>();
 			for(int i=0; i < n; i++)
 				sampled.add(this.next());
 			return sampled;
 		}
+		
+//		public List<V> nextN(int n) {
+//			ArrayList<V> nextNSamples = new ArrayList<V>(n);
+//			
+//			//-- determine Iterator (== Node) to draw from
+//			int r = rng.nextInt(totalWeight);
+//			int idx = HUtil.binFindES(accWeights, r);
+//			if(!samplers.get(idx).hasNext()) { // replace node with children and draw _only_ from them
+//				// should only happen for InnerNodes (those with sample buffers, which are finite).
+//				InnerNode innerNode = (InnerNode) container.get(frontierCIDs.get(idx));
+//				
+//				removeFromFrontier(idx);
+//				List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
+//				SamplingCursor subCursor = new SamplingCursor(lo, hi, relChildCIDs, fixing);
+//				precomputed.addAll(subCursor.nextN_internal(1)); // TODO: permute <precomputed> if we go over to batched sampling 
+//				join(subCursor);
+//			} else {
+//				precomputed.add(samplers.get(idx).next());
+//			}
+//			
+//			//---------------------------------------------------------
+//			protected void refillSamplesFromChildren(int amount) {
+//				//-- determining how much samples we need from each child
+//				ArrayList<Integer> nSamplesPerChild = Randoms.multinomialDist(childWeights, amount, rng);
+//				
+//				//-- fetch samples from children
+//				LinkedList<V> newSamples = new LinkedList<V>();
+//				for (int i = 0; i < pagePointers.size(); i++) {
+//					Node child = container.get(pagePointers.get(i));
+//					List<V> fetchedFromChild = child.drainSamples(nSamplesPerChild.get(i));
+//					// .. and put them in sample buffer
+//					samples.addAll(fetchedFromChild);
+//				}
+//				
+//				//-- permute the newly built sample buffer
+//				Sample.permute(samples, rng);
+//			}
+//			
+//			
+//			
+//			return nextNSamples;
+//		}
+		
 	
 		/** Joins a previously generated subcursor back into the parent. The other cursor is then invalid.
 		 * TODO: Ugh, but we must not close() it, as this would unfix the pages.
@@ -1045,10 +1125,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		private void join(SamplingCursor other) {
 			frontierCIDs.addAll(other.frontierCIDs);
 			samplers.addAll(other.samplers);
-			for (int i = 0; i < other.accWeights.size(); i++)
-				other.accWeights.set(i, other.accWeights.get(i) + totalWeight);
-			accWeights.addAll(other.accWeights);
-			totalWeight += other.totalWeight;
+			for(int w : other.weights)
+				addWeight(w);
+			
+//			for (int i = 0; i < other.accWeights.size(); i++)
+//				other.accWeights.set(i, other.accWeights.get(i) + totalWeight);
+//			accWeights.addAll(other.accWeights);
+//			totalWeight += other.totalWeight;			
+			
 			// other.close(); // Don't! Would break fixing = true behaviour.
 		}
 		

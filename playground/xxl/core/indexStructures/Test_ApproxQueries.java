@@ -222,13 +222,15 @@ public class Test_ApproxQueries {
 		return new Triple<Double, Double, Integer>(agg, relativeError, valuesSampled);
 	}
 	
-	public static Triple<Integer, Integer, Integer> samplingTest(
-					RSTree_v3<Integer, Integer, Long> tree, 
-					Map<Integer,Integer> compmap, 
-					int SAMPLING_QUERY_TESTS) {
-		final int SAMPLE_SIZE = 100;
+	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
+	public static Triple<Integer, Integer, Integer> samplingCursorCorrectness(
+					RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, 
+					Map<Integer,Pair<Integer, Double>> compmap, 
+					final int SAMPLING_QUERY_TESTS,
+					final int SAMPLE_SIZE) {
+		
 		//-- rangeQuery tests
-		System.out.println("-- SamplingQuery Tests (#="+ SAMPLING_QUERY_TESTS +"):");
+		System.out.println("-- SamplingQuery Tests (#queries: "+ SAMPLING_QUERY_TESTS +"; #samples per query: "+ SAMPLE_SIZE +"):");
 		
 		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
 		containedKeys.sort(null);
@@ -246,8 +248,8 @@ public class Test_ApproxQueries {
 			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query
-			Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi), SAMPLE_SIZE);			
-			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
+			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(lo, hi), SAMPLE_SIZE);			
+			List<Pair<Integer, Double>> tRes = new ArrayList<Pair<Integer, Double>>(Cursors.toList(sampCur));
 			
 			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
 			
@@ -256,8 +258,8 @@ public class Test_ApproxQueries {
 			int e_positives = 0;
 			
 			//-- Tests for false positives
-			for(Integer tVal : tRes)
-				if(!compmap.containsKey(tVal)) e_positives++;
+			for(Pair<Integer, Double> tVal : tRes)
+				if(!compmap.containsKey(tree.getGetKey().apply(tVal))) e_positives++;
 	
 			//--- Computing the comparison-result
 			int compLoIdx = HUtil.binFindES(containedKeys, lo);
@@ -303,8 +305,12 @@ public class Test_ApproxQueries {
 		}
 
 		//--- run the actual tests
+		random = new Random(55);
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);		
-		s_pruning(tree);
+		Map<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
+		samplingCursorCorrectness(tree, compmap, 100, 1000);
+		
+//		s_pruning(tree);
 //		s_generation(tree);
 	}
 }

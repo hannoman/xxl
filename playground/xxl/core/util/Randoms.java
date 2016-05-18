@@ -21,8 +21,26 @@ public class Randoms {
 	/** For w = w[0] + w[1] + ... + w[l]
 	 * draws values ds[0..l] according to the distributions:
 	 * 		#ds[i] = B(toDraw - sum(ds[0], ..., ds[i-1]), w[i] / (w - sum(w[0], ..., w[i-1])))
-	 * This ensures that ds always contains exactly <tt>toDraw</tt> elements.
+	 * This ensures that <tt>ds</tt> always contains exactly <tt>toDraw</tt> elements.
 	 * (Note that it is possible to draw more values from a container than it contains.) 
+	 * <p>
+	 * Ok, this is indeed a valid sampling scheme for the multinomial distribution.
+	 * (See: Art B. Owen: Monte Carlo theory, methods and example - Ch.5 Random vectors and objects,
+	 * URL: http://statweb.stanford.edu/~owen/mc/Ch-randvectors.pdf)
+	 * </p><p>
+	 * Not to get confused with "multivariate hypergeometrical distribution".
+	 * </p><p>
+	 * Possible algorithmic improvements include divide and conquer and reordering of groups
+	 * to faciliate early abandoning.
+	 * </p><p><h3>Time-complexity discussion</h3>
+	 * Let <tt>F := Frontier</tt>.<br>
+	 * The reference paper suggests a batched sampling scheme where we would generate |F| sample positions
+	 * in one run, instead of doing a categorical experiment of rougly (as F is changing) |F| categories |F| times.
+	 * This naturally leads to the multinomial distribution <tt>Mult(|F|, ws[1] / totalWeight, ..., ws[|F|] / totalWeight)</tt>.
+	 * If we use the implementation here (equals Algorithm 5.1 of the book) we would need to generate |F| binomial distributed
+	 * random variables, doubtfully being faster than log(|F|)*|F| .. but that remains to be checked.    
+	 * </p>
+	 * 
 	 * @param ws relative weights of the groups
 	 * @param toDraw amount of samples to draw in total
 	 * @param rng random number generator
