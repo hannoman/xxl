@@ -20,7 +20,7 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
-import xxl.core.functions.FunctionsJ8;
+import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
@@ -321,7 +321,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 		public List<Integer> lookup(K key) {
 			List<Integer> idx = new LinkedList<Integer>();
 			
-			List<K> mappedList = new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey));
+			List<K> mappedList = new MappedList<V,K>(values, FunJ8.toOld(getKey));
 			
 			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
 			
@@ -337,7 +337,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 
 		public SplitInfo insert(V value, P thisCID, int levelUnused) {
 			K key = getKey.apply(value);
-			int insertPos = HUtil.binFindES(new MappedList<V,K>(values, FunctionsJ8.toOldFunction(getKey)), key);
+			int insertPos = HUtil.binFindES(new MappedList<V,K>(values, FunJ8.toOld(getKey)), key);
 			values.add(insertPos, value);
 			
 			SplitInfo splitInfo = null;
@@ -603,7 +603,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 			LeafNode curLNode = (LeafNode) curNode;
 			
 			// find starting position
-			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunctionsJ8.toOldFunction(getKey));			
+			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunJ8.toOld(getKey));			
 			int pos = HUtil.binFindES(mappedList, lo);
 			sIdx.push(pos);
 			

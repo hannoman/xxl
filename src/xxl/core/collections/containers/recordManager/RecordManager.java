@@ -61,8 +61,8 @@ import xxl.core.util.WrappingRuntimeException;
  *
  * Note, that this Container is only able to deal with Objects 
  * which are Blocks. Although the insert and update methods
- * expect/return Objects, these Objects will be castet to Block.
- * The intenal identifyer are TIds (tuple identifier) or identifyer
+ * expect/return Objects, these Objects will be casted to Block.
+ * The internal identifiers are TIds (tuple identifier) or identifiers
  * supported by the TIDManager used.
  */
 public class RecordManager extends AbstractContainer implements Convertable {

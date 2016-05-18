@@ -28,6 +28,8 @@ import xxl.core.util.Triple;
  * Sanity checks for self-implemented maps (= trees). 
  * 
  * TODO: enable handling of duplicates in comparison map (change type from Map<K,V> to Map<K,Set<V>>)
+ * 
+ * Mini-Milestone 1: migrate sampling tests to Test_ApproxQueries.java
  */
 public class Test_TestableMap {
 
@@ -41,6 +43,27 @@ public class Test_TestableMap {
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static Random random = new Random(42);	
 	
+	public static Map<Integer,Integer> fill(TestableMap<Integer, Integer, Long> wbTree, int amount) {
+		//-- comparison structure
+		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
+		
+		//-- Insertion - generate test data
+		Random random = new Random(139);
+		System.out.println("-- Insertion test: Generating random test data");
+	
+		for (int i = 1; i <= amount; i++) {
+			int value = random.nextInt();
+			wbTree.insert(value);
+			compmap.put(wbTree.getGetKey().apply(value), value);
+			if (i % (amount / 10) == 0)
+				System.out.print((i / (amount / 100)) + "%, ");
+		}
+		
+		System.out.println("Resulting tree height: " + wbTree.height());
+	
+		return compmap;
+	}
+
 	private static WBTreeSA_v3<Integer, Integer, Long> createWBTree(String testFile) {
 		
 		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
@@ -99,35 +122,16 @@ public class Test_TestableMap {
 	
 	public static void s_approxQueries(RSTree_v3<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
-		random = new Random(55);
+		random = new Random();
 //		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
 		samplingTest(tree, compmap, 100);
 	}
 	
+	
+	
 	public static void suite3(WBTreeSA_v3<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 		debugRangeQueries(tree);
-	}
-	
-	public static Map<Integer,Integer> fill(TestableMap<Integer, Integer, Long> wbTree, int amount) {
-		//-- comparison structure
-		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
-		
-		//-- Insertion - generate test data
-		Random random = new Random(139);
-		System.out.println("-- Insertion test: Generating random test data");
-
-		for (int i = 1; i <= amount; i++) {
-			int value = random.nextInt();
-			wbTree.insert(value);
-			compmap.put(wbTree.getGetKey().apply(value), value);
-			if (i % (amount / 10) == 0)
-				System.out.print((i / (amount / 100)) + "%, ");
-		}
-		
-		System.out.println("Resulting tree height: " + wbTree.height());
-
-		return compmap;
 	}
 	
 	public static int positiveLookups(TestableMap<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_POSITIVE) {
@@ -270,12 +274,73 @@ public class Test_TestableMap {
 	}
 
 	public static Triple<Integer, Integer, Integer> samplingTest(
+		RSTree_v3<Integer, Integer, Long> tree, 
+		Map<Integer,Integer> compmap, 
+		int SAMPLING_QUERY_TESTS) {
+		final int SAMPLE_SIZE = 100;
+		//-- rangeQuery tests
+		System.out.println("-- SamplingQuery Tests (#="+ SAMPLING_QUERY_TESTS +"):");
+		
+		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		containedKeys.sort(null);
+		
+		int error_false_positive = 0;
+		int error_false_negative = 0;
+		int error_both = 0;
+		
+		for(int i=1; i <= SAMPLING_QUERY_TESTS; i++) {
+			Integer lo = random.nextInt();
+			Integer hi = random.nextInt();
+			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
+			long possKeys = (long)hi - (long)lo + 1;
+			
+			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+	
+			//-- execute the query
+			Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi), SAMPLE_SIZE);			
+			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
+			
+			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
+			
+			//-- Test current query
+			int e_negatives = 0;
+			int e_positives = 0;
+			
+			//-- Tests for false positives
+			for(Integer tVal : tRes)
+				if(!compmap.containsKey(tVal)) e_positives++;
+	
+			//--- Computing the comparison-result
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
+			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
+			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
+			
+			System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
+							
+			//- classify error case
+			if(e_negatives > 0 || e_positives > 0) {
+				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				if(e_negatives > 0 && e_positives > 0) error_both++;
+				else if(e_negatives > 0) error_false_negative++;
+				else if(e_positives > 0) error_false_positive++;
+			}
+			
+		}		
+		
+		System.out.println("\tToo big results:   "+ error_false_positive);
+		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+	}
+	
+	public static Triple<Integer, Integer, Integer> samplingTest_fixedPrecision_average(
 			RSTree_v3<Integer, Integer, Long> tree, 
 			Map<Integer,Integer> compmap, 
-			int SAMPLING_QUERY_TESTS) {
+			int FP_SAMPLING_QUERY_TESTS,
+			double TARGET_PRECISION) {
+		
 			final int SAMPLE_SIZE = 100;
 			//-- rangeQuery tests
-			System.out.println("-- SamplingQuery Tests (#="+ SAMPLING_QUERY_TESTS +"):");
+			System.out.println("-- SamplingQuery Tests (#="+ FP_SAMPLING_QUERY_TESTS +"):");
 			
 			ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
 			containedKeys.sort(null);
@@ -284,7 +349,7 @@ public class Test_TestableMap {
 			int error_false_negative = 0;
 			int error_both = 0;
 			
-			for(int i=1; i <= SAMPLING_QUERY_TESTS; i++) {
+			for(int i=1; i <= FP_SAMPLING_QUERY_TESTS; i++) {
 				Integer lo = random.nextInt();
 				Integer hi = random.nextInt();
 				if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
@@ -423,36 +488,6 @@ public class Test_TestableMap {
 		
 	}
 
-	public static void main(String[] args) throws Exception {
-		//--- find a nice filename
-		String fileName;
-		if (args.length > 0) { // custom container file
-			fileName = args[0];
-		} else { // std container file
-			String CONTAINER_FILE_PREFIX = "test_map_test01";
-			String test_data_dirname = "temp_data";
-			System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + test_data_dirname + "\\"
-					+ CONTAINER_FILE_PREFIX + "\"");
-
-			// and the whole thing in short
-			Path curpath = Paths.get("").toAbsolutePath();
-			if (!curpath.resolve(test_data_dirname).toFile().exists()) {
-				System.out.println("Error: Couldn't find \"" + test_data_dirname + "\" directory.");
-				return;
-			}
-			fileName = curpath.resolve("temp_data").resolve(CONTAINER_FILE_PREFIX).toString();
-			System.out.println("resolved to: \"" + fileName + "\".");
-
-		}
-
-		//--- run the actual tests
-//		WBTreeSA_v3<Integer, Integer, Long> tree = createWBTree(fileName);
-		RSTree_v3<Integer, Integer, Long> tree = createRSTree(fileName);		
-//		suite1(tree);
-//		suite2(tree);
-		s_approxQueries(tree);
-	}
-
 	/**
 	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
 	 */
@@ -534,4 +569,34 @@ public class Test_TestableMap {
 		System.out.println("Both sided errors: "+ error_both);
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
+
+	public static void main(String[] args) throws Exception {
+			//--- find a nice filename
+			String fileName;
+			if (args.length > 0) { // custom container file
+				fileName = args[0];
+			} else { // std container file
+				String CONTAINER_FILE_PREFIX = "test_map_test01";
+				String test_data_dirname = "temp_data";
+				System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + test_data_dirname + "\\"
+						+ CONTAINER_FILE_PREFIX + "\"");
+	
+				// and the whole thing in short
+				Path curpath = Paths.get("").toAbsolutePath();
+				if (!curpath.resolve(test_data_dirname).toFile().exists()) {
+					System.out.println("Error: Couldn't find \"" + test_data_dirname + "\" directory.");
+					return;
+				}
+				fileName = curpath.resolve("temp_data").resolve(CONTAINER_FILE_PREFIX).toString();
+				System.out.println("resolved to: \"" + fileName + "\".");
+	
+			}
+	
+			//--- run the actual tests
+	//		WBTreeSA_v3<Integer, Integer, Long> tree = createWBTree(fileName);
+			RSTree_v3<Integer, Integer, Long> tree = createRSTree(fileName);		
+	//		suite1(tree);
+	//		suite2(tree);
+			s_approxQueries(tree);
+		}
 }
