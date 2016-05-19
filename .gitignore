@@ -11,3 +11,4 @@ test-output/*
 /bin
 /doc/
 /temp_data/
+/javadoc/
