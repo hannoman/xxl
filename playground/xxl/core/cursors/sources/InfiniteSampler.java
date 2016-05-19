@@ -23,7 +23,7 @@ public class InfiniteSampler<V> extends AbstractCursor<V> {
 
 	@Override
 	protected boolean hasNextObject() {
-		return true;
+		return !baseList.isEmpty();
 	}
 
 	@Override

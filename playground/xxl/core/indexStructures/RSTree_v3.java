@@ -14,6 +14,7 @@ import java.util.Queue;
 import java.util.Random;
 import java.util.Stack;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -24,6 +25,7 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
+import xxl.core.cursors.filters.Filter;
 import xxl.core.cursors.sources.InfiniteSampler;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.Converter;
@@ -875,17 +877,17 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	
 	public Cursor<V> samplingRangeQuery(K lo, K hi){
-		return new SamplingCursor(lo, hi);
+		return new LazySamplingCursor(lo, hi);
 	}
 
 	/**
-	 * A cursor which produces continually samples from the given query.
+	 * Modification of Algorithm 1 of the paper. Tries to omit unsuccessful sampling attempts. 
 	 * See algorithm 1 in the paper.
 	 * Note that this doesn't correspond to the exact query if run till the end 
 	 * (as there is no end), as this cursor produces values infinitely 
 	 * (and reports values multiple times, even before all unique values are exhausted).  
 	 */
-	public class SamplingCursor extends AbstractCursor<V> {
+	public class LazySamplingCursor extends AbstractCursor<V> {
 		// the query // TODO: generalize from 1-dimensional case
 		final K lo;
 		final K hi;			
@@ -900,7 +902,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		List<P> initialCIDs; 
 		
 		List<P> frontierCIDs;
-		// .. we could use something like weighted cursors/iterators
+
 		List<Integer> weights;
 		List<Integer> accWeights;
 		int totalWeight;
@@ -910,15 +912,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		Queue<V> precomputed;
 		
 		/** Constructs a new SamplingCursor for the given query, which doesn't fix the frontier nodes in buffer. */
-		public SamplingCursor(K lo, K hi) {
+		public LazySamplingCursor(K lo, K hi) {
 			this(lo, hi, false);
 		}
 		/** Constructs a new SamplingCursor for the given query, whether <tt>fixing</tt> the nodes in the buffer or not. */
-		public SamplingCursor(K lo, K hi, boolean fixing) {
+		public LazySamplingCursor(K lo, K hi, boolean fixing) {
 			this(lo, hi, Arrays.asList(rootCID), fixing);
 		}		
 		/* real constructor. */
-		private SamplingCursor(K lo, K hi, List<P> initialCIDs, boolean fixing) {
+		private LazySamplingCursor(K lo, K hi, List<P> initialCIDs, boolean fixing) {
 			super();
 			// query
 			this.lo = lo;
@@ -958,8 +960,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				InnerNode innerNode = (InnerNode) node;
 				if(innerNode.hasSampleBuffer()) { // inner node with attached sample buffer
 					// FIXME!!! we probably erronously yield samples from the sample buffers of canonical set nodes which aren't in the query
-					samplers.add(innerNode.samples.iterator()); // FIXME!!!
-					addWeight(innerNode.totalWeight());
+					Predicate<V> pred = (v -> getKey.apply(v).compareTo(lo) >= 0 && getKey.apply(v).compareTo(hi) <= 0); // java can't convert them automagically
+					List<V> filteredSamples = innerNode.samples.stream().filter(pred).collect(Collectors.toCollection(LinkedList<V>::new));
+
+					// explicit version
+//					LinkedList<V> filteredSamples = new LinkedList<V>();
+//					for(V sample : innerNode.samples) {
+//						K key = getKey.apply(sample);
+//						if(key.compareTo(lo) >= 0 && key.compareTo(hi) <= 0)
+//							filteredSamples.add(sample);
+//					}
+					
+					samplers.add(filteredSamples.iterator()); 
+					addWeight(filteredSamples.size());
 				} else { // inner node without attached sample buffer
 					// QUE: this is in opposition to the paper evaluated eagerly (see algorithm 1, lines 7-11)
 					List<V> relevantSamples = innerNode.relevantValues(lo, hi);
@@ -968,12 +981,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					addWeight(relevantSamples.size());
 				}
 			} else {
-				// this shouldn't be reached (for sufficiently large trees) as we extract all values from leaves in the InnerNodes without sample buffer
-				assert false;
-//				LeafNode leafNode = (LeafNode) node;
-//				List<V> relevantSamples = leafNode.relevantValues(lo, hi);
-//				samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
-//				addWeight(relevantSamples.size());
+				// this shouldn't be reached (at least for sufficiently large trees) as we extract all values from leaves in the InnerNodes without sample buffer
+				System.out.println("Attention! Direct extraction from Leaf Node detected, is the tree really that small?");
+				LeafNode leafNode = (LeafNode) node;
+				List<V> relevantSamples = leafNode.relevantValues(lo, hi);
+				samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
+				addWeight(relevantSamples.size());
 			}			
 		}
 		
@@ -1027,7 +1040,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					
 					removeFromFrontier(idx);
 					List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
-					SamplingCursor subCursor = new SamplingCursor(lo, hi, relChildCIDs, fixing);
+					LazySamplingCursor subCursor = new LazySamplingCursor(lo, hi, relChildCIDs, fixing);
 					precomputed.addAll(subCursor.nextN_internal(1)); // TODO: permute <precomputed> if we go over to batched sampling 
 					join(subCursor);
 				} else {
@@ -1122,7 +1135,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/** Joins a previously generated subcursor back into the parent. The other cursor is then invalid.
 		 * TODO: Ugh, but we must not close() it, as this would unfix the pages.
 		 */
-		private void join(SamplingCursor other) {
+		private void join(LazySamplingCursor other) {
 			frontierCIDs.addAll(other.frontierCIDs);
 			samplers.addAll(other.samplers);
 			for(int w : other.weights)
