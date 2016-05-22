@@ -201,15 +201,17 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public abstract int totalWeight();
 
 		protected abstract List<V> relevantValues(K lo, K hi);
+		
+		public abstract List<V> allValues();
 	}
 	
 	public class InnerNode extends Node {		
-		protected List<K> separators;
-		protected List<P> pagePointers;
-		protected List<Integer> childWeights;
+		public List<K> separators;
+		public List<P> pagePointers;
+		public List<Integer> childWeights;
 		
 		/** The list of samples kept in this node. */
-		LinkedList<V> samples;
+		public LinkedList<V> samples;
 		
 		public boolean isLeaf() { return false; }
 		
@@ -347,6 +349,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			return new InsertionInfo(newodeCID, offspringSeparator, weightLeft, weightRight);			
 		}
 		
+		/** Returns all values in the subtree originating from this node. */
+		public List<V> allValues() {
+			LinkedList<V> allVals = new LinkedList<V>();
+			for(P childCID : pagePointers) {
+				allVals.addAll(container.get(childCID).allValues())
+			}
+			return allVals;
+		}
+		
 		/**
 		 * Returns all values relevant for a given query in this' node subtree. 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
@@ -425,7 +436,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 
 	public class LeafNode extends Node {
-		List<V> values;
+		public List<V> values;
 
 		public boolean isLeaf() { return true; }
 		
@@ -519,6 +530,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					allValues.add(value);
 			}
 			return allValues;
+		}
+		
+		/** Returns all values in the subtree originating from this node. */
+		public List<V> allValues() {
+			return values;
 		}
 	}
 	
@@ -1081,9 +1097,16 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	private class LazySamplingCursor_v2 extends AbstractCursor<V> {
 
-		public class LazyInnerSampler<V,P> implements StatefulSampler<V, P> {
+		public class LazyInnerSampler implements StatefulSampler {
 			InnerNode node;
+			Iterator<V> sampleIter;
 			
+			public LazyInnerSampler(InnerNode node) {
+				super();
+				this.node = node;
+				sampleIter = node.samples.iterator();
+			}
+
 			@Override
 			public int size() {
 				return node.totalWeight();
@@ -1091,19 +1114,29 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 
 			@Override
 			public List<V> tryToSample(int n) {
-				// TODO Auto-generated method stub
+				List<V> sampled = new LinkedList<V>();
+				V sampleTrial = null;
+				for(int i=0; i < n; i++) {
+					if(!sampleIter.hasNext())
+						childrenSample(n - i - 1);
+					sampleTrial = sampleIter.next();
+					sampled.add(sampleTrial);
+				}
+				return sampled;
+			}
+			
+			private childrenSample
+
+			@Override
+			public List<StatefulSampler<V,P>> getChildren() {		
+//				List<Node> childNodes = new LinkedList<Node>();
+//				return childNodes;
 				return null;
 			}
 
-			@Override
-			public InnerNode getNode() {		
-				return node;
+			public boolean exhausted() {
+				return !sampleIter.hasNext();
 			}
-
-			boolean exhausted() {
-				return false;
-			}
-
 			
 		}
 		

@@ -8,8 +8,10 @@ public interface StatefulSampler<V,P> {
 
 	List<V> tryToSample(int n);
 
-	P getNode();
+//	P getNode();
 
 	boolean exhausted();
+
+	List<StatefulSampler<V, P>> getChildren();
 	
 }
