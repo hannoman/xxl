@@ -158,6 +158,15 @@ public class HUtil {
 			return getAll_SequentialAccess(idxs, values);
 	}
 	
+	/** Removes all specified positions (which msut be given in ascending order) from the list. 
+	 * @param <V>*/
+	public static <V> void removeAll(List<Integer> idxs, List<V> values) {
+		int removed = 0;
+		for(int idx : idxs) {
+			values.remove(idx-removed);
+			removed++;
+		}
+	}
 	
 
 	

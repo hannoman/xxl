@@ -1,5 +1,7 @@
 package xxl.core.indexStructures;
 
+package xxl.core.indexStructures;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -28,15 +30,14 @@ import xxl.core.cursors.Cursor;
 import xxl.core.cursors.samplingcursor.StatefulSampler;
 import xxl.core.cursors.sources.InfiniteSampler;
 import xxl.core.functions.FunJ8;
-import xxl.core.indexStructures.keyRanges.KeyRangeFactory;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
-import xxl.core.util.KeyRangeG;
-import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V, P> {
+// TODO: reimplement TestableMap again
+// public class RSTree_v3<K extends Descriptor, V, P> implements TestableMap<K, V, P> {
+public abstract class RSTreeAbstract<K extends Descriptor, V, P> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -97,7 +98,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public RSTree_v3(int samplesPerNode, int branchingParam, int leafLo, int leafHi, Function<V, K> getKey) {
+	public RSTreeAbstract(int samplesPerNode, int branchingParam, int leafLo, int leafHi, Function<V, K> getKey) {
 		super();
 //		this.branchingParam = branchingParam;		
 		this.getKey = getKey;
@@ -117,7 +118,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	
 
-	public RSTree_v3(int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
+	public RSTreeAbstract(int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
 		super();
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -206,7 +207,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public abstract List<V> allValues();
 	}
 	
-	public class InnerNode extends Node {		
+	public abstract class InnerNode extends Node {		
 		public List<K> separators;
 		public List<P> pagePointers;
 		public List<Integer> childWeights;
@@ -254,9 +255,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		/** Abstract the determination of choosing which child node to insert a record into. */
-		protected int findInsertionPos(K key) {
-			return HUtil.binFindES(separators, key);
-		}
+		public abstract int findInsertionPos(K key);
 		
 		public InsertionInfo insert(V value, P thisCID, int level) {
 			K key = getKey.apply(value);
@@ -294,7 +293,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 						sampleIter.set(value);
 				}
 			}
-			// FIXME: what to do when the weight of the node just grew bigger than 2*s ?
 			
 			//- check for split here
 			InsertionInfo insertionInfo = null;
@@ -311,7 +309,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public InsertionInfo split() {			
 			int splitPos = pagePointers.size() / 2; // B-Tree splitting == just split in the middle.
 			
-			InnerNode newode = new InnerNode();
+			int sv = RSTreeAbstract.this.branchingLo;
+//			Object newode = RSTreeAbstract<K,V,P>.this.new InnerNode();
+			Object newode = this();
 			
 			//- split separators
 			// separators[splitPos] becomes the separator between the offspring 
@@ -363,7 +363,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public List<V> allValues() {
 			LinkedList<V> allVals = new LinkedList<V>();
 			for(P childCID : pagePointers) {
-				allVals.addAll(container.get(childCID).allValues());
+				allVals.addAll(container.get(childCID).allValues())
 			}
 			return allVals;
 		}
@@ -558,7 +558,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * If one wants finer control over the constructed <tt>ConverterContainer</tt>, this class can be instantiated
 	 * by <tt>RSTree_v3<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
 	 * 
-	 * @see RSTree_v3#initialize_withReadyContainer(TypeSafeContainer)
+	 * @see RSTreeAbstract#initialize_withReadyContainer(TypeSafeContainer)
 	 */
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
@@ -688,6 +688,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	/**
 	 * Insertion. 
 	 */
+	@Override
 	public void insert(V value) {
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
@@ -713,7 +714,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				newroot.childWeights.add(insertionInfo.weightLeft);
 				newroot.childWeights.add(insertionInfo.weightRight);
 				
-				// fill the root node with samples again
+				// FIX: we forgot to fill the root node with samples again
 				if(newroot.totalWeight() > samplesPerNodeHi) {
 					newroot.samples = new LinkedList<V>();
 					newroot.repairSampleBuffer();
@@ -721,14 +722,16 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				
 				rootCID = container.insert(newroot);
 				rootHeight++;
+			} else {
+//				rootWeight++;
 			}
-			
 		}		
 	}
 			
 	/**
 	 * Lookup.
 	 */
+	@Override
 	public List<V> get(K key) {
 		int level = rootHeight;
 		P nodeCID = rootCID;
@@ -899,52 +902,320 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	}
 	
+	
 	public Cursor<V> samplingRangeQuery(K lo, K hi){
-		KeyRangeG<K> query = new KeyRangeG<K>(lo, hi);
-		return new ReallyLazySamplingCursor(query, Arrays.asList(rootCID), new LinkedList<K>(), 20);
+		return new LazySamplingCursor(lo, hi);
 	}
 
-	/** The really lazy (and a bit dumb) sampling cursor from the paper.
-	 * It now allows to batch of sampling tries.  
+	/**
+	 * Modification of Algorithm 1 of the paper. Tries to omit unsuccessful sampling attempts. 
+	 * See algorithm 1 in the paper.
+	 * Note that this doesn't correspond to the exact query if run till the end 
+	 * (as there is no end), as this cursor produces values infinitely 
+	 * (and reports values multiple times, even before all unique values are exhausted).  
 	 */
-	public class ReallyLazySamplingCursor extends AbstractCursor<V> {
-		/** the query */
-		KeyRangeG<K> query;
-		/** batch size */
-		int batchSize;
-		/** Precomputed values for the cursor. */
-		LinkedList<V> precomputed = new LinkedList<V>();
+	public class LazySamplingCursor extends AbstractCursor<V> {
+		// the query // TODO: generalize from 1-dimensional case
+		final K lo;
+		final K hi;			
+		
+		/** Whether the cursor fixes the frontier nodes in the buffer. Mind that this cursor will eventually load
+		 * the whole base relation that way.. */
+		boolean fixing;
+		
+		/** Temporary variable to store nodes to inspect between construction and call to open() 
+		 * as we only want to reserve ressources after open().
+		 */
+		List<P> initialCIDs; 
+		
+		List<P> frontierCIDs;
 
-		/** Saves region information about the nodes present in frontier. */
-		List<K> separators;
-		/** List of Samplers of the nodes in frontier. 
-		 * A Sampler encapsulates the state information that describes the process in sampling from a node. 
-		 * It also saves the effective weight of a sampled node. */ 
-		List<Sampler> samplers; 
-
-		/** Constructor. Especially used for recursive calls. Information about the nodes have to be given. */ 
-		public ReallyLazySamplingCursor(KeyRangeG<K> query, List<P> initialCIDs, List<K> separators, int batchSize) {
+		List<Integer> weights;
+		List<Integer> accWeights;
+		int totalWeight;
+		
+		List<Iterator<V>> samplers; // FIXME: we still have to permute the iterators of the sample buffers 
+		
+		Queue<V> precomputed;
+		
+		/** Constructs a new SamplingCursor for the given query, which doesn't fix the frontier nodes in buffer. */
+		public LazySamplingCursor(K lo, K hi) {
+			this(lo, hi, false);
+		}
+		/** Constructs a new SamplingCursor for the given query, whether <tt>fixing</tt> the nodes in the buffer or not. */
+		public LazySamplingCursor(K lo, K hi, boolean fixing) {
+			this(lo, hi, Arrays.asList(rootCID), fixing);
+		}		
+		/* real constructor. */
+		private LazySamplingCursor(K lo, K hi, List<P> initialCIDs, boolean fixing) {
 			super();
 			// query
-			this.query = query;
-			// batch size
-			this.batchSize = batchSize;
-			// frontier
-			this.separators = separators;		
-			this.samplers = new LinkedList<Sampler>();
-			//- create samplers for the given nodes
-			for(P nodeCID : initialCIDs) {
-				Node node = container.get(nodeCID);
-				samplers.add(createSampler(nodeCID));
+			this.lo = lo;
+			this.hi = hi;
+			// nodes to inspect
+			this.initialCIDs = initialCIDs;
+			// config
+			this.fixing = fixing;
+			// state
+			frontierCIDs = new LinkedList<P>();
+			weights = new LinkedList<Integer>();
+			accWeights = new ArrayList<Integer>(); // as accesses should outnumber modifications use ArrayList
+			totalWeight = 0;
+			samplers = new ArrayList<Iterator<V>>();
+			// next values to spit out
+			precomputed = new LinkedList<V>(); 
+		}
+	
+		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
+		@Override
+		public void open() {
+			for(P iniCID : initialCIDs)
+				addToFrontier(iniCID);			
+			//- sets the open flag
+			super.open();
+		}
+		
+		/**
+		 * Only called from open().
+		 */
+		private void addToFrontier(P nodeCID) {
+			Node node = container.get(nodeCID, !fixing); // fix
+			
+			frontierCIDs.add(nodeCID);
+			
+			if(node.isInner()) {
+				InnerNode innerNode = (InnerNode) node;
+				if(innerNode.hasSampleBuffer()) { // inner node with attached sample buffer
+					// FIXME!!! we probably erronously yield samples from the sample buffers of canonical set nodes which aren't in the query
+					// we filter not until we actually draw from the sample
+					samplers.add(innerNode.samples.iterator()); 
+					addWeight(innerNode.samples.size());
+				} else { // inner node without attached sample buffer
+					// QUE: this is in opposition to the paper evaluated eagerly (see algorithm 1, lines 7-11). Does this skew the probabilities?
+					//		--> yes, probably yes.
+					List<V> relevantSamples = innerNode.relevantValues(lo, hi);
+					// FIXME: don't add empty relevantValues to list
+					if(!relevantSamples.isEmpty()) {
+						samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
+						addWeight(relevantSamples.size());
+					}
+				}
+			} else {
+				// this shouldn't be reached (at least for sufficiently large trees) as we extract all values from leaves in the InnerNodes without sample buffer
+				System.out.println("Attention! Direct extraction from Leaf Node detected, is the tree really that small?");
+				LeafNode leafNode = (LeafNode) node;
+				List<V> relevantSamples = leafNode.relevantValues(lo, hi);
+				samplers.add(new InfiniteSampler<V>(relevantSamples, rng));
+				addWeight(relevantSamples.size());
+			}			
+		}
+		
+		private void removeFromFrontier(int idx) {
+			container.unfix(frontierCIDs.remove(idx)); // unfix and remove from CID list // TODO: is this a problem if already unfixed?
+			removeWeight(idx);
+			samplers.remove(idx);			
+		}
+		
+		private void addWeight(int w) {
+			weights.add(w);
+			if(accWeights.isEmpty()) {
+				accWeights.add(w);
+			} else {
+				accWeights.add(accWeights.get(accWeights.size() - 1) + w);
+			}			
+			totalWeight += w;
+		}
+		
+		/** Removes the weight at specified position from the weight list and recalculates affected values
+		 * in the accumulated weights list.
+		 */
+		private void removeWeight(int idx) {
+			int w = weights.remove(idx);
+			totalWeight -= w;
+			
+			ListIterator<Integer> awIter = accWeights.listIterator(idx);
+			awIter.next();
+			awIter.remove();
+			while(awIter.hasNext())				
+				awIter.set(awIter.next() - w);
+		}
+	
+		@Override
+		public void close() {			
+			// release all nodes which are still in frontier from the buffer
+			for(P cid : frontierCIDs)
+				container.unfix(cid);
+			super.close();
+		}
+		
+		/* We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
+		protected boolean hasNextObject() {		
+			if(precomputed.isEmpty()) { // compute new values // single run here
+				//-- determine Iterator (== Node) to draw from
+				int r = rng.nextInt(totalWeight);
+				int idx = HUtil.binFindES(accWeights, r);
+				if(!samplers.get(idx).hasNext()) { // replace node with children and draw _only_ from them
+					// should only happen for InnerNodes (those with sample buffers, which are finite).
+					InnerNode innerNode = (InnerNode) container.get(frontierCIDs.get(idx));
+					
+					removeFromFrontier(idx);
+					List<P> relChildCIDs = innerNode.relevantChildCIDs(lo, hi);
+					LazySamplingCursor subCursor = new LazySamplingCursor(lo, hi, relChildCIDs, fixing);
+					precomputed.addAll(subCursor.nextN_internal(1)); // TODO: permute <precomputed> if we go over to batched sampling 
+					join(subCursor);
+				} else {
+					precomputed.add(samplers.get(idx).next()); // FIXME: we need to check if it lies in the query first
+				}
+			}
+			
+			return true;
+		}
+
+		public List<V> tryToSample(int n) {
+			List<Integer> weights = sizedIterators.stream().map(x -> x.size()).collect(Collectors.toList());
+			List<Integer> ds = Randoms.multinomialDist(weights, n, rng);
+			for(int i=0; i < ds.size(); i++) {
+				
 			}
 		}
 		
-		/** Constructor with naive batch size = 1. */
-		public ReallyLazySamplingCursor(KeyRangeG<K> query, List<P> initialCIDs, List<K> separators) {
-			this(query, initialCIDs, separators, 1);
+		@Override
+		protected V nextObject() {
+			return precomputed.remove();
+		}
+		
+		/** Batched iteration. */
+		public List<V> nextN_internal(int n) {
+			// OPT: actually _do_ some optimization. xD
+			List<V> sampled = new LinkedList<V>();
+			for(int i=0; i < n; i++)
+				sampled.add(this.next());
+			return sampled;
+		}
+		
+		/** Joins a previously generated subcursor back into the parent. The other cursor is then invalid.
+		 * TODO: Ugh, but we must not close() it, as this would unfix the pages.
+		 */
+		private void join(LazySamplingCursor other) {
+			frontierCIDs.addAll(other.frontierCIDs);
+			samplers.addAll(other.samplers);
+			for(int w : other.weights)
+				addWeight(w);
+		}
+		
+	}
+	
+	private class LazySamplingCursor_v2 extends AbstractCursor<V> {
+
+		public class LazyInnerSampler implements StatefulSampler {
+			InnerNode node;
+			Iterator<V> sampleIter;
+			
+			public LazyInnerSampler(InnerNode node) {
+				super();
+				this.node = node;
+				sampleIter = node.samples.iterator();
+			}
+
+			@Override
+			public int size() {
+				return node.totalWeight();
+			}
+
+			@Override
+			public List<V> tryToSample(int n) {
+				List<V> sampled = new LinkedList<V>();
+				V sampleTrial = null;
+				for(int i=0; i < n; i++) {
+					if(!sampleIter.hasNext())
+						childrenSample(n - i - 1);
+					sampleTrial = sampleIter.next();
+					sampled.add(sampleTrial);
+				}
+				return sampled;
+			}
+			
+			private childrenSample
+
+			@Override
+			public List<StatefulSampler<V,P>> getChildren() {		
+//				List<Node> childNodes = new LinkedList<Node>();
+//				return childNodes;
+				return null;
+			}
+
+			public boolean exhausted() {
+				return !sampleIter.hasNext();
+			}
+			
+		}
+		
+		
+		
+		public LazySamplingCursor_v2(List<P> iniCIDs) {
+			
+		}
+		
+		
+		
+		
+		public List<V> tryToSample(int n) {
+			
+		}
+		
+		
+		@Override
+		protected boolean hasNextObject() {
+			// TODO Auto-generated method stub
+			return false;
 		}
 
-		/** Performs a batched trial of n draws. The amount of samples generated will typically be much less. */
+		@Override
+		protected V nextObject() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+		
+		
+		
+		
+		
+	}
+
+	
+	/**
+	 * 
+	 */
+	// TODO: filter out subtrees which don't intersect the query
+	public class SamplingCurse {
+		// the query
+		Descriptor query;
+		
+		/** Temporary variable to store nodes to inspect between construction and call to open() 
+		 * as we only want to reserve ressources after open().
+		 */
+		List<P> initialCIDs; 
+
+		List<Descriptor> ranges;
+		List<Sampler> samplers; 
+
+		private Predicate<V> pred;
+		
+		/** Constructor for recursive calls. Information about the nodes have to be given. */ 
+		public SamplingCurse(Descriptor query, List<P> initialCIDs, List<Descriptor> ranges, List<Integer> weights) {
+			super();
+			// query
+			this.query = query;
+			// frontier
+			this.initialCIDs = initialCIDs;
+			this.ranges = ranges;		
+			this.samplers = new LinkedList<Sampler>();
+			for(P nodeCID : initialCIDs) {
+				Node node = container.get(nodeCID);
+				samplers.add(createSampler(nodeCID, pred));
+			}
+		}
+
 		public List<V> tryToSample(int n) {
 			List<V> samplesObtained = new LinkedList<V>();
 
@@ -954,16 +1225,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				weights.add(sampler.weight());
 			// determine how many to draw from which
 			List<Integer> toDraw = Randoms.multinomialDist(weights, n, rng);
-			
-			// fetch accordingly from each sampler and save the results
+			// fetch accordingsly from each sampler and save the results
 			List<SamplingResult> results = new ArrayList<SamplingResult>(samplers.size());
 			for(int i=0; i < toDraw.size(); i++) {
 				// .. and check on nodes which would get sampled whether they are disjoint with the query
-				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
-				KeyRangeG<K> samplerRange = new KeyRangeG<K>(i > 0               ? separators.get(i-1) : null, 
-															 i < toDraw.size()-1 ? separators.get(i)   : null);
-				if(toDraw.get(i) > 0 && !query.overlaps(samplerRange)) {
+				if(toDraw.get(i) > 0 && !ranges.get(i).overlaps(query)) {
 					res = new SamplingResult();
 				} else {
 					res = samplers.get(i).tryToSample(toDraw.get(i));
@@ -973,67 +1240,47 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 			
 			// perform the batch updating
-			int i = 0, removed = 0;
-			for(SamplingResult res : results) {				
+			ListIterator<Descriptor> itSeparators = ranges.listIterator();
+			ListIterator<Sampler> itSamplers = samplers.listIterator();
+			for(SamplingResult res : results) {
+				itSeparators.next();
+				itSamplers.next();
 				if(res.replacementNeeded) {
-					if(i < toDraw.size() - 1) // only remove if not at last position
-						separators.remove(i - removed);
-					samplers.remove(i - removed);
-					
+					itSeparators.remove();
+					itSamplers.remove();
 					if(res.replacee != null)
 						adjoin(res.replacee);
 				}
-				i++;
 			}
 			
 			return samplesObtained;
 		}
 		
-		private void adjoin(ReallyLazySamplingCursor other) {
-			separators.addAll(other.separators);
+		private void adjoin(SamplingCurse other) {
+			ranges.addAll(other.ranges);
 			samplers.addAll(other.samplers);			
 		}
 
-		//-------------------- abstract cursor implementation
-		@Override
-		protected boolean hasNextObject() {
-			while(precomputed.isEmpty()) {
-				if(samplers.isEmpty()) return false;
-				precomputed.addAll(tryToSample(batchSize));
-			}			
-			return true;
+		public Sampler createSampler(P nodeCID, Predicate<V> pred) throws Exception {
+			Node node = container.get(nodeCID);
+			if(node.isInner()) {
+				InnerNode inode = (InnerNode) node;
+				if(inode.hasSampleBuffer()) {
+					return new InnerSampler(nodeCID, pred);
+				} else {
+					return new UnbufferedSampler(inode.allValues(), pred);
+				}
+			} else {
+				throw new Exception("LeafNode unexpected.");					
+			}					
 		}
-
-		@Override
-		protected V nextObject() {
-			return precomputed.remove();
-		}
-
-
+		
 		public abstract class Sampler {
 			public abstract SamplingResult tryToSample(int n);
 			
 			public abstract int weight();
 		}
 		
-		/** Factory for Samplers - respectively different initialisation of subclasses depending on the node contents. */
-		public Sampler createSampler(P nodeCID) {
-			Node node = container.get(nodeCID);
-			if(node.isInner()) {
-				InnerNode inode = (InnerNode) node;
-				if(inode.hasSampleBuffer()) {
-					return new InnerSampler(nodeCID);
-				} else {
-					return new UnbufferedSampler(inode.allValues());
-				}
-			} else {
-				// HACK to not add throws declarations everywhere
-				System.err.println("LeafNode unexpected.");
-				System.exit(-1);
-				return null;
-			}					
-		}
-
 		/** We need to keep track of the state of this sampler so meticulously to adhere to the paper, because it is 
 		 * (probably meant to be) evaluated lazily like this, and otherwise the batched probabilities would get skewed.
 		 * 
@@ -1054,7 +1301,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			ArrayList<V> keepers;
 			
 			public UnbufferedSampler(List<V> baselist) {
-				this.uncategorized = baselist; // CHECK no defensive copy
+				this.uncategorized = baselist; // no defensive copy
 				this.keepers = new ArrayList<V>(uncategorized.size());
 			}
 
@@ -1139,11 +1386,13 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		public class InnerSampler extends Sampler {
 			P nodeCID;
+			final Predicate<V> pred;
 			Iterator<V> sampleIter;
 			int savedWeight;
 			
-			public InnerSampler(P nodeCID) {
+			public InnerSampler(P nodeCID, Predicate<V> pred) {
 				this.nodeCID = nodeCID;
+				this.pred = pred;
 				InnerNode inode = (InnerNode) container.get(nodeCID);
 				assert inode.hasSampleBuffer();
 				this.savedWeight = inode.totalWeight();
@@ -1158,17 +1407,17 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				int i = 0;
 				for(; i < n && sampleIter.hasNext(); i++) {
 					V sample = sampleIter.next();
-					if(query.contains(getKey.apply(sample))) {
+					if(pred.test(sample)) {
 						samplesObtained.add(sample);
 					}
 				}
 				
 				if(i < n) { // we didn't find enough samples in the sample buffer
+					// recursively create a new SamplingCurse
 					int remaining = n - i;
 					InnerNode inode = (InnerNode) container.get(nodeCID);
-
-					// recursively create a new SamplingCurse
-					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, inode.pagePointers, inode.separators, batchSize);
+					
+					SamplingCurse subCursor = new SamplingCurse(query, inode.pagePointers, inode.separators);
 					samplesObtained.addAll(subCursor.tryToSample(remaining));
 					return new SamplingResult(samplesObtained, subCursor);
 				} else {
@@ -1186,7 +1435,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/** Field class to for results of sampling from a node. */
 		public class SamplingResult {
 			boolean replacementNeeded;
-			ReallyLazySamplingCursor replacee;
+			SamplingCurse replacee;
 			List<V> samplesObtained;
 			
 			/** innernodes which don't need expansion or eternal unbuffered nodes */
@@ -1197,7 +1446,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 			
 			/** inner node which produces something and need expansion */
-			public SamplingResult(List<V> samplesObtained, ReallyLazySamplingCursor replacee) { 			
+			public SamplingResult(List<V> samplesObtained, SamplingCurse replacee) { 			
 				this.replacementNeeded = true;
 				this.replacee = replacee;
 				this.samplesObtained = samplesObtained;
