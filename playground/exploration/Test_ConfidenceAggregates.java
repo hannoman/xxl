@@ -1,7 +1,5 @@
 package exploration;
 
-import java.util.Random;
-
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 
 public class Test_ConfidenceAggregates {

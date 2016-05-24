@@ -16,10 +16,15 @@ import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
+import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.Converter;
+import xxl.core.io.converters.DoubleConverter;
+import xxl.core.io.converters.FixedSizeConverter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.util.HUtil;
+import xxl.core.util.Interval;
 import xxl.core.util.Pair;
+import xxl.core.util.PairConverterFixedSized;
 import xxl.core.util.QuickTime;
 import xxl.core.util.Triple;
 
@@ -43,20 +48,20 @@ public class Test_TestableMap {
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static Random random = new Random(42);	
 	
-	public static Map<Integer,Integer> fill(TestableMap<Integer, Integer, Long> wbTree, int amount) {
+	public static Map<Integer,Integer> fill(TestableMap<Integer, Integer, Long> wbTree, int AMOUNT) {
 		//-- comparison structure
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
 		//-- Insertion - generate test data
 		Random random = new Random(139);
-		System.out.println("-- Insertion test: Generating random test data");
+		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
-		for (int i = 1; i <= amount; i++) {
+		for (int i = 1; i <= AMOUNT; i++) {
 			int value = random.nextInt();
 			wbTree.insert(value);
 			compmap.put(wbTree.getGetKey().apply(value), value);
-			if (i % (amount / 10) == 0)
-				System.out.print((i / (amount / 100)) + "%, ");
+			if (i % (AMOUNT / 10) == 0)
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
 		}
 		
 		System.out.println("Resulting tree height: " + wbTree.height());
@@ -84,19 +89,52 @@ public class Test_TestableMap {
 	}
 	
 	private static RSTree_v3<Integer, Integer, Long> createRSTree(String testFile) {
+		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
-		RSTree_v3<Integer, Integer, Long> tree = new RSTree_v3<Integer, Integer, Long>(
-				20, 											// samplesPerNode
-				10, 											// branchingParam
-				25, 											// leafLo
-				100, 											// leafHi
-				(x -> x));										// getKey
+		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
+		FixedSizeConverter<Integer> valueConverter = IntegerConverter.DEFAULT_INSTANCE; 
+		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
+		int leafLo = leafHi / 4;
+		
+		//- set branching param fixed
+		int branchingParamHi = 20;
+		int branchingParamLo = branchingParamHi / 4;
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+		
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Integer> valueConverter = IntegerConverter.DEFAULT_INSTANCE;
-		
-		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
-		
+		RSTree_v3<Integer, Integer, Long> tree = 
+				new RSTree_v3<Integer, Integer, Long>(
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
+						samplesPerNodeLo, 
+						samplesPerNodeHi, 
+						branchingParamLo, 
+						branchingParamHi, 
+						leafLo, 
+						leafHi, 
+						(x -> x)
+					);
+				
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
 		
@@ -595,8 +633,8 @@ public class Test_TestableMap {
 			//--- run the actual tests
 	//		WBTreeSA_v3<Integer, Integer, Long> tree = createWBTree(fileName);
 			RSTree_v3<Integer, Integer, Long> tree = createRSTree(fileName);		
-	//		suite1(tree);
+			suite1(tree);
 	//		suite2(tree);
-			s_approxQueries(tree);
+//			s_approxQueries(tree);
 		}
 }

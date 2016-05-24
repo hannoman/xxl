@@ -1,9 +1,5 @@
 package xxl.core.functions;
 
-import xxl.core.functions.*;
-
-import java.util.function.*;
-
 /** Conversions between old XXL-style functions and Java 8's new functional capabilities. */
 public class FunJ8 {
 

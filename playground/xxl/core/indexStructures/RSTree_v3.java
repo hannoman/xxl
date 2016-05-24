@@ -44,9 +44,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
 	 *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
 	 *   DONE Mini-Milestone 2: Implement lazy sampling query cursor
-	 *   Mini-Milestone 3: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
-	 *   			And to automatically construct a tree with optimally set parameters. 
-	 *   Mini-Milestone: Do real tests.
+	 *   Mini-Milestone 2.5: ReallyLazySamplingCursor should adjust batchSize dynamically to use |Frontier|.
+	 *   Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
+	 *   Future: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
+	 *   			And to automatically construct a tree with optimally set parameters.
+	 *   	(first tries can be seen in xxl.core.indexStructures.Test_ApproxQueries.createRSTree(String)
+	 *   							and xxl.core.indexStructures.Test_ApproxQueries.createRSTree_withInnerUnbufferedNodes(String)
+	 *   	) 
+	 *   (40%) Mini-Milestone: Do real tests.
 	 *   		--> see xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction
 	 *   Mini-Milestone: Generalize Query-Types
 	 *   Mini-Milestone: Support removals
@@ -319,6 +324,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			int pos = HUtil.binFindES(separators, key);
 			return pagePointers.get(pos);
 			*/
+			// stream syntax doesn't make it any shorter...
+//			return chooseSubtreesIdxs(key).stream().map(pagePointers::get).collect(Collectors.toCollection(LinkedList<P>::new));
 			return HUtil.getAll(chooseSubtreesIdxs(key), pagePointers);
 		}
 		
@@ -386,18 +393,23 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			
 			//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
 			int curWeight = totalWeight();
-			if(hasSampleBuffer() && curWeight - oldWeight > 0) { // insertion actually took place 
-				/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
-				 * with the newly inserted item.
-				 * QUE: This is like it is described in the paper, but perhaps we can improve on this? */ 
-				double p = 1.0 / (double)curWeight;				
-				for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); ) {
-					sampleIter.next();
-					if(rng.nextDouble() < p)
-						sampleIter.set(value);
+			boolean insertionTookPlace = curWeight - oldWeight > 0;
+			if(insertionTookPlace) {
+				if(hasSampleBuffer()) {  
+					/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
+					 * with the newly inserted item.
+					 * QUE: This is like it is described in the paper, but perhaps we can improve on this? */ 
+					double p = 1.0 / (double)curWeight;
+					for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); ) {
+						sampleIter.next();
+						if(rng.nextDouble() < p)
+							sampleIter.set(value);
+					}
+				} else if(curWeight > samplesPerNodeHi) { // we currently have no sample buffer but we should have one! 
+					samples = new LinkedList<V>();
+					repairSampleBuffer();
 				}
 			}
-			// FIXME: what to do when the weight of the node just grew bigger than 2*s ?
 			
 			//- check for split here
 			InsertionInfo insertionInfo = null;
@@ -476,9 +488,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/** Returns all values in the subtree originating from this node. */
 		public List<V> allValues() {
 			LinkedList<V> allVals = new LinkedList<V>();
-			for(P childCID : pagePointers) {
+			for(P childCID : pagePointers)
 				allVals.addAll(container.get(childCID).allValues());
-			}
 			return allVals;
 		}
 		
@@ -525,14 +536,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		@Override
 		protected List<V> drainSamples(int amount) {
-			if(samples.size() - amount < samplesPerNodeLo) { // we have to refill, this includes the case where amount > samples.size()
-				int toRedraw = amount + samplesPerNodeReplenishTarget - samples.size();
-				refillSamplesFromChildren(toRedraw);				
+			if(hasSampleBuffer()) {
+				if(samples.size() - amount < samplesPerNodeLo) { // we have to refill, this includes the case where amount > samples.size()
+					int toRedraw = amount + samplesPerNodeReplenishTarget - samples.size();
+					refillSamplesFromChildren(toRedraw);				
+				}
+				
+				// as refillSamplesFromChildren now does the permutation we can return the first elements
+				List<V> toYield = HUtil.splitOffLeft(samples, amount, new LinkedList<V>());
+				return toYield;
+			} else { // just sample from the values in the subtree if we are unbuffered.
+				// CHECK: does this result in the right probabilities?
+				return Sample.wrKeep(allValues(), amount, rng);
 			}
-			
-			// as refillSamplesFromChildren now does the permutation we can return the first elements
-			List<V> toYield = HUtil.splitOffLeft(samples, amount, new LinkedList<V>());
-			return toYield;
 		}
 		
 		protected void refillSamplesFromChildren(int amount) {
@@ -950,15 +966,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	}
 	
-	public Cursor<V> samplingRangeQuery(K lo, K hi){
+	public Cursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
 		Interval<K> query = new Interval<K>(lo, hi);
 		List<P> initialCIDs = new LinkedList<P>(Arrays.asList(rootCID));
 		List<Interval<K>> ranges = new LinkedList<Interval<K>>(Arrays.asList(universe));
-		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, 20);
+		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, samplingBatchSize);
 	}
 
-	/** The really lazy (and a bit dumb) sampling cursor from the paper.
-	 * It now allows to batch of sampling tries.  
+	/** The really lazy (and a bit desoriented) sampling cursor from the paper.
+	 * It now allows to batch sampling tries.  
 	 */
 	public class ReallyLazySamplingCursor extends AbstractCursor<V> {
 		/** the query */
@@ -992,11 +1008,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 		}
 		
-		/** Constructor with naive batch size = 1. */
-		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges) {
-			this(query, initialCIDs, ranges, 1);
-		}
-
 		/** Performs a batched trial of n draws. The amount of samples generated will typically be much less. */
 		public List<V> tryToSample(int n) {
 			List<V> samplesObtained = new LinkedList<V>();
@@ -1014,10 +1025,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				// .. and check on nodes which would get sampled whether they are disjoint with the query
 				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
-				// FIXME we calculate the samplerRanges entirely wrong, as we add new separators to the end of
-				// the separator list which reulsts in empty intervals.
-//				KeyRangeG<K> samplerRange = new KeyRangeG<K>(i > 0               ? ranges.get(i-1) : null, 
-//															 i < toDraw.size()-1 ? ranges.get(i)   : null);
 				if(toDraw.get(i) > 0 && !query.intersects(ranges.get(i))) {
 					res = new SamplingResult();
 				} else {
@@ -1063,25 +1070,39 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 
+		/**
+		 * Factory for Samplers - respectively different initialisation of
+		 * subclasses depending on the node contents.
+		 */
+		public Sampler createSampler(P nodeCID) {
+			Node node = container.get(nodeCID);
+			if (node.isInner()) {
+				InnerNode inode = (InnerNode) node;
+				if (inode.hasSampleBuffer())
+					return new InnerSampler(nodeCID);
+				else {
+					// CHECK !!!
+					/* Mind that we can only create InnerNodes with buffers in the general case
+					 * (that means Insertions and Deletions) if:
+					 * "branchingLo * leafLo < samplesPerNodeHi". 
+					 * (Except for the root where "2 * leafLo < samplesPerNodeHi")
+					 * 
+					 * If our tree is built only from insertions, then this amounts too:
+					 * "branchingHi / 2 * leafHi / 2 < samplesPerNodeHi" (for non-roots)
+					 */
+					return new UnbufferedSampler(node.allValues());
+				}
+			} else {
+				return new UnbufferedSampler(node.allValues());
+			}
+		}
+
 		public abstract class Sampler {
 			public abstract SamplingResult tryToSample(int n);
 			
 			public abstract int weight();
 		}
-		
-		/** Factory for Samplers - respectively different initialisation of subclasses depending on the node contents. */
-		public Sampler createSampler(P nodeCID) {
-			Node node = container.get(nodeCID);
-			assert node.isInner();
-//			if(node.isInner()) {
-				InnerNode inode = (InnerNode) node;
-				if(inode.hasSampleBuffer()) {
-					return new InnerSampler(nodeCID);
-				} else {
-					return new UnbufferedSampler(inode.allValues());
-				}
-//			} 				
-		}
+
 
 		/** We need to keep track of the state of this sampler so meticulously to adhere to the paper, because it is 
 		 * (probably meant to be) evaluated lazily like this, and otherwise the batched probabilities would get skewed.
@@ -1133,7 +1154,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				
 				int oldAvailable = uncategorized.size() + keepers.size();
 
-				try {
+//				try {
 						
 					for(int i=0; i < n; i++) {
 						int x = rng.nextInt(oldAvailable);
@@ -1144,15 +1165,20 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 						}				
 					}
 					
-				} catch (IllegalArgumentException e) { // this means that this sampler is empty						
-					assert e.getMessage() == "bound must be positive";
-					assert samplesObtained.isEmpty();
+//				} catch (IllegalArgumentException e) { // catches Exception of "rng.nextInt(0)", meaning that this sampler is empty						
+//					assert e.getMessage() == "bound must be positive";
+//					assert samplesObtained.isEmpty();
+//					
+//					// as we can't descent any further from unbuffered nodes, return an empty sampler list.
+//					return new SamplingResult();
+//				}
 					
-					// as we can't descent any further from unbuffered nodes, return an empty sampler list.
+				if(weight() == 0) {
+					assert samplesObtained.isEmpty();
 					return new SamplingResult();
 				}
-
-				return new SamplingResult(samplesObtained);
+				else
+					return new SamplingResult(samplesObtained);
 			}
 			
 			/** "Iterative" sampling which adjusts the effective weight after each draw.

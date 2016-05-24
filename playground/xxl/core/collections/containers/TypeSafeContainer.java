@@ -27,7 +27,6 @@ package xxl.core.collections.containers;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.function.Supplier;
 
 import xxl.core.cursors.Cursor;
 import xxl.core.functions.Function;

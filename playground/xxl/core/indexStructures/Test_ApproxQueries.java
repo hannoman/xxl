@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 import xxl.core.collections.containers.Container;
@@ -46,14 +47,17 @@ public class Test_ApproxQueries {
 	static final int KEY_LO = 0, KEY_HI = 10000;
 	static final double VAL_LO = 0, VAL_HI = 100000000.0;
 	
+	static final int BATCHSAMPLING_SIZE = 20;
+	
 
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static Random random = new Random(42);	
 		
+	/** Performs 100 comparisons between exact and approximate average queries. */
 	public static void s_pruning(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree) {
 		random = new Random(55);
 		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
-		approxTest(tree, 100);
+		approxExactComparisons(tree, PRECISION_BOUND, 100);
 	}
 
 	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generatd correctly. */ 
@@ -76,16 +80,16 @@ public class Test_ApproxQueries {
 		//-- estimating parameters for the tree
 		//- fill leafes optimal
 		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
-		int leafLo = leafHi / 4;
+		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
 		
 		//- set branching param fixed
 		int branchingParamHi = 20;
-		int branchingParamLo = branchingParamHi / 4;
+		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
 		
 		//- determine how much is left for samples
 		int innerSpaceLeft = BLOCK_SIZE;
 		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
-		innerSpaceLeft -= IntegerConverter.SIZE; // # child nodes
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
 		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
 		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
 		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
@@ -113,17 +117,6 @@ public class Test_ApproxQueries {
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
 				
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = 
-//			new RSTree_v3<Integer, Pair<Integer, Double>, Long>(
-//				10, 											// samplesPerNodeLo
-//				40,												// samplesPerNodeHi
-//				10, 											// branchingParamLo
-//				40,												// branchingParamHi
-//				leafLo, 										// leafLo
-//				leafHi, 										// leafHi
-//				((Pair<Integer, Double> x) -> x.getFirst())		// getKey
-//			);	
-			
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
 		
@@ -131,8 +124,66 @@ public class Test_ApproxQueries {
 		return tree;
 	}
 
+	/** Tries to set the tree parameters so that actually unbuffered inner nodes can emerge. 
+	 * See {@link xxl.core.indexStructures.RSTree_v3.ReallyLazySamplingCursor.createSampler(P)}
+	 * */
+	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(String testFile) {
+		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
+		
+		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
+		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
+				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+//		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
+		int leafHi = 10;
+		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
+		
+		//- set branching param fixed
+		int branchingParamHi = 5;
+		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+		
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 	
-	public static Map<Integer,Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>, Long> tree, int AMOUNT) {		
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = 
+				new RSTree_v3<Integer, Pair<Integer,Double>, Long>(
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
+						samplesPerNodeLo, 
+						samplesPerNodeHi, 
+						branchingParamLo, 
+						branchingParamHi, 
+						leafLo, 
+						leafHi, 
+						((Pair<Integer, Double> x) -> x.getFirst())
+					);
+				
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		
+		System.out.println("Initialization of the tree finished.");
+		return tree;
+	}
+
+	public static SortedMap<Integer,Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>, Long> tree, int AMOUNT) {		
 		//-- comparison structure
 		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
 		
@@ -156,8 +207,12 @@ public class Test_ApproxQueries {
 		return compmap;
 	}
 	
-	/** Compares the amount of tuples read for an exact and an approximate average query on N_QUERIES random range queries. */
-	public static void approxTest(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int N_QUERIES) {
+	/** Computes the average of a range query once exactly and once approximately with large sample confidence < PRECISION_BOUND,
+	 * then compares the amount of tuples needed. 
+	 * Note that it might be possible that the SamplingCursor actually needs more tuples, as a high precision might dictate for
+	 * more samples than the result set actually has.
+	 * This is done N_QUERIES times. */
+	public static void approxExactComparisons(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, double PRECISION_BOUND, int N_QUERIES) {
 		for(int i=0; i < N_QUERIES; i++) {
 			// CHECK: is this a uniform distribution of intervals?
 			int key_lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
@@ -165,7 +220,7 @@ public class Test_ApproxQueries {
 			if(key_lo > key_hi) { int tmp = key_lo; key_lo = key_hi; key_hi = tmp; } // swap 
 			
 			// approximate computation
-			Triple<Double,Double,Integer> approx = approx1(tree, key_lo, key_hi);
+			Triple<Double,Double,Integer> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
 			// exact computation						
 			Pair<Double, Integer> exact = exact1(tree, key_lo, key_hi);
 			
@@ -199,12 +254,14 @@ public class Test_ApproxQueries {
 		return new Pair<Double, Integer>(agg, valuesUsed);
 	}
 	
-	public static Triple<Double, Double, Integer> approx1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
+	/** Computes an average-estimator with confidence according to the large sample assumption, 
+	 * from as much samples as needed to match PRECISION_BOUND. */
+	public static Triple<Double, Double, Integer> approx1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
 		int REPORT_INTERVAL = 1000;		
 		
 		Cursor<Double> vals = new Mapper<Pair<Integer,Double>, Double>(
 				FunJ8.toOld(Pair::getSecond), 
-				tree.samplingRangeQuery(key_lo, key_hi));
+				tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE));
 		
 		int i = 0;
 		ConfidenceAggregationFunction coAggFun = ConfidenceAggregationFunction.largeSampleConfidenceAverage(CONFIDENCE);
@@ -230,7 +287,7 @@ public class Test_ApproxQueries {
 	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
 	public static Triple<Integer, Integer, Integer> samplingCursorCorrectness(
 					RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, 
-					Map<Integer,Pair<Integer, Double>> compmap, 
+					SortedMap<Integer,Pair<Integer, Double>> compmap, 
 					final int SAMPLING_QUERY_TESTS,
 					final int SAMPLE_SIZE) {
 		
@@ -245,15 +302,15 @@ public class Test_ApproxQueries {
 		int error_both = 0;
 		
 		for(int i=1; i <= SAMPLING_QUERY_TESTS; i++) {
-			Integer lo = random.nextInt();
-			Integer hi = random.nextInt();
+			Integer lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
+			Integer hi = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
 			long possKeys = (long)hi - (long)lo + 1;
 			
 			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query
-			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(lo, hi), SAMPLE_SIZE);			
+			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(lo, hi, BATCHSAMPLING_SIZE), SAMPLE_SIZE);			
 			List<Pair<Integer, Double>> tRes = new ArrayList<Pair<Integer, Double>>(Cursors.toList(sampCur));
 			
 			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
@@ -267,19 +324,21 @@ public class Test_ApproxQueries {
 				if(!compmap.containsKey(tree.getGetKey().apply(tVal))) e_positives++;
 	
 			//--- Computing the comparison-result
-			int compLoIdx = HUtil.binFindES(containedKeys, lo);
-			int compHiIdx = HUtil.binFindES(containedKeys, hi);
-			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
-			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
+//			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+//			int compHiIdx = HUtil.binFindSE(containedKeys, hi);
+//			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
+			SortedMap<Integer, Pair<Integer, Double>> cResMap = compmap.subMap(lo, hi);
 			
-			System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
+			System.out.println("C-result (#="+ cResMap.size() +"): "+ cResMap);			
 							
 			//- classify error case
 			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cResMap.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
 				if(e_negatives > 0 && e_positives > 0) error_both++;
 				else if(e_negatives > 0) error_false_negative++;
 				else if(e_positives > 0) error_false_positive++;
+			} else {
+				System.out.println("ok.");
 			}
 			
 		}		
@@ -311,11 +370,14 @@ public class Test_ApproxQueries {
 
 		//--- run the actual tests
 		random = new Random(55);
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);		
-		Map<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
-		samplingCursorCorrectness(tree, compmap, 100, 1000);
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(fileName);
+		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
+//		samplingCursorCorrectness(tree, compmap, 10, 100);
+		approxExactComparisons(tree, PRECISION_BOUND, 100);
 		
-//		s_pruning(tree);
+		// s_pruning(tree);
+		
 //		s_generation(tree);
 	}
 }
