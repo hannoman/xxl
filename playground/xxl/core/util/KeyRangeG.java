@@ -63,7 +63,9 @@ public class KeyRangeG<K extends Comparable<K>> implements Descriptor {
      *         <tt>false</tt> otherwise
      */
     public boolean contains(K key) {
-    	// null signal negative/positive infinity
+    	// TODO: null signal negative/positive infinity when used as a bound. In the case of key we don't now whether it should be positive or negative.
+    	// So we just say it's not contained.
+    	if(key == null) return false;
         return (min==null || min.compareTo(key) <= 0) && (max==null || max.compareTo(key) >= 0);
     }
     /**
@@ -124,6 +126,17 @@ public class KeyRangeG<K extends Comparable<K>> implements Descriptor {
         if (min.compareTo(kkey) > 0) min = kkey;
         else if (max.compareTo(kkey) < 0) max = kkey;
     }
+    
+    /** Returns the intersection of this with other. */ 
+    public KeyRangeG<K> intersect(KeyRangeG<? extends K> other) {
+    	K bmin = min, bmax = max;
+    	if(min == null || (other.min != null && min.compareTo(other.min) < 0))
+    		bmin = other.min;
+    	if(max == null || (other.max != null && max.compareTo(other.max) > 0))
+    		bmax = other.max;
+    	return new KeyRangeG<K>(bmin, bmax);
+    }    
+    
     /**
      * Checks whether this <tt>KeyRangel</tt> is a point (i.e. minimal and
      * maximal bounds are equal).
@@ -132,7 +145,7 @@ public class KeyRangeG<K extends Comparable<K>> implements Descriptor {
      *         <tt>false</tt> otherwise
      */
     public boolean isPoint() {
-        return min.compareTo(max) == 0;
+        return min != null && max != null && min.compareTo(max) == 0;
     }
     /**
      * Overwrites the method
@@ -145,10 +158,11 @@ public class KeyRangeG<K extends Comparable<K>> implements Descriptor {
         return true;
     }
     public String toString() {
-        StringBuffer sb = new StringBuffer("[" + min);
+        StringBuffer sb = new StringBuffer("[");
+        sb.append(min == null ? "-inf" : min.toString());
         if (!isPoint()) {
             sb.append(", ");
-            sb.append(max);
+            sb.append(max == null ? "+inf" : max.toString());
         }
         sb.append("]");
         return sb.toString();

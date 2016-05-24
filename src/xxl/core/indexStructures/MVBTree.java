@@ -1180,7 +1180,7 @@ public class MVBTree extends BPlusTree {
 		protected Object data;
 						
 		/** Creates a new Leaf Entry. The created Leaf Entry conatains the given Separator and data Object. 
-		 * @param separator the separator of the new Leaf Entry
+		 * @param range the separator of the new Leaf Entry
 		 * @param data the data object of the new Leaf Entry.
 		 */		
 		public LeafEntry(Lifespan lifespan, Object data) {
@@ -1188,7 +1188,7 @@ public class MVBTree extends BPlusTree {
 		}
 		
 		/** Initializes the Leaf Entry by the given Separator and data Object. 
-		 * @param separator the new separator of the Leaf Entry
+		 * @param range the new separator of the Leaf Entry
 		 * @param data the new data object of the Leaf Entry.
 		 * @return the initialized current Leaf Entry itself.
 		 */				

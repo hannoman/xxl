@@ -65,23 +65,24 @@ public class Randoms {
 	
 	/**
 	 * Produce the indices of a WR-sample of size <tt>toDraw</tt> drawn from <tt>n</tt> elements.
-	 * In ascending order with repitions.
+	 * In ascending order with repititions.
 	 */
 	public static List<Integer> multinomialDistUnweighted(int n, int toDraw, Random rng) {
 		int toDrawCopy = toDraw;
 		
 		int weightTotal = n;		
-		List<Integer> ds = new LinkedList<Integer>();
+		List<Integer> drawIdxs = new LinkedList<Integer>();
 		for (int i = 0; i < n; i++) {
 			double relWeight = 1.0 / (double)(n-i);
-			int drawn = binomialDist(toDraw, relWeight, rng); 
+			int drawn = binomialDist(toDraw, relWeight, rng);
+			// add drawn occurences of bucket i to the index list
 			for (int j = 0; j < drawn; j++)
-				ds.add(i);						
+				drawIdxs.add(i);						
 			toDraw -= drawn;			
 		}
 		
-		assert ds.stream().reduce(0, (x,y) -> x+y) == toDrawCopy;
-		return ds;
+		assert drawIdxs.size() == toDrawCopy;
+		return drawIdxs;
 	}
 	
 	

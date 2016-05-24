@@ -16,7 +16,6 @@ import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.BooleanConverter;
-import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
 import xxl.core.io.converters.IntegerConverter;
@@ -24,6 +23,7 @@ import xxl.core.math.functions.AggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
 import xxl.core.util.HUtil;
+import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
 import xxl.core.util.Triple;
@@ -99,6 +99,7 @@ public class Test_ApproxQueries {
 
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = 
 				new RSTree_v3<Integer, Pair<Integer,Double>, Long>(
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
 						branchingParamLo, 
@@ -127,14 +128,14 @@ public class Test_ApproxQueries {
 	}
 
 	
-	public static Map<Integer,Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>, Long> tree, int amount) {		
+	public static Map<Integer,Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>, Long> tree, int AMOUNT) {		
 		//-- comparison structure
 		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
 		
 		//-- Insertion - generate test data		
-		System.out.println("-- Insertion test: Generating random test data");
+		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
-		for (int i = 1; i <= amount; i++) {
+		for (int i = 1; i <= AMOUNT; i++) {
 			// Data1: Payload correlated with the key: payload ~ NormalDistribution(key*key, key)
 			int key = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			double value = key * key + (random.nextDouble() * 2 * key) - key;
@@ -142,8 +143,8 @@ public class Test_ApproxQueries {
 			Pair<Integer,Double> entry = new Pair<Integer, Double>(key, value);
 			tree.insert(entry);
 			compmap.put(tree.getGetKey().apply(entry), entry);
-			if (i % (amount / 10) == 0)
-				System.out.print((i / (amount / 100)) + "%, ");
+			if (i % (AMOUNT / 10) == 0)
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
 		}
 		
 		System.out.println("Resulting tree height: " + tree.height());

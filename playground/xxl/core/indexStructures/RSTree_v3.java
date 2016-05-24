@@ -10,11 +10,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Stack;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -25,13 +23,10 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
-import xxl.core.cursors.samplingcursor.StatefulSampler;
-import xxl.core.cursors.sources.InfiniteSampler;
 import xxl.core.functions.FunJ8;
-import xxl.core.indexStructures.keyRanges.KeyRangeFactory;
 import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
-import xxl.core.util.KeyRangeG;
+import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
@@ -97,28 +92,28 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public RSTree_v3(int samplesPerNode, int branchingParam, int leafLo, int leafHi, Function<V, K> getKey) {
-		super();
-//		this.branchingParam = branchingParam;		
-		this.getKey = getKey;
-		
-		this.leafLo = leafLo;
-		this.leafHi = leafHi;
-		
-		//- setting defaults
-		this.branchingLo = branchingParam / 2;
-		this.branchingHi = branchingParam * 2;
-		this.samplesPerNodeLo = samplesPerNode / 2;
-		this.samplesPerNodeHi = samplesPerNode * 2;
-		this.samplesPerNodeReplenishTarget = samplesPerNode;		
-		this.rng = new Random();
-	}
+//	public RSTree_v3(int samplesPerNode, int branchingParam, int leafLo, int leafHi, Function<V, K> getKey) {
+//		super();
+////		this.branchingParam = branchingParam;		
+//		this.getKey = getKey;
+//		
+//		this.leafLo = leafLo;
+//		this.leafHi = leafHi;
+//		
+//		//- setting defaults
+//		this.branchingLo = branchingParam / 2;
+//		this.branchingHi = branchingParam * 2;
+//		this.samplesPerNodeLo = samplesPerNode / 2;
+//		this.samplesPerNodeHi = samplesPerNode * 2;
+//		this.samplesPerNodeReplenishTarget = samplesPerNode;		
+//		this.rng = new Random();
+//	}
 
-	
+	Interval<K> universe;
 	
 
-	public RSTree_v3(int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
-		super();
+	public RSTree_v3(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
+		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
 		this.branchingLo = branchingLo;
@@ -157,6 +152,75 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.rng = rng;
 	}
 	
+	
+
+	/**
+	 * Insertion. 
+	 */
+	public void insert(V value) {
+		if(rootCID == null) { // tree empty
+			LeafNode root = new LeafNode();
+			root.values = new ArrayList<V>(leafHi);
+			root.values.add(value);
+			rootHeight = 0;
+			rootCID = container.insert(root);
+			return;
+		} else {
+			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
+			
+			if(insertionInfo.isSplit) { // new root
+				InnerNode newroot = new InnerNode();
+				
+				newroot.ranges = new ArrayList<Interval<K>>(branchingHi);
+				//- calculate new ranges
+				Pair<Interval<K>, Interval<K>> newRanges = universe.split(insertionInfo.separator, true);				
+				newroot.ranges.add(newRanges.getElement1());
+				newroot.ranges.add(newRanges.getElement2());
+				//- adjust the rest
+				newroot.pagePointers = new ArrayList<P>(branchingHi);
+				newroot.pagePointers.add(rootCID);
+				newroot.pagePointers.add(insertionInfo.newnodeCID);
+				
+				newroot.childWeights = new ArrayList<Integer>(branchingHi);
+				newroot.childWeights.add(insertionInfo.weightLeft);
+				newroot.childWeights.add(insertionInfo.weightRight);
+				
+				// fill the root node with samples again
+				if(newroot.totalWeight() > samplesPerNodeHi) {
+					newroot.samples = new LinkedList<V>();
+					newroot.repairSampleBuffer();
+				}
+				
+				rootCID = container.insert(newroot);
+				rootHeight++;
+			}
+			
+		}		
+	}
+
+	/**
+	 * Lookup.
+	 */
+	public List<V> get(K key) {
+		int level = rootHeight;
+		P nodeCID = rootCID;
+		while(level > 0) {
+			// nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtrees(key);
+			// restrict us to one path for now
+			nodeCID = ((InnerNode) container.get(nodeCID)).chooseFirstSubtreeCID(key);
+			level--;
+		}		
+		LeafNode lnode = (LeafNode) container.get(nodeCID);
+		
+		List<Integer> hitIdx = lnode.lookupIdxs(key);
+		Stream<V> results = hitIdx.stream().map(lnode.values::get);
+		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
+		
+		return resultsV;		
+	} 
+	
+	
+	
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
 	 * operation in a subtree. This can either be the information that and how the child has split (~ SplitInfo),
@@ -164,28 +228,39 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * is needed to maintain aggregate meta-information. 
 	 */
 	class InsertionInfo {
-		boolean isSplit = false;
+		boolean isSplit;
 		int weightNew = 0;
-		// TODO: for single insertions we don't need the new weight, but only the info if it was
-		// boolean insertionSuccessful = true;  
+		// OPT: for single insertions we don't need the new weight, but only the info if it was
+		// 			boolean insertionSuccessful = true;  
 		
 		P newnodeCID = null;
+//		Interval<K> rangeLeft = null, rangeRight = null;
 		K separator = null;
 		int weightLeft = -1;
 		int weightRight = -1;		
 		
-		public InsertionInfo(P newnodeCID, K separator, int weightLeft, int weightRight) {		
+//		public InsertionInfo(P newnodeCID, Interval<K> rangeLeft, Interval<K> rangeRight, int weightLeft, int weightRight) {
+//			this.isSplit = true;
+//			this.newnodeCID = newnodeCID;
+//			this.rangeLeft = rangeLeft;
+//			this.rangeRight = rangeRight;
+//			this.weightLeft = weightLeft;
+//			this.weightRight = weightRight;
+//		}
+
+		public InsertionInfo(P newnodeCID, K separator, int weightLeft, int weightRight) {
 			this.isSplit = true;
 			this.newnodeCID = newnodeCID;
 			this.separator = separator;
 			this.weightLeft = weightLeft;
 			this.weightRight = weightRight;
 		}
-
+		
 		public InsertionInfo(int weightNew) {
 			this.isSplit = false;
 			this.weightNew = weightNew;
 		}
+
 	}
 
 	//-- Node class
@@ -201,13 +276,13 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 
 		public abstract int totalWeight();
 
-		protected abstract List<V> relevantValues(K lo, K hi);
+		protected abstract List<V> relevantValues(Interval<K> query);
 		
 		public abstract List<V> allValues();
 	}
 	
 	public class InnerNode extends Node {		
-		public List<K> separators;
+		public List<Interval<K>> ranges;
 		public List<P> pagePointers;
 		public List<Integer> childWeights;
 		
@@ -239,12 +314,31 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * @param key the key to look for
 		 * @return P containerID of the next node
 		 */
-		public P chooseSubtrees(K key) {
+		public List<P> chooseSubtrees(K key) {
 			/*// 1d case
 			int pos = HUtil.binFindES(separators, key);
 			return pagePointers.get(pos);
 			*/
-			return null; // FIXME
+			return HUtil.getAll(chooseSubtreesIdxs(key), pagePointers);
+		}
+		
+		public List<Integer> chooseSubtreesIdxs(K key) {
+			List<Integer> relevantChilds = new LinkedList<Integer>();
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).contains(key))
+					relevantChilds.add(i);
+			return relevantChilds;
+		}
+		
+		public Integer chooseFirstSubtreeIdx(K key) {
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).contains(key))
+					return i;
+			return null;
+		}
+		
+		public P chooseFirstSubtreeCID(K key) {
+			return pagePointers.get(chooseFirstSubtreeIdx(key));
 		}
 
 		@Override
@@ -254,15 +348,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		/** Abstract the determination of choosing which child node to insert a record into. */
-		protected int findInsertionPos(K key) {
-			return HUtil.binFindES(separators, key);
+		protected Integer findInsertionPos(K key) {
+			// return the index of the first range which could contain the key 
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).contains(key))
+					return i;
+			return null;
 		}
 		
 		public InsertionInfo insert(V value, P thisCID, int level) {
 			K key = getKey.apply(value);
 			
 			//- insert in sublevel
-			int pos = findInsertionPos(key);			
+			int pos = findInsertionPos(key);
 			P nextCID = pagePointers.get(pos);
 			Node nextNode = container.get(nextCID);
 			int oldWeight = totalWeight(); 
@@ -270,7 +368,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, level-1); //== RECURSION ==
 			
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
-				separators.add  (pos  , childInsertInfo.separator);
+				// calculate the new ranges
+				Interval<K> oldRange = ranges.get(pos);
+				Interval<K> rangeLeft = new Interval<K>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true); // CHECK
+				Interval<K> rangeRight = new Interval<K>(childInsertInfo.separator, false, oldRange.hi, oldRange.hiIn);
+				ranges.set(pos, rangeLeft);
+				ranges.add(pos+1, rangeRight);
+				
+				// adjust the rest
 				pagePointers.add(pos+1, childInsertInfo.newnodeCID);
 				childWeights.set(pos  , childInsertInfo.weightLeft);
 				childWeights.add(pos+1, childInsertInfo.weightRight);
@@ -278,8 +383,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				// .. this can only be done after insertion on leaf level, as only then it's clear how the weight was affected.
 				childWeights.set(pos, childInsertInfo.weightNew);
 			}
-			
-			// container.unfix(nextCID); // release lock on the childs memory			
 			
 			//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
 			int curWeight = totalWeight();
@@ -315,8 +418,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			
 			//- split separators
 			// separators[splitPos] becomes the separator between the offspring 
-			newode.separators = HUtil.splitOffRight(separators, splitPos, new ArrayList<K>()); // CHECK LinkedList seems to make more sense here
-			K offspringSeparator = separators.remove(splitPos-1);
+			newode.ranges = HUtil.splitOffRight(ranges, splitPos, new ArrayList<Interval<K>>()); // CHECK LinkedList seems to make more sense here
+			Interval<K> rangeLeft = ranges.stream().reduce(Interval<K>::union).get();
+			Interval<K> rangeRight = newode.ranges.stream().reduce(Interval<K>::union).get();
 			
 			//- split pointers and weights
 			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
@@ -331,11 +435,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			if(this.samples != null) {
 				LinkedList<V> samplesLeft = new LinkedList<V>();
 				LinkedList<V> samplesRight = new LinkedList<V>();
+				
 				for(V sample : samples) {
-					if(getKey.apply(sample).compareTo(offspringSeparator) >= 0)
-						samplesRight.add(sample);
-					else
+					K key = getKey.apply(sample);
+					assert !(rangeLeft.contains(key) && rangeRight.contains(key)) : "Unexpected inclusion of sample in both parts of a split.";
+					assert rangeLeft.contains(key) || rangeRight.contains(key) : "Sample can't be fitted into childs of split anymore.";
+					if(rangeLeft.contains(key))
 						samplesLeft.add(sample);
+					else
+						samplesRight.add(sample);
 				}
 				
 				//- attach filtered samples to new nodes if they should have an attached sample buffer
@@ -356,7 +464,13 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			//- put new node into Container
 			P newodeCID = container.insert(newode);
 			
-			return new InsertionInfo(newodeCID, offspringSeparator, weightLeft, weightRight);			
+			
+			
+			
+			// for now still return only the separator to be compliant with LeafNodes which can't determine their own boundaries.
+//			return new InsertionInfo(newodeCID, rangeLeft, rangeRight, weightLeft, weightRight);
+			assert rangeLeft.hiIn;
+			return new InsertionInfo(newodeCID, rangeLeft.hi, weightLeft, weightRight);
 		}
 		
 		/** Returns all values in the subtree originating from this node. */
@@ -373,11 +487,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
 		 * OPT: only called from xxl.core.indexStructures.RSTree_v3.SamplingCursor.addToFrontier(P) -> inline?
 		 */
-		protected List<V> relevantValues(K lo, K hi) {
+		protected List<V> relevantValues(Interval<K> query) {
 			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
-			for(int i : relevantChildIdxs(lo, hi)) {
+			for(int i : relevantChildIdxs(query)) {
 				Node child = container.get(pagePointers.get(i));
-				allValues.addAll(child.relevantValues(lo,hi));
+				allValues.addAll(child.relevantValues(query));
 			}
 			return allValues;
 		}
@@ -385,21 +499,16 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/**
 		 * Returns the indices of all childs relevant for a given query. 
 		 */
-		protected List<Integer> relevantChildIdxs(K lo, K hi) {
+		protected List<Integer> relevantChildIdxs(Interval<K> query) {
 			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) concatenation
-			
-			// CHECK whether this correctly uses all nodes in the canonical set
-			
-			// TODO: use general format for queries, unspecific to the 1-dimensional case.
-			int startPos = HUtil.binFindES(separators, lo);
-			int endPos = HUtil.binFindES(separators, hi);
-			for(int i=startPos; i <= endPos; i++)
-				relChilds.add(i);
+			for (int i = 0; i < ranges.size(); i++)
+				if(ranges.get(i).intersects(query))
+					relChilds.add(i);
 			return relChilds;
 		}
 		
-		protected List<P> relevantChildCIDs(K lo, K hi) {
-			return HUtil.getAll(relevantChildIdxs(lo, hi), pagePointers);
+		protected List<P> relevantChildCIDs(Interval<K> query) {
+			return HUtil.getAll(relevantChildIdxs(query), pagePointers);
 		}
 		
 		/**
@@ -500,7 +609,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * @param key key to look for
 		 * @return list of indices i with "getKey(values[i]) == key" 
 		 */
-		public List<Integer> lookup(K key) {
+		public List<Integer> lookupIdxs(K key) {
 			List<Integer> idx = new LinkedList<Integer>();
 			
 			List<K> mappedList = new MappedList<V,K>(values, FunJ8.toOld(getKey));
@@ -531,12 +640,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
 		 */
 		@Override
-		protected List<V> relevantValues(K lo, K hi) {
+		protected List<V> relevantValues(Interval<K> query) {
 			List<V> allValues = new LinkedList<V>();
-						
 			for(V value : values) {
 				K key = getKey.apply(value);
-				if(key.compareTo(lo) >= 0 && key.compareTo(hi) <= 0) // TODO: use general format for queries, unspecific to the 1-dimensional case.
+				if(query.contains(key))
 					allValues.add(value);
 			}
 			return allValues;
@@ -566,12 +674,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		Converter<K> keyConverter;
 		Converter<V> valueConverter;
 		Converter<P> cidConverter;
+		Converter<Interval<K>> rangeConverter;
 		
 		public NodeConverter(Converter<K> keyConverter, Converter<V> valueConverter, Converter<P> cidConverter) {
 			super();
 			this.keyConverter = keyConverter;
 			this.valueConverter = valueConverter;
 			this.cidConverter = cidConverter;
+			this.rangeConverter = Interval.getConverter(keyConverter);
 		}
 
 		@Override
@@ -604,9 +714,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			int nChildren = dataInput.readInt();
 
 			// -- read separators
-			node.separators = new LinkedList<K>();
-			for(int i=0; i < nChildren-1; i++) { // only #childs-1 separators!
-				node.separators.add(keyConverter.read(dataInput));
+			node.ranges = new LinkedList<Interval<K>>();
+			for(int i=0; i < nChildren; i++) { // only #childs-1 separators!
+				node.ranges.add(rangeConverter.read(dataInput));
 			}
 			
 			// -- read the ContainerIDs of the IndexEntries
@@ -658,8 +768,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			dataOutput.writeInt(node.pagePointers.size());
 
 			// -- write separators
-			for (K key : node.separators) {
-				keyConverter.write(dataOutput, key);
+			for (Interval<K> range : node.ranges) {
+				rangeConverter.write(dataOutput, range);
 			}
 
 			// -- write ContainerIDs
@@ -685,66 +795,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 	}
 	
-	/**
-	 * Insertion. 
-	 */
-	public void insert(V value) {
-		if(rootCID == null) { // tree empty
-			LeafNode root = new LeafNode();
-			root.values = new ArrayList<V>(leafHi);
-			root.values.add(value);
-			rootHeight = 0;
-			rootCID = container.insert(root);
-			return;
-		} else {
-			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
-			
-			if(insertionInfo.isSplit) { // new root
-				InnerNode newroot = new InnerNode();
-				
-				newroot.separators = new ArrayList<K>(branchingHi-1);
-				newroot.separators.add(insertionInfo.separator);
-				
-				newroot.pagePointers = new ArrayList<P>(branchingHi);
-				newroot.pagePointers.add(rootCID);
-				newroot.pagePointers.add(insertionInfo.newnodeCID);
-				
-				newroot.childWeights = new ArrayList<Integer>(branchingHi);
-				newroot.childWeights.add(insertionInfo.weightLeft);
-				newroot.childWeights.add(insertionInfo.weightRight);
-				
-				// fill the root node with samples again
-				if(newroot.totalWeight() > samplesPerNodeHi) {
-					newroot.samples = new LinkedList<V>();
-					newroot.repairSampleBuffer();
-				}
-				
-				rootCID = container.insert(newroot);
-				rootHeight++;
-			}
-			
-		}		
-	}
-			
-	/**
-	 * Lookup.
-	 */
-	public List<V> get(K key) {
-		int level = rootHeight;
-		P nodeCID = rootCID;
-		while(level > 0) {
-			nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtrees(key);
-			level--;
-		}		
-		LeafNode lnode = (LeafNode) container.get(nodeCID);
-		
-		List<Integer> hitIdx = lnode.lookup(key);
-		Stream<V> results = hitIdx.stream().map(lnode.values::get);
-		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
-		
-		return resultsV;		
-	}
-
 	@Override
 	public Cursor<V> rangeQuery(K lo, K hi){
 		return new QueryCursor(lo, hi);
@@ -798,7 +848,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-				int nextPos = HUtil.binFindES(curINode.separators, lo);
+//				int nextPos = HUtil.binFindES(curINode.ranges, lo);
+				int nextPos = curINode.chooseFirstSubtreeIdx(lo);
 				sIdx.push(nextPos);
 				
 				// descend to next node
@@ -900,8 +951,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 	
 	public Cursor<V> samplingRangeQuery(K lo, K hi){
-		KeyRangeG<K> query = new KeyRangeG<K>(lo, hi);
-		return new ReallyLazySamplingCursor(query, Arrays.asList(rootCID), new LinkedList<K>(), 20);
+		Interval<K> query = new Interval<K>(lo, hi);
+		List<P> initialCIDs = Arrays.asList(rootCID);
+		List<Interval<K>> ranges = Arrays.asList(universe);
+		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, 20);
 	}
 
 	/** The really lazy (and a bit dumb) sampling cursor from the paper.
@@ -909,28 +962,28 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 */
 	public class ReallyLazySamplingCursor extends AbstractCursor<V> {
 		/** the query */
-		KeyRangeG<K> query;
+		Interval<K> query;
 		/** batch size */
 		int batchSize;
 		/** Precomputed values for the cursor. */
 		LinkedList<V> precomputed = new LinkedList<V>();
 
 		/** Saves region information about the nodes present in frontier. */
-		List<K> separators;
+		List<Interval<K>> ranges;
 		/** List of Samplers of the nodes in frontier. 
 		 * A Sampler encapsulates the state information that describes the process in sampling from a node. 
 		 * It also saves the effective weight of a sampled node. */ 
 		List<Sampler> samplers; 
 
 		/** Constructor. Especially used for recursive calls. Information about the nodes have to be given. */ 
-		public ReallyLazySamplingCursor(KeyRangeG<K> query, List<P> initialCIDs, List<K> separators, int batchSize) {
+		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges, int batchSize) {
 			super();
 			// query
 			this.query = query;
 			// batch size
 			this.batchSize = batchSize;
 			// frontier
-			this.separators = separators;		
+			this.ranges = ranges;		
 			this.samplers = new LinkedList<Sampler>();
 			//- create samplers for the given nodes
 			for(P nodeCID : initialCIDs) {
@@ -940,30 +993,32 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 		
 		/** Constructor with naive batch size = 1. */
-		public ReallyLazySamplingCursor(KeyRangeG<K> query, List<P> initialCIDs, List<K> separators) {
-			this(query, initialCIDs, separators, 1);
+		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges) {
+			this(query, initialCIDs, ranges, 1);
 		}
 
 		/** Performs a batched trial of n draws. The amount of samples generated will typically be much less. */
 		public List<V> tryToSample(int n) {
 			List<V> samplesObtained = new LinkedList<V>();
 
-			// check the weight of the samplers
+			//- get the weights of the samplers
 			List<Integer> weights = new ArrayList<Integer>(samplers.size());
 			for(Sampler sampler : samplers)
 				weights.add(sampler.weight());
-			// determine how many to draw from which
+			//- determine how many to draw from which
 			List<Integer> toDraw = Randoms.multinomialDist(weights, n, rng);
 			
-			// fetch accordingly from each sampler and save the results
+			//- fetch accordingly from each sampler and save the results
 			List<SamplingResult> results = new ArrayList<SamplingResult>(samplers.size());
 			for(int i=0; i < toDraw.size(); i++) {
 				// .. and check on nodes which would get sampled whether they are disjoint with the query
 				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
-				KeyRangeG<K> samplerRange = new KeyRangeG<K>(i > 0               ? separators.get(i-1) : null, 
-															 i < toDraw.size()-1 ? separators.get(i)   : null);
-				if(toDraw.get(i) > 0 && !query.overlaps(samplerRange)) {
+				// FIXME we calculate the samplerRanges entirely wrong, as we add new separators to the end of
+				// the separator list which reulsts in empty intervals.
+//				KeyRangeG<K> samplerRange = new KeyRangeG<K>(i > 0               ? ranges.get(i-1) : null, 
+//															 i < toDraw.size()-1 ? ranges.get(i)   : null);
+				if(toDraw.get(i) > 0 && !query.intersects(ranges.get(i))) {
 					res = new SamplingResult();
 				} else {
 					res = samplers.get(i).tryToSample(toDraw.get(i));
@@ -972,16 +1027,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				samplesObtained.addAll(res.samplesObtained);
 			}
 			
-			// perform the batch updating
+			//- perform the batch updating
 			int i = 0, removed = 0;
 			for(SamplingResult res : results) {				
 				if(res.replacementNeeded) {
-					if(i < toDraw.size() - 1) // only remove if not at last position
-						separators.remove(i - removed);
+					Interval<K> parentRange = ranges.remove(i - removed);
 					samplers.remove(i - removed);
+					removed++;
 					
-					if(res.replacee != null)
-						adjoin(res.replacee);
+					if(res.replacee != null) {
+						samplers.addAll(res.replacee.samplers);
+						for(Interval<K> range : res.replacee.ranges)
+							ranges.add(range.intersection(parentRange));
+					}
 				}
 				i++;
 			}
@@ -989,12 +1047,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			return samplesObtained;
 		}
 		
-		private void adjoin(ReallyLazySamplingCursor other) {
-			separators.addAll(other.separators);
-			samplers.addAll(other.samplers);			
-		}
-
-		//-------------------- abstract cursor implementation
+		//-------------------- AbstractCursor concretization
 		@Override
 		protected boolean hasNextObject() {
 			while(precomputed.isEmpty()) {
@@ -1019,19 +1072,15 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/** Factory for Samplers - respectively different initialisation of subclasses depending on the node contents. */
 		public Sampler createSampler(P nodeCID) {
 			Node node = container.get(nodeCID);
-			if(node.isInner()) {
+			assert node.isInner();
+//			if(node.isInner()) {
 				InnerNode inode = (InnerNode) node;
 				if(inode.hasSampleBuffer()) {
 					return new InnerSampler(nodeCID);
 				} else {
 					return new UnbufferedSampler(inode.allValues());
 				}
-			} else {
-				// HACK to not add throws declarations everywhere
-				System.err.println("LeafNode unexpected.");
-				System.exit(-1);
-				return null;
-			}					
+//			} 				
 		}
 
 		/** We need to keep track of the state of this sampler so meticulously to adhere to the paper, because it is 
@@ -1168,7 +1217,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					InnerNode inode = (InnerNode) container.get(nodeCID);
 
 					// recursively create a new SamplingCurse
-					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, inode.pagePointers, inode.separators, batchSize);
+					// FIXME: we need to calculate the ranges here too
+					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, inode.pagePointers, inode.ranges, batchSize);
 					samplesObtained.addAll(subCursor.tryToSample(remaining));
 					return new SamplingResult(samplesObtained, subCursor);
 				} else {
@@ -1225,6 +1275,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	@Override
 	public Function<V, K> getGetKey() {
 		return getKey;
-	} 
+	}
+
+
+
+
 	
 }

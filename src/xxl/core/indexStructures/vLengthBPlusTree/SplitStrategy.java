@@ -97,7 +97,7 @@ public abstract class SplitStrategy<D,K> implements Splitter {
 	}
 	/**
 	 * 
-	 * @param separator
+	 * @param range
 	 * @return
 	 */
 	public Separator createSeparator(K keyOfdataObject){
