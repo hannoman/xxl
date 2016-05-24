@@ -952,8 +952,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	public Cursor<V> samplingRangeQuery(K lo, K hi){
 		Interval<K> query = new Interval<K>(lo, hi);
-		List<P> initialCIDs = Arrays.asList(rootCID);
-		List<Interval<K>> ranges = Arrays.asList(universe);
+		List<P> initialCIDs = new LinkedList<P>(Arrays.asList(rootCID));
+		List<Interval<K>> ranges = new LinkedList<Interval<K>>(Arrays.asList(universe));
 		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, 20);
 	}
 

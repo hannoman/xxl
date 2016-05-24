@@ -71,6 +71,7 @@ public class Test_ApproxQueries {
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
 		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
 				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
 		
 		//-- estimating parameters for the tree
 		//- fill leafes optimal
@@ -82,10 +83,13 @@ public class Test_ApproxQueries {
 		int branchingParamLo = branchingParamHi / 4;
 		
 		//- determine how much is left for samples
-		int innerSpaceLeft = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE);
-		innerSpaceLeft -= keyConverter.getSerializedSize() * (branchingParamHi - 1); // only b-1 separators
-		// for every child the pointer and weight is saved
-		innerSpaceLeft -= (treeRawContainer.objectIdConverter().getSerializedSize() + IntegerConverter.SIZE) * branchingParamHi;
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // # child nodes
+		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
+		
 		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
 		//- set sample param for the remaining space optimal
 		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();

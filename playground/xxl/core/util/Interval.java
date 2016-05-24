@@ -4,7 +4,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.Converter;
+import xxl.core.io.converters.FixedSizeConverter;
 
 public class Interval<K extends Comparable<K>> {
 
@@ -145,10 +147,40 @@ public class Interval<K extends Comparable<K>> {
 			else { assert i1 == i2; return 0; }
 		}
 	}
-	
+		
 	public static <T extends Comparable<T>> Converter<Interval<T>> getConverter(Converter<T> kConv) {
 		@SuppressWarnings("serial")
 		Converter<Interval<T>> compConv = new Converter<Interval<T>>() {
+
+			@Override
+			public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
+				if(object == null)
+					object = new Interval<T>();
+				
+				object.lo = kConv.read(dataInput, object.lo);
+				object.loIn = dataInput.readBoolean();
+				object.hi = kConv.read(dataInput, object.hi);
+				object.hiIn = dataInput.readBoolean();
+				return object;
+			}
+
+			@Override
+			public void write(DataOutput dataOutput, Interval<T> object) throws IOException {
+				kConv.write(dataOutput, object.lo);
+				dataOutput.writeBoolean(object.loIn);
+				kConv.write(dataOutput, object.hi);
+				dataOutput.writeBoolean(object.hiIn);				
+			}			
+		};
+		
+		return compConv;
+	}
+	
+	public static <T extends Comparable<T>> FixedSizeConverter<Interval<T>> getConverter(FixedSizeConverter<T> kConv) {
+		int size = kConv.getSerializedSize() * 2 + BooleanConverter.SIZE * 2;
+		
+		@SuppressWarnings("serial")
+		FixedSizeConverter<Interval<T>> compConv = new FixedSizeConverter<Interval<T>>(size) {
 
 			@Override
 			public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
@@ -168,10 +200,12 @@ public class Interval<K extends Comparable<K>> {
 				dataOutput.writeBoolean(object.loIn);
 				kConv.write(dataOutput, object.hi);
 				dataOutput.writeBoolean(object.hiIn);				
-			}			
+			}
 		};
 		
 		return compConv;
 	}
+	
+	
 	
 }
