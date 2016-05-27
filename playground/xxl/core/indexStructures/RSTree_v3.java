@@ -202,13 +202,32 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			
 		}		
 	}
+	
+	/** Remove all entries with matchink key from the tree. Reports how many entries were removed. */
+	public int remove(K key) {
+		if(rootCID == null) return 0; // tree empty
+		
+		Interval<K> query = new Interval<K>(key);
+		
+		Node root = container.get(rootCID);
+		int weightOld = root.totalWeight();
+		RemoveInfo remInfo = root.remove(query);
+		// TODO: merging of root = shrinking of tree
+		int nRemove = remInfo.weightNew - weightOld;
+		return nRemove;
+	}
 
 	/**
 	 * Lookup.
 	 */
+	// TODO: problems when there are more than leafHi duplicates of one key k. These could get saved in a leaf with range ]k,k] = 0
+	//			which would never get sampled.
 	public List<V> get(K key) {
+		if(rootCID == null) return new LinkedList<V>(); // tree empty
+		
 		int level = rootHeight;
 		P nodeCID = rootCID;
+		
 		while(level > 0) {
 			// nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtrees(key);
 			// restrict us to one path for now
@@ -217,14 +236,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}		
 		LeafNode lnode = (LeafNode) container.get(nodeCID);
 		
-		List<Integer> hitIdx = lnode.lookupIdxs(key);
-		Stream<V> results = hitIdx.stream().map(lnode.values::get);
-		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
-		
-		return resultsV;		
+		return HUtil.getAll(lnode.lookupIdxs(key), lnode.values);
 	} 
-	
-	
+		
 	
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
@@ -244,15 +258,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		int weightLeft = -1;
 		int weightRight = -1;		
 		
-//		public InsertionInfo(P newnodeCID, Interval<K> rangeLeft, Interval<K> rangeRight, int weightLeft, int weightRight) {
-//			this.isSplit = true;
-//			this.newnodeCID = newnodeCID;
-//			this.rangeLeft = rangeLeft;
-//			this.rangeRight = rangeRight;
-//			this.weightLeft = weightLeft;
-//			this.weightRight = weightRight;
-//		}
-
 		public InsertionInfo(P newnodeCID, K separator, int weightLeft, int weightRight) {
 			this.isSplit = true;
 			this.newnodeCID = newnodeCID;
@@ -268,14 +273,31 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 
 	}
 
+	/**
+	 */
+	class RemoveInfo {
+		boolean isUnderflow;
+		int weightNew;
+		
+		public RemoveInfo(boolean isUnderflow, int weightNew) {
+			super();
+			this.isUnderflow = isUnderflow;
+			this.weightNew = weightNew;
+		}
+	}
+	
 	//-- Node class
 	public abstract class Node {
 		
 		public abstract boolean isLeaf();
 		
+		
+
 		public boolean isInner() { return !isLeaf(); }
 		
 		public abstract InsertionInfo insert(V value, P thisCID, int level);
+		
+		public abstract RemoveInfo remove(Interval<K> query);
 
 		protected abstract List<V> drainSamples(int amount);
 
@@ -362,6 +384,22 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					return i;
 			return null;
 		}
+		
+		@Override
+		public RemoveInfo remove(Interval<K> query) {
+			List<Integer> relChildIdxs = relevantChildIdxs(query);
+			
+			boolean removalTookPlace = false;
+			
+			List<RemoveInfo> remInfos = new LinkedList<RemoveInfo>();
+			for(int idx : relChildIdxs) {
+				Node child = container.get(pagePointers.get(idx));
+				RemoveInfo remInfo = child.remove(query); 
+				remInfos.add(remInfo);
+				
+			}
+		}
+		
 		
 		public InsertionInfo insert(V value, P thisCID, int level) {
 			K key = getKey.apply(value);

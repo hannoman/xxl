@@ -891,7 +891,7 @@ public class BPlusTree extends Tree {
         	// test code 
             /* TODO: unnecessary casts of rootEntry() */
             /* TODO: what does this code actually do? 
-             * Adjusts the sepValue of the rootEntry to always be the maximum of all inserted "entry.sepValues". 
+             * Adjusts the sepValue of the rootEntry to always be the maximum of all inserted "entry.sepValue"s. 
              */
             Separator sep = ((IndexEntry)rootEntry()).separator();
             Separator entrySep = (Separator)descriptor; 

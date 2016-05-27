@@ -148,62 +148,70 @@ public class Interval<K extends Comparable<K>> {
 		}
 	}
 		
-	public static <T extends Comparable<T>> Converter<Interval<T>> getConverter(Converter<T> kConv) {
-		@SuppressWarnings("serial")
-		Converter<Interval<T>> compConv = new Converter<Interval<T>>() {
-
-			@Override
-			public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
-				if(object == null)
-					object = new Interval<T>();
-				
-				object.lo = kConv.read(dataInput, object.lo);
-				object.loIn = dataInput.readBoolean();
-				object.hi = kConv.read(dataInput, object.hi);
-				object.hiIn = dataInput.readBoolean();
-				return object;
-			}
-
-			@Override
-			public void write(DataOutput dataOutput, Interval<T> object) throws IOException {
-				kConv.write(dataOutput, object.lo);
-				dataOutput.writeBoolean(object.loIn);
-				kConv.write(dataOutput, object.hi);
-				dataOutput.writeBoolean(object.hiIn);				
-			}			
-		};
+	
+	@SuppressWarnings("serial")
+	public static class IntervalConverter<T extends Comparable<T>> extends Converter<Interval<T>> {
 		
-		return compConv;
+		Converter<T> kConv;
+		
+		public IntervalConverter(Converter<T> kConv) {
+			super();
+			this.kConv = kConv;
+		}
+
+		@Override
+		public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
+			if(object == null)
+				object = new Interval<T>();
+			
+			object.lo = kConv.read(dataInput, object.lo);
+			object.loIn = dataInput.readBoolean();
+			object.hi = kConv.read(dataInput, object.hi);
+			object.hiIn = dataInput.readBoolean();
+			return object;
+		}
+
+		@Override
+		public void write(DataOutput dataOutput, Interval<T> object) throws IOException {
+			kConv.write(dataOutput, object.lo);
+			dataOutput.writeBoolean(object.loIn);
+			kConv.write(dataOutput, object.hi);
+			dataOutput.writeBoolean(object.hiIn);				
+		}			
+		
+	}
+	
+	@SuppressWarnings("serial")
+	public static class FixedSizeIntervalConverter<T extends Comparable<T>> 
+						extends FixedSizeConverter<Interval<T>> { 
+
+		IntervalConverter<T> iConv;
+		
+		public FixedSizeIntervalConverter(FixedSizeConverter<T> kConv) {
+			super(kConv.getSerializedSize() * 2 + BooleanConverter.SIZE * 2); 
+			// int size = kConv.getSerializedSize() * 2 + BooleanConverter.SIZE * 2; super(size); // just screw you java!
+			
+			this.iConv = new IntervalConverter<T>(kConv);			
+		}
+
+		@Override
+		public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
+			return iConv.read(dataInput, object);
+		}
+
+		@Override
+		public void write(DataOutput dataOutput, Interval<T> object) throws IOException {
+			iConv.write(dataOutput, object);			
+		}
+		
+	}
+	
+	public static <T extends Comparable<T>> Converter<Interval<T>> getConverter(Converter<T> kConv) {
+		return new IntervalConverter<T>(kConv);
 	}
 	
 	public static <T extends Comparable<T>> FixedSizeConverter<Interval<T>> getConverter(FixedSizeConverter<T> kConv) {
-		int size = kConv.getSerializedSize() * 2 + BooleanConverter.SIZE * 2;
-		
-		@SuppressWarnings("serial")
-		FixedSizeConverter<Interval<T>> compConv = new FixedSizeConverter<Interval<T>>(size) {
-
-			@Override
-			public Interval<T> read(DataInput dataInput, Interval<T> object) throws IOException {
-				if(object == null)
-					object = new Interval<T>();
-				
-				kConv.read(dataInput, object.lo);
-				object.loIn = dataInput.readBoolean();
-				kConv.read(dataInput, object.hi);
-				object.hiIn = dataInput.readBoolean();
-				return object;
-			}
-
-			@Override
-			public void write(DataOutput dataOutput, Interval<T> object) throws IOException {
-				kConv.write(dataOutput, object.lo);
-				dataOutput.writeBoolean(object.loIn);
-				kConv.write(dataOutput, object.hi);
-				dataOutput.writeBoolean(object.hiIn);				
-			}
-		};
-		
-		return compConv;
+		return new FixedSizeIntervalConverter<T>(kConv);
 	}
 	
 	

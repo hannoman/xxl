@@ -443,9 +443,8 @@ public class HilbertRTree extends BPlusTree {
 		final Iterator[] iterators = new Iterator[height() + 1];
 		Arrays.fill(iterators, EmptyCursor.DEFAULT_INSTANCE);
 		if (height() > 0
-				&& queryRectangle.overlaps(((ORKeyRange) rootDescriptor())
-						.getIndexEntryMBR()))
-			iterators[height()] = new SingleObjectCursor(rootEntry());
+		 && queryRectangle.overlaps( ((ORKeyRange) rootDescriptor()).getIndexEntryMBR() )
+		 ) iterators[height()] = new SingleObjectCursor(rootEntry());
 		return new AbstractCursor() {
 			int queryAllLevel = 0;
 			Object toRemove = null;
@@ -457,30 +456,18 @@ public class HilbertRTree extends BPlusTree {
 						if (parentLevel == targetLevel)
 							return true;
 						else {
-							IndexEntry indexEntry = (IndexEntry) iterators[parentLevel]
-									.next();
+							IndexEntry indexEntry = (IndexEntry) iterators[parentLevel].next();
 							if (indexEntry.level() >= targetLevel) {
 								Tree.Node node = indexEntry.get(true);
 								Iterator queryIterator;
-								if (parentLevel <= queryAllLevel
-										|| queryRectangle
-												.contains(((ORSeparator) indexEntry
-														.separator())
-														.getIndexEntryMBR())) {
-									queryIterator = node.entries(); // Falls
-																	// alle
-																	// entries
-									if (parentLevel > queryAllLevel
-											&& !iterators[node.level].hasNext())
+								if (parentLevel <= queryAllLevel || queryRectangle.contains(((ORSeparator) indexEntry.separator()).getIndexEntryMBR())) {
+									queryIterator = node.entries(); // Falls alle entries
+									if (parentLevel > queryAllLevel && !iterators[node.level].hasNext())
 										queryAllLevel = node.level;
 								} else
 									// edit
-									queryIterator = ((Node) node)
-											.queryOR(queryRectangle);
-								iterators[parentLevel = node.level] = iterators[parentLevel]
-										.hasNext() ? new Sequentializer(
-										queryIterator, iterators[parentLevel])
-										: queryIterator;
+									queryIterator = ((Node) node).queryOR(queryRectangle);
+								iterators[parentLevel = node.level] = iterators[parentLevel].hasNext() ? new Sequentializer(queryIterator, iterators[parentLevel]) : queryIterator;
 								path.push(new MapEntry(indexEntry, node));
 							}
 						}
