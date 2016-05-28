@@ -16,6 +16,7 @@ import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
+import xxl.core.indexStructures.RSTree_v3.ReallyLazySamplingCursor;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
@@ -23,10 +24,12 @@ import xxl.core.io.converters.IntegerConverter;
 import xxl.core.math.functions.AggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
+import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
+import xxl.core.util.Quadruple;
 import xxl.core.util.Triple;
 
 
@@ -39,11 +42,11 @@ import xxl.core.util.Triple;
 public class Test_ApproxQueries {
 
 	public static final int BLOCK_SIZE = 1024;
-	public static final int NUMBER_OF_ELEMENTS = 10000;
+	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
-	public static final double CONFIDENCE = 0.95;
-	public static final double PRECISION_BOUND = 0.001;
+	public static final double INCONFIDENCE = 0.10;
+	public static final double PRECISION_BOUND = 0.01;
 	static final int KEY_LO = 0, KEY_HI = 10000;
 	static final double VAL_LO = 0, VAL_HI = 100000000.0;
 	
@@ -220,28 +223,36 @@ public class Test_ApproxQueries {
 			if(key_lo > key_hi) { int tmp = key_lo; key_lo = key_hi; key_hi = tmp; } // swap 
 			
 			// approximate computation
-			Triple<Double,Double,Integer> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
+			Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
 			// exact computation						
-			Pair<Double, Integer> exact = exact1(tree, key_lo, key_hi);
+			Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact = exact1(tree, key_lo, key_hi);
 			
 			double estimatedError = Math.abs(approx.getElement2());
 			double realError = Math.abs( (approx.getElement1() - exact.getElement1() ) / exact.getElement1() );
 					
 			System.out.println("approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
 					" - #entries needed: "+ approx.getElement3() +"/"+ exact.getElement2() + 
-					" - estimated error: "+ String.format("%2.4f", estimatedError / 100) +"%"+
-					" - real error: "+ String.format("%2.4f", realError / 100) +"%");
+					" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
+					" - real error: "+ String.format("%2.4f", realError * 100) +"%");
+			
+			Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
+			int approxTotal = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
+//			System.out.println("\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
+			Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
+			int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
+//			System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
+			System.out.println("\t approx/exact touched: "+ approxTotal +" / "+ exactTotal);
 		}		
 	}
 	
 	/** Exact computation of one query.
 	 * @return a pair <tt>(result, count)</tt> where count is the full number of entries satisfying the range query.
 	 */
-	public static Pair<Double,Integer> exact1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
+	public static Triple<Double,Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
 //		double resultExact = (double) Cursors.last(new Aggregator(exactVals, new StatefulAverage()));
 		// exact computation
-		Cursor<Pair<Integer, Double>> exactQuery = tree.rangeQuery(key_lo, key_hi);
-		Cursor<Double> exactVals = new Mapper<Pair<Integer,Double>, Double>(FunJ8.toOld(e -> e.getSecond()), exactQuery);
+		ProfilingCursor<Pair<Integer, Double>> exactQueryCursor = tree.rangeQuery(key_lo, key_hi);
+		Cursor<Double> exactVals = new Mapper<Pair<Integer,Double>, Double>(FunJ8.toOld(e -> e.getSecond()), exactQueryCursor);
 		
 		AggregationFunction<Number, Number> avgAggFun = new StatefulAverage();
 		Double agg = null;
@@ -251,20 +262,21 @@ public class Test_ApproxQueries {
 			agg = (Double) avgAggFun.invoke(agg, val);
 		}
 		int valuesUsed = i;
-		return new Pair<Double, Integer>(agg, valuesUsed);
+		return new Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>>(agg, valuesUsed, exactQueryCursor);
 	}
 	
 	/** Computes an average-estimator with confidence according to the large sample assumption, 
 	 * from as much samples as needed to match PRECISION_BOUND. */
-	public static Triple<Double, Double, Integer> approx1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
 		int REPORT_INTERVAL = 1000;		
 		
+		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE);
 		Cursor<Double> vals = new Mapper<Pair<Integer,Double>, Double>(
 				FunJ8.toOld(Pair::getSecond), 
-				tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE));
+				samplingCursor);
 		
 		int i = 0;
-		ConfidenceAggregationFunction coAggFun = ConfidenceAggregationFunction.largeSampleConfidenceAverage(CONFIDENCE);
+		ConfidenceAggregationFunction coAggFun = ConfidenceAggregationFunction.largeSampleConfidenceAverage(INCONFIDENCE);
 		Double agg = null;
 		double eps = Double.POSITIVE_INFINITY;
 		double relativeError = Double.POSITIVE_INFINITY;		
@@ -274,14 +286,16 @@ public class Test_ApproxQueries {
 			agg = (double) coAggFun.invoke(agg, nVal);
 			eps = (double) coAggFun.epsilon();
 			relativeError = eps / agg;
-//			if(i % REPORT_INTERVAL == 0) {
-//				System.out.println(i + ":\tval: " + nVal + "\t agg: " + agg + 
-//						"\t eps: "+ eps +"\t relError: "+ String.format("%3.3f", (Math.abs(relativeError) / 100)) +"%");
-//			}			
+			/*
+			if(i % REPORT_INTERVAL == 0) {
+				System.out.println(i + ":\tval: " + nVal + "\t agg: " + agg + 
+						"\t eps: "+ eps +"\t relError: "+ String.format("%3.3f", (Math.abs(relativeError) / 100)) +"%");
+			}
+			*/			
 		}
 		int valuesSampled = i;
 		
-		return new Triple<Double, Double, Integer>(agg, relativeError, valuesSampled);
+		return new Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>>(agg, relativeError, valuesSampled, samplingCursor);
 	}
 	
 	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
@@ -369,9 +383,9 @@ public class Test_ApproxQueries {
 		}
 
 		//--- run the actual tests
-		random = new Random(55);
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(fileName);
+		random = new Random();
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(fileName);
 		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 //		samplingCursorCorrectness(tree, compmap, 10, 100);
 		approxExactComparisons(tree, PRECISION_BOUND, 100);

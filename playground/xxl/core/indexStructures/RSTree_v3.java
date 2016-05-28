@@ -6,15 +6,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.Stack;
+import java.util.TreeMap;
 import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.CastingContainer;
@@ -25,6 +27,7 @@ import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.Converter;
+import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
@@ -45,7 +48,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
 	 *   DONE Mini-Milestone 2: Implement lazy sampling query cursor
 	 *   Mini-Milestone 2.5: ReallyLazySamplingCursor should adjust batchSize dynamically to use |Frontier|.
-	 *   Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
+	 *   DONE Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
+	 *   	-> TODO: yet, ReallyLazySamplingCursor needs to count the leaf nodes which got visited indirectly (from an unbuffered
+	 *   			inner node) too.  
+	 *   
 	 *   Future: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
 	 *   			And to automatically construct a tree with optimally set parameters.
 	 *   	(first tries can be seen in xxl.core.indexStructures.Test_ApproxQueries.createRSTree(String)
@@ -206,9 +212,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	/**
 	 * Lookup.
 	 */
+	// TODO: problems when there are more than leafHi duplicates of one key k. These could get saved in a leaf with range ]k,k] = 0
+	//			which would never get sampled.
 	public List<V> get(K key) {
+		if(rootCID == null) return new LinkedList<V>(); // tree empty
+		
 		int level = rootHeight;
 		P nodeCID = rootCID;
+		
 		while(level > 0) {
 			// nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtrees(key);
 			// restrict us to one path for now
@@ -217,14 +228,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}		
 		LeafNode lnode = (LeafNode) container.get(nodeCID);
 		
-		List<Integer> hitIdx = lnode.lookupIdxs(key);
-		Stream<V> results = hitIdx.stream().map(lnode.values::get);
-		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
-		
-		return resultsV;		
+		return HUtil.getAll(lnode.lookupIdxs(key), lnode.values);
 	} 
-	
-	
+		
 	
 	/**
 	 * Generalization of SplitInfo class which is used to report the result of an
@@ -244,15 +250,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		int weightLeft = -1;
 		int weightRight = -1;		
 		
-//		public InsertionInfo(P newnodeCID, Interval<K> rangeLeft, Interval<K> rangeRight, int weightLeft, int weightRight) {
-//			this.isSplit = true;
-//			this.newnodeCID = newnodeCID;
-//			this.rangeLeft = rangeLeft;
-//			this.rangeRight = rangeRight;
-//			this.weightLeft = weightLeft;
-//			this.weightRight = weightRight;
-//		}
-
 		public InsertionInfo(P newnodeCID, K separator, int weightLeft, int weightRight) {
 			this.isSplit = true;
 			this.newnodeCID = newnodeCID;
@@ -812,7 +809,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 	
 	@Override
-	public Cursor<V> rangeQuery(K lo, K hi){
+	public ProfilingCursor<V> rangeQuery(K lo, K hi){
 		return new QueryCursor(lo, hi);
 	}
 	
@@ -826,22 +823,34 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * A query cursor for simple range queries.
 	 * 
 	 * We won't subclass xxl.core.indexStructures.QueryCursor here as it is 
-	 * supposed for queries over trees which inherit from xxl.core.indexStructures.Tree.
+	 * designed for queries over trees which inherit from xxl.core.indexStructures.Tree.
 	 */
-	public class QueryCursor extends AbstractCursor<V> {
+	public class QueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
+		// query
 		final K lo;
 		final K hi;			
+		
+		/** Profiling information: nodes touched. */
+		Set<Pair<Integer, P>> p_nodesTouched;		
+		
+		int startlevel;
 		
 		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node		
 		Stack<Integer> sIdx; // sIdx.peek() =: current index
 		
+		
 		V precomputed;
 		
-		public QueryCursor(K lo, K hi, P startNode) {
+		public QueryCursor(K lo, K hi, P startNode, int startlevel) {
 			super();
+			this.startlevel = startlevel;
+			
+			// profiling
+			p_nodesTouched = new HashSet<Pair<Integer,P>>();
+			// query
 			this.lo = lo;
 			this.hi = hi;
-			
+						
 			sNodes = new Stack<P>();
 			sNodes.push(startNode);
 			
@@ -851,20 +860,40 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 		
 		public QueryCursor(K lo, K hi) {
-			this(lo, hi, rootCID);
+			this(lo, hi, rootCID, rootHeight);
+		}
+		
+		@Override
+		public Pair<Map<Integer,Integer>, Map<Integer, Integer>> getProfilingInformation() {
+			// process the profiling information
+			Map<Integer, Integer> touchedByLevel = new TreeMap<Integer, Integer>();
+			for(Pair<Integer, P> nodeId : p_nodesTouched) {
+				int l = nodeId.getElement1();
+				touchedByLevel.putIfAbsent(l, 0);
+				touchedByLevel.put(l, touchedByLevel.get(l)+1);
+			}
+			
+			Map<Integer, Integer> prunedByLevel = new TreeMap<Integer, Integer>();			
+			
+			return new Pair<Map<Integer, Integer>, Map<Integer, Integer>>(touchedByLevel, prunedByLevel);
 		}
 	
+		/** Marks the node currently on the head of the stack as touched for profiling. */
+		private void markedTouched() {
+			p_nodesTouched.add(new Pair<Integer, P>(startlevel - sNodes.size() + 1, sNodes.peek()));
+		}
+		
 		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
 		@Override
 		public void open() {
 			// get the current node and lock it in the buffer
-			Node curNode = container.get(sNodes.peek(), false);
+			Node curNode = container.get(sNodes.peek(), false); // this should always be the root if we don't descend from a different node
+			markedTouched();
 			
 			while(curNode.isInner()) {
 				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-//				int nextPos = HUtil.binFindES(curINode.ranges, lo);
 				int nextPos = curINode.chooseFirstSubtreeIdx(lo);
 				sIdx.push(nextPos);
 				
@@ -872,6 +901,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				P nextPID = curINode.pagePointers.get(nextPos);
 				sNodes.push(nextPID);
 				curNode = container.get(sNodes.peek(), false);
+				markedTouched();
 			}
 			
 			// now our node is a leaf and we just need to find the starting position			
@@ -901,8 +931,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		private void descendToSmallest() {
 			// get the current node and fix it in the buffer
 			Node curNode = container.get(sNodes.peek(), false);			
+			markedTouched();
 			
-			while(curNode.isInner()) {				
+			while(curNode.isInner()) {
 				InnerNode curINode = (InnerNode) curNode;
 				// set the index of the current node
 				sIdx.push(0);
@@ -910,6 +941,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
 				sNodes.push(nextPID);
 				curNode = container.get(sNodes.peek(), false);
+				markedTouched();
 			}
 			
 			// set the index in the leaf node too
@@ -946,7 +978,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			if(sIdx.peek() >= curLNode.values.size()) { // we need to switch to the node which has the next values
 				if(switchToNextNode())
 					// fetch the updated leaf node again, that is the state change incured by switchToNextNode() 
-					// TODO: separate tail of stack from the rest
 					curLNode = (LeafNode) container.get(sNodes.peek());
 				else  
 					return false; // hit the right border of the index structure				
@@ -966,17 +997,19 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	}
 	
-	public Cursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
+	// public RSTree_v3<K, V, P>.ReallyLazySamplingCursor samplingRangeQuery(K lo, K hi, int samplingBatchSize){
+	public ProfilingCursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
 		Interval<K> query = new Interval<K>(lo, hi);
 		List<P> initialCIDs = new LinkedList<P>(Arrays.asList(rootCID));
 		List<Interval<K>> ranges = new LinkedList<Interval<K>>(Arrays.asList(universe));
-		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, samplingBatchSize);
+		List<Integer> levels = new LinkedList<Integer>(Arrays.asList(rootHeight));
+		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, levels, samplingBatchSize);
 	}
 
 	/** The really lazy (and a bit desoriented) sampling cursor from the paper.
 	 * It now allows to batch sampling tries.  
 	 */
-	public class ReallyLazySamplingCursor extends AbstractCursor<V> {
+	public class ReallyLazySamplingCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
 		/** the query */
 		Interval<K> query;
 		/** batch size */
@@ -984,16 +1017,24 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/** Precomputed values for the cursor. */
 		LinkedList<V> precomputed = new LinkedList<V>();
 
+		/** Profiling information: nodes touched. */
+		Set<Pair<Integer, P>> p_nodesTouched;		
+		/** Profiling information: nodes excluded from search because of being disjoint with the query. */
+		Set<Pair<Integer, P>> p_nodesPruned;
+		
 		/** Saves region information about the nodes present in frontier. */
 		List<Interval<K>> ranges;
+		
 		/** List of Samplers of the nodes in frontier. 
 		 * A Sampler encapsulates the state information that describes the process in sampling from a node. 
 		 * It also saves the effective weight of a sampled node. */ 
-		List<Sampler> samplers; 
-
+		List<Sampler> samplers;
 		/** Constructor. Especially used for recursive calls. Information about the nodes have to be given. */ 
-		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges, int batchSize) {
+		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges, List<Integer> levels, int batchSize) {
 			super();
+			// profiling
+			p_nodesTouched = new HashSet<Pair<Integer,P>>();
+			p_nodesPruned = new HashSet<Pair<Integer,P>>();			
 			// query
 			this.query = query;
 			// batch size
@@ -1002,10 +1043,28 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			this.ranges = ranges;		
 			this.samplers = new LinkedList<Sampler>();
 			//- create samplers for the given nodes
-			for(P nodeCID : initialCIDs) {
-				Node node = container.get(nodeCID);
-				samplers.add(createSampler(nodeCID));
+			for (int i = 0; i < initialCIDs.size(); i++) {
+				samplers.add(createSampler(initialCIDs.get(i), levels.get(i)));
 			}
+		}
+		
+		public Pair<Map<Integer,Integer>, Map<Integer, Integer>> getProfilingInformation() {
+			// process the profiling information
+			Map<Integer, Integer> touchedByLevel = new TreeMap<Integer, Integer>();
+			for(Pair<Integer, P> nodeId : p_nodesTouched) {
+				int l = nodeId.getElement1();
+				touchedByLevel.putIfAbsent(l, 0);
+				touchedByLevel.put(l, touchedByLevel.get(l)+1);
+			}
+			
+			Map<Integer, Integer> prunedByLevel = new TreeMap<Integer, Integer>();
+			for(Pair<Integer, P> nodeId : p_nodesPruned) {
+				int l = nodeId.getElement1();
+				prunedByLevel.putIfAbsent(l, 0);
+				prunedByLevel.put(l, prunedByLevel.get(l)+1);
+			}
+			
+			return new Pair<Map<Integer, Integer>, Map<Integer, Integer>>(touchedByLevel, prunedByLevel);
 		}
 		
 		/** Performs a batched trial of n draws. The amount of samples generated will typically be much less. */
@@ -1026,8 +1085,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
 				if(toDraw.get(i) > 0 && !query.intersects(ranges.get(i))) {
+					p_nodesPruned.add(samplers.get(i).getNodeIdentifier());
 					res = new SamplingResult();
-				} else {
+				} else {					
 					res = samplers.get(i).tryToSample(toDraw.get(i));
 				}
 				results.add(res);
@@ -1046,6 +1106,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 						samplers.addAll(res.replacee.samplers);
 						for(Interval<K> range : res.replacee.ranges)
 							ranges.add(range.intersection(parentRange));
+						
+						// join the profiling information
+						p_nodesTouched.addAll(res.replacee.p_nodesTouched);
+						p_nodesPruned.addAll(res.replacee.p_nodesPruned);
 					}
 				}
 				i++;
@@ -1074,12 +1138,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Factory for Samplers - respectively different initialisation of
 		 * subclasses depending on the node contents.
 		 */
-		public Sampler createSampler(P nodeCID) {
+		public Sampler createSampler(P nodeCID, int level) {
 			Node node = container.get(nodeCID);
 			if (node.isInner()) {
 				InnerNode inode = (InnerNode) node;
 				if (inode.hasSampleBuffer())
-					return new InnerSampler(nodeCID);
+					return new InnerSampler(nodeCID, level);
 				else {
 					// CHECK !!!
 					/* Mind that we can only create InnerNodes with buffers in the general case
@@ -1090,10 +1154,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					 * If our tree is built only from insertions, then this amounts too:
 					 * "branchingHi / 2 * leafHi / 2 < samplesPerNodeHi" (for non-roots)
 					 */
-					return new UnbufferedSampler(node.allValues());
+					return new UnbufferedSampler(node.allValues(), nodeCID, level);
 				}
 			} else {
-				return new UnbufferedSampler(node.allValues());
+				return new UnbufferedSampler(node.allValues(), nodeCID, level);
 			}
 		}
 
@@ -1101,6 +1165,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			public abstract SamplingResult tryToSample(int n);
 			
 			public abstract int weight();
+			
+			public abstract Pair<Integer, P> getNodeIdentifier();
 		}
 
 
@@ -1119,15 +1185,23 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Also this incorrectness would cascade.
 		 */
 		public class UnbufferedSampler extends Sampler {
-
+			P nodeCID; // for profiling
+			int level; // for profiling
 			List<V> uncategorized;
 			ArrayList<V> keepers;
 			
-			public UnbufferedSampler(List<V> baselist) {
+			public UnbufferedSampler(List<V> baselist, P nodeCID, int level) {
+				this.nodeCID = nodeCID;
+				this.level = level;
 				this.uncategorized = baselist; // CHECK no defensive copy
 				this.keepers = new ArrayList<V>(uncategorized.size());
 			}
 
+			@Override
+			public Pair<Integer, P> getNodeIdentifier() {
+				return new Pair<Integer, P>(level, nodeCID);
+			}
+			
 			/** This only occassionally produces a sample. Might fail as long as we have uncategorized elements left. */
 			protected V trySample1() {		
 				int x = rng.nextInt(uncategorized.size() + keepers.size());
@@ -1150,6 +1224,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			
 			/** Batched sampling of n elements where the the effective weight of the node is only updated afterwards. */ 
 			public SamplingResult tryToSample(int n) {
+				p_nodesTouched.add(new Pair<Integer, P>(level, nodeCID)); // profiling
+				
 				LinkedList<V> samplesObtained = new LinkedList<V>();
 				
 				int oldAvailable = uncategorized.size() + keepers.size();
@@ -1214,20 +1290,29 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		public class InnerSampler extends Sampler {
 			P nodeCID;
+			int level;
 			Iterator<V> sampleIter;
 			int savedWeight;
 			
-			public InnerSampler(P nodeCID) {
+			public InnerSampler(P nodeCID, int level) {
 				this.nodeCID = nodeCID;
+				this.level = level;
 				InnerNode inode = (InnerNode) container.get(nodeCID);
 				assert inode.hasSampleBuffer();
 				this.savedWeight = inode.totalWeight();
 				
 				sampleIter = inode.samples.iterator(); 
 			}
+			
+			@Override
+			public Pair<Integer, P> getNodeIdentifier() {
+				return new Pair<Integer, P>(level, nodeCID);
+			}
 
 			@Override
 			public SamplingResult tryToSample(int n) {
+				p_nodesTouched.add(new Pair<Integer, P>(level, nodeCID));
+				
 				List<V> samplesObtained = new LinkedList<V>();
 				
 				int i = 0;
@@ -1244,7 +1329,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 
 					// recursively create a new SamplingCurse
 					// FIXME: we need to calculate the ranges here too
-					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, inode.pagePointers, inode.ranges, batchSize);
+					List<Integer> sublevels = new ArrayList<Integer>(inode.pagePointers.size());
+					for(int j=0; j < inode.pagePointers.size(); j++) sublevels.add(level-1);
+					
+					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, inode.pagePointers, inode.ranges, sublevels, batchSize);
 					samplesObtained.addAll(subCursor.tryToSample(remaining));
 					return new SamplingResult(samplesObtained, subCursor);
 				} else {

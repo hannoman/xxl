@@ -184,7 +184,7 @@ public abstract class ConfidenceAggregationFunction extends AggregationFunction<
 	 * the average estimator. The bounds of the confidence interval base on the central limit
 	 * theorem. See [Haa97] for further details.
 	 * 
-	 * @param alpha confidence level
+	 * @param alpha confidence level (= UNCERTAINTY)
 	 * @return a function that computes epsilon for the current estimate
 	 *
 	 * @see xxl.core.math.statistics.parametric.aggregates.StatefulVarianceEstimator
