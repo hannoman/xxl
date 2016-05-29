@@ -1,7 +1,10 @@
 package xxl.core.indexStructures;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,6 +20,7 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.CastingContainer;
@@ -26,6 +30,8 @@ import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunJ8;
+import xxl.core.io.Convertable;
+import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.HUtil;
@@ -57,8 +63,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 *   	(first tries can be seen in xxl.core.indexStructures.Test_ApproxQueries.createRSTree(String)
 	 *   							and xxl.core.indexStructures.Test_ApproxQueries.createRSTree_withInnerUnbufferedNodes(String)
 	 *   	) 
-	 *   (40%) Mini-Milestone: Do real tests.
-	 *   		--> see xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction
+	 *   Mini-Milestone: Augment QueryCursor of BPlusTree with profiling capabilities.
+	 *   Mini-Milestone (40%): Do real tests.
+ *   		-> Create and save really big trees and then only load them for testing.
+	 *   		
 	 *   Mini-Milestone: Generalize Query-Types
 	 *   Mini-Milestone: Support removals
 	 *      
@@ -138,9 +146,46 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.rng = new Random();
 	}
 
-
-
-
+	protected static <K extends Comparable<K>, V, P> RSTree_v3<K, V, P> loadFromMetaData(
+			File metaDataFilename, 
+			Function<File, Container> containerFactory, // generalizes from creating a specific container "(f -> new BlockFileContainer(f, 1024))"
+			Converter<K> keyConverter, 
+			Converter<V> valueConverter,
+			Function<V,K> getKey) throws IOException {
+		//-- open the data files for reading and construct a raw container
+		DataInput metaData = new DataInputStream(new FileInputStream(metaDataFilename));
+		String dataFileName = metaData.readUTF();
+		File dataFile = new File(metaDataFilename, dataFileName);
+		
+		Container rawContainer = containerFactory.apply(dataFile);
+				
+		//-- reading the parameters of the tree
+		//- read the universe (awkward as we have to construct an IntervalConverter especially for this.)
+		Converter<Interval<K>> rangeConverter = Interval.getConverter(keyConverter);
+		Interval<K> universe = rangeConverter.read(metaData);
+		//- read the constructor (topological) parameters
+		int samplesPerNodeLo = metaData.readInt();
+		int samplesPerNodeHi = metaData.readInt();
+		int branchingLo = metaData.readInt();
+		int branchingHi = metaData.readInt();
+		int leafLo = metaData.readInt();
+		int leafHi = metaData.readInt();
+		
+		//-- construct the tree
+		RSTree_v3<K, V, P> instance = new RSTree_v3<K, V, P>(universe, samplesPerNodeLo, samplesPerNodeHi, branchingLo, branchingHi, leafLo, leafHi, getKey);
+		
+		//- read state parameters
+		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
+		int rootHeight = metaData.readInt();
+		long rngState =  
+		
+	}
+	
+	public void writeToMetaData(File metaDataFilename) {
+		rng.
+	}
+	
+	
 	/** Initialize the tree with a raw container (e.g. <tt>BlockFileContainer</tt>) and the needed converters.
 	 * We construct the usable node container from them ourselfes.
 	 * 

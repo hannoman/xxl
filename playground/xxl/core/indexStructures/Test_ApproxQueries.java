@@ -1,5 +1,8 @@
 package xxl.core.indexStructures;
 
+import java.io.DataInputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -16,7 +19,6 @@ import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
-import xxl.core.indexStructures.RSTree_v3.ReallyLazySamplingCursor;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
@@ -25,7 +27,6 @@ import xxl.core.math.functions.AggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
 import xxl.core.profiling.ProfilingCursor;
-import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
@@ -71,6 +72,16 @@ public class Test_ApproxQueries {
 			System.out.println(key +": "+ compMap.get(key));
 		}
 	}
+	
+	private RSTree_v3<Integer, Pair<Integer, Double>, Long> loadBigTree(String metaFileName) throws FileNotFoundException {
+
+		DataInputStream dataIn = new DataInputStream(new FileInputStream(metaFileName));
+		
+		
+		
+	}
+	
+	
 	
 	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);

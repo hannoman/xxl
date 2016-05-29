@@ -3,8 +3,6 @@ package xxl.core.collections.containers;
 import java.util.NoSuchElementException;
 
 /** Decorates a container for simple printf-debugging.
- * 
- * @author Dominik Krappel
  */
 public class DebugContainer extends ConstrainedDecoratorContainer {
 
