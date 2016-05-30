@@ -1,13 +1,16 @@
 package xxl.core.indexStructures;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -20,6 +23,7 @@ import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.BooleanConverter;
+import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
@@ -28,6 +32,7 @@ import xxl.core.math.functions.AggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
@@ -56,18 +61,18 @@ public class Test_ApproxQueries {
 	
 
 	/** Shared state of the RNG. Instanciated Once. */  
-	public static Random random = new Random(42);	
+	public static CopyableRandom random = new CopyableRandom(42);	
 		
 	/** Performs 100 comparisons between exact and approximate average queries. */
 	public static void s_pruning(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree) {
-		random = new Random(55);
+		random = new CopyableRandom(55);
 		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
 		approxExactComparisons(tree, PRECISION_BOUND, 100);
 	}
 
 	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generatd correctly. */ 
 	public static void s_generation(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree) {
-		random = new Random(55);
+		random = new CopyableRandom(55);
 		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
 		for(Integer key : compMap.keySet()) {
 			System.out.println(key +": "+ compMap.get(key));
@@ -152,6 +157,8 @@ public class Test_ApproxQueries {
 						leafHi, 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
+		//- set the trees PRNG to a copy of this current state
+		tree.setRNG(random);
 				
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
@@ -212,6 +219,8 @@ public class Test_ApproxQueries {
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
 				
+		//- set the trees PRNG to a copy of this current state
+		tree.setRNG(random);
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
 		
@@ -266,7 +275,7 @@ public class Test_ApproxQueries {
 			System.out.println("approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
 					" - #entries needed: "+ approx.getElement3() +"/"+ exact.getElement2() + 
 					" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
-					" - real error: "+ String.format("%2.4f", realError * 100) +"%");
+					" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
 			
 			Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
 			int approxTotal = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
@@ -398,8 +407,7 @@ public class Test_ApproxQueries {
 		String result;
 		
 		String testdata_dirname = "temp_data";
-		System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + testdata_dirname + "\\"
-				+ fileName + "\"");
+//		 System.out.println("Trying to resolve to: \""+"<project dir>\\"+ testdata_dirname +"\\"+ fileName + "\"");
 
 		// and the whole thing in short
 		Path curpath = Paths.get("").toAbsolutePath();
@@ -429,13 +437,76 @@ public class Test_ApproxQueries {
 		
 		
 		
-		Random rng = new Random(55);
+		random = new CopyableRandom(55);
+		
+//		testCopyableRandomSerialisation3();
+		
 		//- saving tree to metdata file 
 		String treename = "RS_pairs_big02";
-		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 10000);
+//		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 10000);
 		//- loading tree from metadata file and performing tests on it
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
-		approxExactComparisons(tree, PRECISION_BOUND, 100);
 		
+		System.out.println("--- tree random seed before querying: "+ tree.rng.getSeed());
+		
+		approxExactComparisons(tree, PRECISION_BOUND, 50);
+		
+	}
+	
+	public static void testCopyableRandomSerialisation() throws Exception {
+		
+		String tFile = resolveFilename("testCopyableRandomSerialisation");
+		
+		CopyableRandom r1 = new CopyableRandom();
+		System.out.println("r1 state: "+ r1.getSeed());
+		
+		DataOutputStream dataOut = new DataOutputStream(new FileOutputStream(tFile));
+		new ConvertableConverter<CopyableRandom>().write(dataOut, r1);
+		dataOut.close();
+		
+		System.out.println("r1 state: "+ r1.getSeed());
+		
+		DataInputStream dataIn = new DataInputStream(new FileInputStream(tFile));
+		CopyableRandom r2 = new CopyableRandom(); new ConvertableConverter().read(dataIn, r2);
+		dataIn.close();
+		
+		System.out.println("r2 state: "+ r2.getSeed());
+	}
+	
+	public static void testCopyableRandomSerialisation2() throws Exception {
+		String tFile = resolveFilename("testCopyableRandomSerialisation");
+		
+		CopyableRandom r1 = new CopyableRandom();
+		System.out.println("r1 state: "+ r1.getSeed());
+		
+		DataOutputStream dataOutput = new DataOutputStream(new FileOutputStream(tFile));
+//		 new ConvertableConverter<CopyableRandom>().write(dataOutput, r1);
+		dataOutput.writeLong(r1.getSeed());
+		dataOutput.close();
+		
+		System.out.println("r1 state: "+ r1.getSeed());
+		
+		DataInputStream dataInput = new DataInputStream(new FileInputStream(tFile));
+//		CopyableRandom r2 = new CopyableRandom(); new ConvertableConverter().read(dataInput, r2);
+		CopyableRandom r2 = new CopyableRandom(); r2.setSeed(dataInput.readLong());
+		dataInput.close();
+		
+		System.out.println("r2 state: "+ r2.getSeed());
+	}
+	
+public static void testCopyableRandomSerialisation3() throws Exception {
+		String tFile = resolveFilename("testCopyableRandomSerialisation");
+		
+		CopyableRandom r1 = new CopyableRandom();
+		System.out.println("r1 state: "+ r1.getSeed());
+		System.out.println("r1 state: "+ r1.getSeed());
+		CopyableRandom r2 = new CopyableRandom(r1.getSeed());
+		System.out.println("r2 state: "+ r2.getSeed());
+		CopyableRandom r3 = new CopyableRandom();
+		r3.setSeed(r1.getSeed());
+		System.out.println("r3 state: "+ r3.getSeed());
+		System.out.println("r3 state: "+ r3.getSeed());
+		r3.setSeed(125);
+		System.out.println("r3 state: "+ r3.getSeed());
 	}
 }

@@ -10,11 +10,18 @@ import xxl.core.io.Convertable;
 
 /** Improved version of {@link java.util.Random} with easy support for reading the state.
  * Based on: http://stackoverflow.com/a/18531276/2114486
+ * 
+ * The workhorse of this implementation is setSeed which also does the initialisation. 
+ * This is required as we want to override this method and Random::new() and Random::new(long) 
+ * both call setSeed(long), and we can't avoid the superclass' constructor calls.
+ * 		
+ * This implementation saves its own seed locally though, to make it visible. * 
  */
 public class CopyableRandom extends Random implements Copyable<CopyableRandom>, Convertable {
 	private static final long serialVersionUID = 1L;
 
-	private final AtomicLong seed = new AtomicLong(0L);
+//	private final AtomicLong seed = new AtomicLong(0L);
+	private AtomicLong seed;
 
 	private final static long multiplier = 0x5DEECE66DL;
 	private final static long addend = 0xBL;
@@ -22,11 +29,13 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 	private static volatile long seedUniquifier = 8682522807148012L;
 
 	public CopyableRandom() {
-		this(++seedUniquifier + System.nanoTime());
+		super();
+//		this(++seedUniquifier + System.nanoTime());
 	}
 
 	public CopyableRandom(long seed) {
-		this.seed.set((seed ^ multiplier) & mask);
+		super(seed);
+//		this.seed.set((seed ^ multiplier) & mask);
 	}
 
 	/* copy of superclasses code, as you can seed the seed changes */
@@ -46,26 +55,47 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 	public CopyableRandom copy() {
 		return new CopyableRandom((seed.get() ^ multiplier) & mask);
 	}
-	
-	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getState()} instead. */
-	protected long getRawState() {
-		return seed.get();
+
+	@Override
+	/** We definitely need to overwrite this method as otherwise the state of super().seed would change, 
+	 * which doesnt have any impact on our implementation.
+	 */
+	public synchronized void setSeed(long seed) {		
+		if(this.seed == null) {
+			// System.out.println("Our nice super constructor forces us to do the initialisation here...");
+			this.seed = new AtomicLong();
+		}
+		this.seed.set(initialScramble(seed));	
+		// we nonetheless call super, to reset haveNextNextGaussian without needing access to it.
+		super.setSeed(seed); // --> haveNextNextGaussian = false; 
 	}
-	
+
 	/** As Random does initialScramble on the passed seed we need to "unscramble" it before. */
 	public long getSeed() {
 		return initialUnscramble(seed.get());
 	}
+
+	/** Transferred copy. */	
+	private static long initialScramble(long seed) {
+        return (seed ^ multiplier) & mask;
+    }
 	
 	/** Inverse for {@link java.util.Random.initialScramble(long)} */
 	private static long initialUnscramble(long seed) {
 		return seed ^ multiplier;
 	}
 
+	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getState()} instead. */
+	protected long getRawState() {
+		return seed.get();
+	}
+
 	
+	//----- Converter methods
 	@Override
 	public void read(DataInput dataInput) throws IOException {
-		this.setSeed(dataInput.readLong());		
+		// this.setSeed(dataInput.readLong());
+		this.seed.set(dataInput.readLong());
 	}
 	
 	@Override

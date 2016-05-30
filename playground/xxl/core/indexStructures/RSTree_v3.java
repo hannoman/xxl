@@ -205,7 +205,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		//- .. and force them into the instance
 		instance.rootCID = rootCID;
 		instance.rootHeight = rootHeight;
-		instance.rng = rng;
+		instance.setRNG(rng);
 		
 		//-- finish
 		metaDataFileStream.close();
@@ -1124,6 +1124,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		List<P> initialCIDs = new LinkedList<P>(Arrays.asList(rootCID));
 		List<Interval<K>> ranges = new LinkedList<Interval<K>>(Arrays.asList(universe));
 		List<Integer> levels = new LinkedList<Integer>(Arrays.asList(rootHeight));
+		
 		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, levels, samplingBatchSize);
 	}
 
@@ -1147,9 +1148,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		List<Interval<K>> ranges;
 		
 		/** List of Samplers of the nodes in frontier. 
-		 * A Sampler encapsulates the state information that describes the process in sampling from a node. 
+		 * A Sampler encapsulates the state information that describes the process of sampling from a node. 
 		 * It also saves the effective weight of a sampled node. */ 
 		List<Sampler> samplers;
+		
 		/** Constructor. Especially used for recursive calls. Information about the nodes have to be given. */ 
 		public ReallyLazySamplingCursor(Interval<K> query, List<P> initialCIDs, List<Interval<K>> ranges, List<Integer> levels, int batchSize) {
 			super();
@@ -1324,10 +1326,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 			
 			/** This only occassionally produces a sample. Might fail as long as we have uncategorized elements left. */
-			protected V trySample1() {		
+			/*protected V trySample1() {		
 				int x = rng.nextInt(uncategorized.size() + keepers.size());
 				return trySample1(x);
-			}
+			}*/
 			
 			/** This only occassionally produces a sample. Might fail as long as we have uncategorized elements left. */
 			protected V trySample1(int x) {		
@@ -1351,24 +1353,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				
 				int oldAvailable = uncategorized.size() + keepers.size();
 
-//				try {
-						
-					for(int i=0; i < n; i++) {
-						int x = rng.nextInt(oldAvailable);
-						if(x < uncategorized.size() + keepers.size()) { // otherwise we hit a element which got disabled during this run
-							V sample = trySample1(x);
-							if(sample != null)
-								samplesObtained.add(sample);
-						}				
-					}
-					
-//				} catch (IllegalArgumentException e) { // catches Exception of "rng.nextInt(0)", meaning that this sampler is empty						
-//					assert e.getMessage() == "bound must be positive";
-//					assert samplesObtained.isEmpty();
-//					
-//					// as we can't descent any further from unbuffered nodes, return an empty sampler list.
-//					return new SamplingResult();
-//				}
+				for(int i=0; i < n; i++) {
+					int x = rng.nextInt(oldAvailable);
+					if(x < uncategorized.size() + keepers.size()) { // otherwise we hit a element which got disabled during this run
+						V sample = trySample1(x);
+						if(sample != null)
+							samplesObtained.add(sample);
+					}				
+				}
 					
 				if(weight() == 0) {
 					assert samplesObtained.isEmpty();
@@ -1379,8 +1371,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 			
 			/** "Iterative" sampling which adjusts the effective weight after each draw.
-			 * This does updates after each draw, which is not what we want in a batched draw. */ 
-			private SamplingResult tryToSample_iterative(int n) {
+			 * This does updates after each draw, which is not what we want in a batched draw. 
+			 * 		-> QUE: chance for optimisation? */ 
+			/*private SamplingResult tryToSample_iterative(int n) {
 				LinkedList<V> samplesObtained = new LinkedList<V>();
 							
 				try {
@@ -1400,7 +1393,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				}
 				
 				return new SamplingResult(samplesObtained);
-			}
+			}*/
 			
 			@Override
 			public int weight() {
