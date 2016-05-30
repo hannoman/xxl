@@ -1,12 +1,17 @@
 package xxl.core.util;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class CopyableRandom extends Random implements Copyable<CopyableRandom> {
-	/**
-	 * 
-	 */
+import xxl.core.io.Convertable;
+
+/** Improved version of {@link java.util.Random} with easy support for reading the state.
+ * Based on: http://stackoverflow.com/a/18531276/2114486
+ */
+public class CopyableRandom extends Random implements Copyable<CopyableRandom>, Convertable {
 	private static final long serialVersionUID = 1L;
 
 	private final AtomicLong seed = new AtomicLong(0L);
@@ -42,8 +47,8 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom> {
 		return new CopyableRandom((seed.get() ^ multiplier) & mask);
 	}
 	
-	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getState()} insted. */
-	public long getRawState() {
+	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getState()} instead. */
+	protected long getRawState() {
 		return seed.get();
 	}
 	
@@ -57,6 +62,25 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom> {
 		return seed ^ multiplier;
 	}
 
+	
+	@Override
+	public void read(DataInput dataInput) throws IOException {
+		this.setSeed(dataInput.readLong());		
+	}
+	
+	@Override
+	public void write(DataOutput dataOutput) throws IOException {
+		dataOutput.writeLong(this.getSeed());
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	/** Messy tests. */
 	public static void main(String[] args) {
 	    CopyableRandom cr = new CopyableRandom(22);
 	    Random rng = new Random(22);

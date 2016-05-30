@@ -3,9 +3,14 @@ package xxl.core.indexStructures;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,7 +25,6 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.CastingContainer;
@@ -28,12 +32,11 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
-import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunJ8;
-import xxl.core.io.Convertable;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
@@ -84,7 +87,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	final int samplesPerNodeReplenishTarget; // how full shall the buffer be made if we have to replenish it? // std = samplesPerNodeHi
 	
 	/** RNG used for drawing samples and such. Use {@link #setRNG} to set it. */
-	Random rng;
+	CopyableRandom rng;
 	
 	/** The branching parameter == the fanout. */
 //	final int branchingParam;
@@ -94,9 +97,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	/** Ubiquitious getKey function which maps from values (V) to keys (K). */
 	public Function<V, K> getKey;
 
-	/** Container of the tree (and everything). */
+	/** Container of the tree (and everything). 
+	 * This is a ConvertableContainer which spits out nodes. */
 	public TypeSafeContainer<P, Node> container;
 
+	/** The NodeConverter incorporated in the container.
+	 * Used for saving/loading of the tree. */
+	NodeConverter nodeConverter;
+	
 	/** ContainerID of the root. */
 	P rootCID;
 
@@ -143,27 +151,40 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		// defaults
 		this.samplesPerNodeReplenishTarget = this.samplesPerNodeHi;
-		this.rng = new Random();
+		this.rng = new CopyableRandom();
 	}
 
+	/**
+	 * 
+	 * @param metaDataFilename The absolute path to the metaDataFileName. 
+	 * @param containerFactory Function which builds a container from an absolute filename. 
+	 * 		Allows exchanging of different wrapping containers in between.
+	 * 		Default use: containerFactory = BlockFileContainer::new 
+	 * @throws IOException
+	 */
 	protected static <K extends Comparable<K>, V, P> RSTree_v3<K, V, P> loadFromMetaData(
-			File metaDataFilename, 
-			Function<File, Container> containerFactory, // generalizes from creating a specific container "(f -> new BlockFileContainer(f, 1024))"
+			String metaDataFilename, 
+			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
 			Converter<V> valueConverter,
 			Function<V,K> getKey) throws IOException {
-		//-- open the data files for reading and construct a raw container
-		DataInput metaData = new DataInputStream(new FileInputStream(metaDataFilename));
-		String dataFileName = metaData.readUTF();
-		File dataFile = new File(metaDataFilename, dataFileName);
+		//-- open the metaData-file
+		if(!new File(metaDataFilename).exists())
+			throw new FileNotFoundException("Metadata not found at: \""+ metaDataFilename +"\".");
+		FileInputStream metaDataFileStream = new FileInputStream(metaDataFilename);
+		DataInput metaData = new DataInputStream(metaDataFileStream);
 		
-		Container rawContainer = containerFactory.apply(dataFile);
+		//-- load the raw container
+		String dataFileName = metaData.readUTF();
+		if(!new File(dataFileName).exists()) {
+			metaDataFileStream.close();
+			throw new FileNotFoundException("Container files couldn't be loaded from: \""+ dataFileName +"\".");
+		}
+			
+		Container rawContainer = containerFactory.apply(dataFileName);
 				
-		//-- reading the parameters of the tree
-		//- read the universe (awkward as we have to construct an IntervalConverter especially for this.)
-		Converter<Interval<K>> rangeConverter = Interval.getConverter(keyConverter);
-		Interval<K> universe = rangeConverter.read(metaData);
-		//- read the constructor (topological) parameters
+		//-- read the constructor/topological parameters
+		Interval<K> universe = Interval.getConverter(keyConverter).read(metaData);
 		int samplesPerNodeLo = metaData.readInt();
 		int samplesPerNodeHi = metaData.readInt();
 		int branchingLo = metaData.readInt();
@@ -171,18 +192,68 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		int leafLo = metaData.readInt();
 		int leafHi = metaData.readInt();
 		
-		//-- construct the tree
+		//-- construct and initialize the tree
 		RSTree_v3<K, V, P> instance = new RSTree_v3<K, V, P>(universe, samplesPerNodeLo, samplesPerNodeHi, branchingLo, branchingHi, leafLo, leafHi, getKey);
+		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
 		
 		//- read state parameters
 		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
 		int rootHeight = metaData.readInt();
-		long rngState =  
+		CopyableRandom rng = new ConvertableConverter<CopyableRandom>().read(metaData);
 		
+		//- .. and force them into the instance
+		instance.rootCID = rootCID;
+		instance.rootHeight = rootHeight;
+		instance.rng = rng;
+		
+		//-- finish
+		metaDataFileStream.close();
+		return instance;
 	}
 	
-	public void writeToMetaData(File metaDataFilename) {
-		rng.
+	/**
+	 * 
+	 * @param metaDataFilename
+	 * @param dataFileName abolute path to the container backing this tree.
+	 * @throws IOException 
+	 */
+	protected void writeToMetaData(
+			String metaDataFilename, 
+			String dataFileName,
+			Converter<K> keyConverter, 
+			Converter<V> valueConverter
+			) throws IOException {
+		//-- open the metaData file
+		if(new File(metaDataFilename).exists()) {
+			System.out.println("Warning: metadata file \""+ metaDataFilename +"\" already exists. We won't override here.");
+			throw new FileAlreadyExistsException(metaDataFilename);
+		}		
+		FileOutputStream metaDataFileStream = new FileOutputStream(metaDataFilename, false);
+		DataOutput metaData = new DataOutputStream(metaDataFileStream);
+		
+		//- write the container file prefix
+		if(!new File(dataFileName).exists()) {
+			metaDataFileStream.close();
+			throw new FileNotFoundException("No container files found at: \""+ dataFileName +"\".");
+		}
+		metaData.writeUTF(dataFileName);
+
+		//-- write the constructor/topological parameters
+		Interval.getConverter(keyConverter).write(metaData, universe);
+		metaData.writeInt(samplesPerNodeLo);
+		metaData.writeInt(samplesPerNodeHi);
+		metaData.writeInt(branchingLo);
+		metaData.writeInt(branchingHi);
+		metaData.writeInt(leafLo);
+		metaData.writeInt(leafHi);
+		metaData.writeInt(samplesPerNodeLo);
+		
+		//-- write state parameters
+		container.objectIdConverter().write(metaData, rootCID);
+		metaData.writeInt(rootHeight);
+		new ConvertableConverter<CopyableRandom>().write(metaData, rng);
+
+		metaDataFileStream.close();
 	}
 	
 	
@@ -204,7 +275,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 
 	/** For repeatable results in testing. */
-	public void setRNG(Random rng) {
+	public void setRNG(CopyableRandom rng) {
 		this.rng = rng;
 	}
 	

@@ -1,8 +1,8 @@
 package xxl.core.indexStructures;
 
-import java.io.DataInputStream;
-import java.io.FileInputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -20,6 +20,7 @@ import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.BooleanConverter;
+import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
 import xxl.core.io.converters.IntegerConverter;
@@ -73,14 +74,31 @@ public class Test_ApproxQueries {
 		}
 	}
 	
-	private RSTree_v3<Integer, Pair<Integer, Double>, Long> loadBigTree(String metaFileName) throws FileNotFoundException {
+//	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> loadPairTree(String metaDataFilestring) throws IOException {
+//
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> bigTree = RSTree_v3.loadFromMetaData(
+//				new File(metaDataFilestring), 
+//				(fpath -> new BlockFileContainer(fpath, BLOCK_SIZE)), 	// containerFactory 
+//				IntegerConverter.DEFAULT_INSTANCE, 						// keyConverter
+//				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE), // valueConverter 
+//				((Pair<Integer, Double> x) -> x.getFirst()) 			// getKey
+//				);
+//
+//		return bigTree;
+//	}
 
-		DataInputStream dataIn = new DataInputStream(new FileInputStream(metaFileName));
+	private static void saveBigTree(String metaDataFilename, String containerPrefix) throws IOException {
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix);
+		fill(tree, 100000);
 		
+		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
 		
+		tree.writeToMetaData(metaDataFilename, containerPrefix, keyConverter, valueConverter);
 		
+		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
 	}
-	
+
 	
 	
 	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
