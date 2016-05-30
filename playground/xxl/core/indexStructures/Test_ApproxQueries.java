@@ -1,6 +1,5 @@
 package xxl.core.indexStructures;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -11,6 +10,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
@@ -43,12 +43,12 @@ import xxl.core.util.Triple;
  */
 public class Test_ApproxQueries {
 
-	public static final int BLOCK_SIZE = 1024;
+	public static final int BLOCK_SIZE = 4096;
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
 	public static final double INCONFIDENCE = 0.10;
-	public static final double PRECISION_BOUND = 0.01;
+	public static final double PRECISION_BOUND = 0.05;
 	static final int KEY_LO = 0, KEY_HI = 10000;
 	static final double VAL_LO = 0, VAL_HI = 100000000.0;
 	
@@ -74,22 +74,9 @@ public class Test_ApproxQueries {
 		}
 	}
 	
-//	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> loadPairTree(String metaDataFilestring) throws IOException {
-//
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> bigTree = RSTree_v3.loadFromMetaData(
-//				new File(metaDataFilestring), 
-//				(fpath -> new BlockFileContainer(fpath, BLOCK_SIZE)), 	// containerFactory 
-//				IntegerConverter.DEFAULT_INSTANCE, 						// keyConverter
-//				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE), // valueConverter 
-//				((Pair<Integer, Double> x) -> x.getFirst()) 			// getKey
-//				);
-//
-//		return bigTree;
-//	}
-
-	private static void saveBigTree(String metaDataFilename, String containerPrefix) throws IOException {
+	private static void createAndSave_RS_pair(String metaDataFilename, String containerPrefix, int nTuples) throws IOException {
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix);
-		fill(tree, 100000);
+		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, nTuples);
 		
 		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
 		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
@@ -99,6 +86,23 @@ public class Test_ApproxQueries {
 		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
 	}
 
+	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> load_RS_pair(String metaDataFilename) throws IOException {
+		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
+		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
+		
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = RSTree_v3.loadFromMetaData(
+				metaDataFilename, 
+				containerFactory, 
+				keyConverter, 
+				valueConverter, 
+				getKey);
+		
+		System.out.println("-- Tree successfully loaded from metadata-file: \""+ metaDataFilename +"\"");
+		
+		return tree;
+	}
 	
 	
 	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
@@ -390,37 +394,48 @@ public class Test_ApproxQueries {
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
-	public static void main(String[] args) throws Exception {
-		//--- find a nice filename
-		String fileName;
-		if (args.length > 0) { // custom container file
-			fileName = args[0];
-		} else { // std container file
-			String CONTAINER_FILE_PREFIX = "test_map_test01";
-			String test_data_dirname = "temp_data";
-			System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + test_data_dirname + "\\"
-					+ CONTAINER_FILE_PREFIX + "\"");
+	private static String resolveFilename(String fileName) throws FileNotFoundException {
+		String result;
+		
+		String testdata_dirname = "temp_data";
+		System.out.println("No filename as program parameter found. Using standard: \"" + "<project dir>\\" + testdata_dirname + "\\"
+				+ fileName + "\"");
 
-			// and the whole thing in short
-			Path curpath = Paths.get("").toAbsolutePath();
-			if (!curpath.resolve(test_data_dirname).toFile().exists()) {
-				System.out.println("Error: Couldn't find \"" + test_data_dirname + "\" directory.");
-				return;
-			}
-			fileName = curpath.resolve("temp_data").resolve(CONTAINER_FILE_PREFIX).toString();
-			System.out.println("resolved to: \"" + fileName + "\".");
+		// and the whole thing in short
+		Path curpath = Paths.get("").toAbsolutePath();
+		if (!curpath.resolve(testdata_dirname).toFile().exists()) {
+			throw new FileNotFoundException("Error: Couldn't find \"" + testdata_dirname + "\" directory.");
 		}
-
+		result = curpath.resolve(testdata_dirname).resolve(fileName).toString();
+		System.out.println("resolved to: \"" + result + "\".");
+		return result;
+	}
+	
+	
+	public static void main(String[] args) throws Exception {
+		
+		
 		//--- run the actual tests
-		random = new Random();
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(fileName);
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(fileName);
-		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
+//		random = new Random();
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("RSTree_noUnbuffered_pairs01"));
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(resolveFilename("RSTree_someUnbufferred_pairs01"));
+//		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 //		samplingCursorCorrectness(tree, compmap, 10, 100);
-		approxExactComparisons(tree, PRECISION_BOUND, 100);
+//		approxExactComparisons(tree, PRECISION_BOUND, 100);
 		
 		// s_pruning(tree);
 		
 //		s_generation(tree);
+		
+		
+		
+		Random rng = new Random(55);
+		//- saving tree to metdata file 
+		String treename = "RS_pairs_big02";
+		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 10000);
+		//- loading tree from metadata file and performing tests on it
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
+		approxExactComparisons(tree, PRECISION_BOUND, 100);
+		
 	}
 }

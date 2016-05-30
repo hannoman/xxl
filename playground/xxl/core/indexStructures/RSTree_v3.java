@@ -176,10 +176,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		
 		//-- load the raw container
 		String dataFileName = metaData.readUTF();
-		if(!new File(dataFileName).exists()) {
+		// there is no file without suffix, so dont check this here
+		/* if(!new File(dataFileName).exists()) {
 			metaDataFileStream.close();
 			throw new FileNotFoundException("Container files couldn't be loaded from: \""+ dataFileName +"\".");
-		}
+		} */
 			
 		Container rawContainer = containerFactory.apply(dataFileName);
 				
@@ -199,7 +200,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		//- read state parameters
 		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
 		int rootHeight = metaData.readInt();
-		CopyableRandom rng = new ConvertableConverter<CopyableRandom>().read(metaData);
+		CopyableRandom rng = new CopyableRandom(); new ConvertableConverter().read(metaData, rng);
 		
 		//- .. and force them into the instance
 		instance.rootCID = rootCID;
@@ -225,17 +226,22 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			) throws IOException {
 		//-- open the metaData file
 		if(new File(metaDataFilename).exists()) {
-			System.out.println("Warning: metadata file \""+ metaDataFilename +"\" already exists. We won't override here.");
-			throw new FileAlreadyExistsException(metaDataFilename);
+			System.out.println("Warning: metadata file \""+ metaDataFilename +"\" already exists.");
+			System.out.println("Deleting old metadata file.");
+			// throw new FileAlreadyExistsException(metaDataFilename);
+			new File(metaDataFilename).delete();
 		}		
 		FileOutputStream metaDataFileStream = new FileOutputStream(metaDataFilename, false);
 		DataOutput metaData = new DataOutputStream(metaDataFileStream);
 		
 		//- write the container file prefix
-		if(!new File(dataFileName).exists()) {
+		// there is no file without suffix, so dont check this here
+		/* if(!new File(dataFileName).exists()) {
 			metaDataFileStream.close();
 			throw new FileNotFoundException("No container files found at: \""+ dataFileName +"\".");
-		}
+		} */ 
+
+		container.close(); // CHECK: to get the container to write its metadata we need to close it :/
 		metaData.writeUTF(dataFileName);
 
 		//-- write the constructor/topological parameters
@@ -246,7 +252,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		metaData.writeInt(branchingHi);
 		metaData.writeInt(leafLo);
 		metaData.writeInt(leafHi);
-		metaData.writeInt(samplesPerNodeLo);
 		
 		//-- write state parameters
 		container.objectIdConverter().write(metaData, rootCID);
