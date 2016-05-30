@@ -1,16 +1,13 @@
 package xxl.core.indexStructures;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -23,7 +20,6 @@ import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.BooleanConverter;
-import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
@@ -54,8 +50,10 @@ public class Test_ApproxQueries {
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
 	public static final double INCONFIDENCE = 0.10;
 	public static final double PRECISION_BOUND = 0.05;
-	static final int KEY_LO = 0, KEY_HI = 10000;
-	static final double VAL_LO = 0, VAL_HI = 100000000.0;
+	static final int KEY_LO = 0;
+	static final int KEY_HI = 90000000; // 10000
+	static final double VAL_LO = 0;
+	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
 	
 	static final int BATCHSAMPLING_SIZE = 20;
 	
@@ -263,28 +261,36 @@ public class Test_ApproxQueries {
 			int key_lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			int key_hi = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			if(key_lo > key_hi) { int tmp = key_lo; key_lo = key_hi; key_hi = tmp; } // swap 
-			
-			// approximate computation
-			Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
-			// exact computation						
-			Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact = exact1(tree, key_lo, key_hi);
-			
-			double estimatedError = Math.abs(approx.getElement2());
-			double realError = Math.abs( (approx.getElement1() - exact.getElement1() ) / exact.getElement1() );
-					
-			System.out.println("approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
-					" - #entries needed: "+ approx.getElement3() +"/"+ exact.getElement2() + 
-					" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
-					" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
-			
-			Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
-			int approxTotal = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
-//			System.out.println("\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
-			Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
-			int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
-//			System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
-			System.out.println("\t approx/exact touched: "+ approxTotal +" / "+ exactTotal);
+
+			approxExactComparison(tree, key_lo, key_hi, PRECISION_BOUND);
 		}		
+	}
+	
+	public static void approxExactComparison(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+		// approximate computation
+		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
+		
+		// exact computation						
+		Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact = exact1(tree, key_lo, key_hi);
+		
+		double estimatedError = approx.getElement2();
+		double realError = Math.abs( (approx.getElement1() - exact.getElement1() ) / exact.getElement1() );
+				
+		System.out.println("approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
+				" - #entries needed: "+ approx.getElement3() +"/"+ exact.getElement2() + 
+				" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
+				" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
+		
+		Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
+		int approxSeen = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
+		int approxPruned = approxCursorProfilingInfo.getElement2().values().stream().reduce(0, (x,y) -> x+y);
+		int approxLoaded = approxSeen - approxPruned;
+		
+		System.out.println("\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
+		Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
+		int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
+		System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
+		System.out.println("\t approx/exact touched: "+ approxLoaded +"("+approxSeen +")"+" / "+ exactTotal);
 	}
 	
 	/** Exact computation of one query.
@@ -317,17 +323,21 @@ public class Test_ApproxQueries {
 				FunJ8.toOld(Pair::getSecond), 
 				samplingCursor);
 		
-		int i = 0;
 		ConfidenceAggregationFunction coAggFun = ConfidenceAggregationFunction.largeSampleConfidenceAverage(INCONFIDENCE);
 		Double agg = null;
 		double eps = Double.POSITIVE_INFINITY;
 		double relativeError = Double.POSITIVE_INFINITY;		
 		int MIN_ITERATIONS = 30; // Rule of thumb when CLT can be applied
+		int i = 0;
 		for(; relativeError > PRECISION_BOUND || i < MIN_ITERATIONS; i++) {
 			double nVal = vals.next();
 			agg = (double) coAggFun.invoke(agg, nVal);
 			eps = (double) coAggFun.epsilon();
-			relativeError = eps / agg;
+			relativeError = Math.abs(eps / agg);
+			
+			if(i < 0) {
+				System.out.println("i overflowed!"); // debug
+			}
 			/*
 			if(i % REPORT_INTERVAL == 0) {
 				System.out.println(i + ":\tval: " + nVal + "\t agg: " + agg + 
@@ -419,7 +429,32 @@ public class Test_ApproxQueries {
 		return result;
 	}
 	
+	public static BPlusTree createBTree(String container_prefix, int blockSize) {
+		//- construction of tree
+		BPlusTree tree = new BPlusTree(blockSize, 0.5, true);
+		//- prepare for initialisation (try initialisator with least parameters)
+		Container container = new BlockFileContainer(container_prefix, blockSize);
+		
+		Function<Pair<Integer, Double>, Integer> getDescriptorNew = (t -> t.getElement1());
+		xxl.core.functions.Function getDescriptor = FunJ8.toOld(getDescriptorNew);
+		
+		//- initialize
+		tree.initialize(getDescriptor, container, 10, 20);	
+		
+		//- finished
+		return tree;
+	}
 	
+	public static void bTreeTest() {
+		BPlusTree tree = createBTree("bplus_init_test03", 1024);
+		
+		fill(tree, 10000);
+		
+		
+		//- close the container so that the metadata-file is written
+		tree.container().close();
+	}
+
 	public static void main(String[] args) throws Exception {
 		
 		
@@ -437,76 +472,23 @@ public class Test_ApproxQueries {
 		
 		
 		
-		random = new CopyableRandom(55);
-		
-//		testCopyableRandomSerialisation3();
+		random = new CopyableRandom(155);
 		
 		//- saving tree to metdata file 
-		String treename = "RS_pairs_big02";
-//		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 10000);
+		String treename = "RS_pairs_big03";
+//		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 1000000);
 		//- loading tree from metadata file and performing tests on it
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
 		
+		tree.setRNG(new CopyableRandom());
 		System.out.println("--- tree random seed before querying: "+ tree.rng.getSeed());
 		
-		approxExactComparisons(tree, PRECISION_BOUND, 50);
+		int key_lo = new Random().nextInt(KEY_HI);
+		System.out.println("query: "+ new Interval<Integer>(key_lo, key_lo + 1000000));
+		approxExactComparison(tree, key_lo, key_lo + 1000000, PRECISION_BOUND);
 		
-	}
-	
-	public static void testCopyableRandomSerialisation() throws Exception {
 		
-		String tFile = resolveFilename("testCopyableRandomSerialisation");
+		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		CopyableRandom r1 = new CopyableRandom();
-		System.out.println("r1 state: "+ r1.getSeed());
-		
-		DataOutputStream dataOut = new DataOutputStream(new FileOutputStream(tFile));
-		new ConvertableConverter<CopyableRandom>().write(dataOut, r1);
-		dataOut.close();
-		
-		System.out.println("r1 state: "+ r1.getSeed());
-		
-		DataInputStream dataIn = new DataInputStream(new FileInputStream(tFile));
-		CopyableRandom r2 = new CopyableRandom(); new ConvertableConverter().read(dataIn, r2);
-		dataIn.close();
-		
-		System.out.println("r2 state: "+ r2.getSeed());
-	}
-	
-	public static void testCopyableRandomSerialisation2() throws Exception {
-		String tFile = resolveFilename("testCopyableRandomSerialisation");
-		
-		CopyableRandom r1 = new CopyableRandom();
-		System.out.println("r1 state: "+ r1.getSeed());
-		
-		DataOutputStream dataOutput = new DataOutputStream(new FileOutputStream(tFile));
-//		 new ConvertableConverter<CopyableRandom>().write(dataOutput, r1);
-		dataOutput.writeLong(r1.getSeed());
-		dataOutput.close();
-		
-		System.out.println("r1 state: "+ r1.getSeed());
-		
-		DataInputStream dataInput = new DataInputStream(new FileInputStream(tFile));
-//		CopyableRandom r2 = new CopyableRandom(); new ConvertableConverter().read(dataInput, r2);
-		CopyableRandom r2 = new CopyableRandom(); r2.setSeed(dataInput.readLong());
-		dataInput.close();
-		
-		System.out.println("r2 state: "+ r2.getSeed());
-	}
-	
-public static void testCopyableRandomSerialisation3() throws Exception {
-		String tFile = resolveFilename("testCopyableRandomSerialisation");
-		
-		CopyableRandom r1 = new CopyableRandom();
-		System.out.println("r1 state: "+ r1.getSeed());
-		System.out.println("r1 state: "+ r1.getSeed());
-		CopyableRandom r2 = new CopyableRandom(r1.getSeed());
-		System.out.println("r2 state: "+ r2.getSeed());
-		CopyableRandom r3 = new CopyableRandom();
-		r3.setSeed(r1.getSeed());
-		System.out.println("r3 state: "+ r3.getSeed());
-		System.out.println("r3 state: "+ r3.getSeed());
-		r3.setSeed(125);
-		System.out.println("r3 state: "+ r3.getSeed());
 	}
 }

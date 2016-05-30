@@ -772,8 +772,8 @@ public class BPlusTree extends Tree {
      * @return the <tt>Container</tt> of the <tt>BPlusTree</tt>
      */
     public Container container() {
-    	/* TODO: this call probably violates the contract for {@link BPlusTree#getContainer} which should have type 
-    	 * Function: {@link Tree.IndexEntry} &rarr; {@link Container}.
+    	/* TODO: this call probably violates the contract for {@link BPlusTree#getContainer} (inherited from Tree.getContainer) 
+    	 * which should have type Function: {@link Tree.IndexEntry} &rarr; {@link Container}.
     	 * It works here because getContainer is always initialised as a constant function which just swallows the given argument Object. */
         return (Container) this.getContainer.invoke(this); 
     }
