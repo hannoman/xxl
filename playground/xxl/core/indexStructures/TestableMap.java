@@ -9,16 +9,7 @@ import xxl.core.indexStructures.RSTree_v3.QueryCursor;
 import xxl.core.io.converters.Converter;
 
 /** Interface for doing sanity checks on self implemented maps (= trees). */
-public interface TestableMap<K extends Comparable<K>, V, P> {
-
-	/** Initialize the tree with a raw container (e.g. <tt>BlockFileContainer</tt>) and the needed converters.
-	 * We construct the usable node container from them ourselfes.
-	 * 
-	 * @param rawContainer container to store the data in
-	 * @param keyConverter converter for the key-type K 
-	 * @param valueConverter converter for the value type V
-	 */
-	public void initialize_buildContainer(Container rawContainer, Converter<K> keyConverter, Converter<V> valueConverter);
+public interface TestableMap<K extends Comparable<K>, V> {
 
 	/**
 	 * Insertion. 

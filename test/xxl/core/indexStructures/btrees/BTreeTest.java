@@ -82,7 +82,7 @@ public class BTreeTest {
 	 * @param args command line parameters
 	 * @throws Exception exceptions are thrown
 	 */
-	public static void main (String [] args) throws Exception {
+	public static void oldmain (String [] args) throws Exception {
 		System.out.println("BTreeTest: an example using xxl.core.indexStructures.BTree\n");
 		
 		if (args.length<2) {
@@ -183,5 +183,114 @@ public class BTreeTest {
 
 		System.out.println("Closing application");
 		container.close();
+	}
+	
+	
+	/** 
+	 * The main method performing the tests.
+	 * 
+	 * @param args command line parameters
+	 * @throws Exception exceptions are thrown
+	 */
+	public static void test(int mincap,
+			int maxcap,
+			int elements,
+			boolean bulk,
+			int bufferSize,
+			int queryMin,
+			int queryMax
+			) throws Exception {
+		System.out.println("BTreeTest: an example using xxl.core.indexStructures.BTree\n");
+		
+		BTree btree = new BTree();
+		// an unbuffered container that counts the access to the BTree
+		CounterContainer lowerCounterContainer = new CounterContainer(
+			new ConverterContainer(
+				new BlockFileContainer("BTree", 4+2+16*maxcap),
+				btree.nodeConverter(IntegerConverter.DEFAULT_INSTANCE, IntegerConverter.DEFAULT_INSTANCE, new ComparableComparator())
+			)
+		);
+		// a buffered container that count the access to the buffered BTree
+		BufferedContainer bufferedContainer = new BufferedContainer(lowerCounterContainer, new LRUBuffer(bufferSize), true);
+		CounterContainer upperCounterContainer = new CounterContainer(bufferedContainer);
+
+		// the container that stores the content of the BTree
+		Container container = upperCounterContainer;
+		// Container container = new MapContainer();
+		
+		// initialize the BTree with the descriptor-factory method, a
+		// container for storing the nodes and the minimum and maximum
+		// capacity of them
+		btree.initialize(GET_DESCRIPTOR, container, mincap, maxcap);
+		Iterator it = new Permutator(elements);
+
+		long t1, t2;
+		t1 = System.currentTimeMillis();
+
+		// insert an iterator of objects by inserting every single object
+		// or by bulk-insertion
+		if (bulk) {
+			it = new MergeSorter(it, new ComparableComparator(), 12, 4*4096, 4*4096);
+			new SortBasedBulkLoading(btree, 
+				it,
+				new Constant(container)
+			);
+		}
+		else {
+			while (it.hasNext())
+				btree.insert(it.next());
+		}
+
+		t2 = System.currentTimeMillis();
+
+		System.out.println("Time for insertion: "+ (t2-t1) +"ms");
+		System.out.println("Insertion complete, height: "+btree.height()+", universe: \n"+btree.rootDescriptor());
+		System.out.println("\nAccessing the BufferedContainer\n"+upperCounterContainer+"\n");
+		System.out.println("Accessing the ConverterContainer and the BlockFileContainer\n"+lowerCounterContainer+"\n");
+
+		System.out.println("Reset counters");
+		upperCounterContainer.reset();
+		lowerCounterContainer.reset();
+		
+		System.out.println("Flushing buffers");
+		bufferedContainer.flush();
+
+		System.out.println("\nAccessing the BufferedContainer\n"+upperCounterContainer+"\n");
+		System.out.println("Accessing the ConverterContainer and the BlockFileContainer\n"+lowerCounterContainer+"\n");
+
+		System.out.print("Checking descriptors... ");
+		btree.checkDescriptors();
+
+		System.out.println("done.\n");
+		
+		System.out.println("Reset counters");
+		upperCounterContainer.reset();
+		lowerCounterContainer.reset();
+
+		System.out.println("Performing Query");
+		t1 = System.currentTimeMillis();
+		// perform a range-query
+		int hits = Cursors.count(
+			btree.query(new Interval1D(new Integer(queryMin), new Integer(queryMax)))
+		);
+		t2 = System.currentTimeMillis();
+
+		System.out.println("Time for queries: "+(t2-t1) +"ms");
+		System.out.println("Number of hits: "+hits);
+
+		System.out.println("Closing application");
+		container.close();
+	}
+	
+	public static void main(String[] args) throws Exception {
+		test(
+				5, 				// mincap
+				20, 			// maxcap
+				100000, 			// elements
+				false, 			// bulk
+				10, 				// bufferSize
+				100, 			// queryMin
+				200  			// queryMax
+			);
 	}
 }

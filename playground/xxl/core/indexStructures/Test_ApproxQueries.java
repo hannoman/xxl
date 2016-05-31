@@ -14,6 +14,9 @@ import java.util.function.Function;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
+import xxl.core.collections.containers.io.ConverterContainer;
+import xxl.core.comparators.ComparableComparator;
+import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
@@ -30,6 +33,7 @@ import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
+import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
 import xxl.core.util.Quadruple;
@@ -51,7 +55,7 @@ public class Test_ApproxQueries {
 	public static final double INCONFIDENCE = 0.10;
 	public static final double PRECISION_BOUND = 0.05;
 	static final int KEY_LO = 0;
-	static final int KEY_HI = 90000000; // 10000
+	static final int KEY_HI = 9000000; // 10000
 	static final double VAL_LO = 0;
 	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
 	
@@ -226,7 +230,7 @@ public class Test_ApproxQueries {
 		return tree;
 	}
 
-	public static SortedMap<Integer,Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>, Long> tree, int AMOUNT) {		
+	public static SortedMap<Integer, Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>> tree, int AMOUNT) {		
 		//-- comparison structure
 		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
 		
@@ -243,6 +247,33 @@ public class Test_ApproxQueries {
 			compmap.put(tree.getGetKey().apply(entry), entry);
 			if (i % (AMOUNT / 10) == 0)
 				System.out.print((i / (AMOUNT / 100)) + "%, ");
+		}
+		
+		System.out.println("Resulting tree height: " + tree.height());
+	
+		return compmap;
+	}
+	
+	public static <K extends Comparable<K>, V> SortedMap<K, V> fillTestableMap(
+			TestableMap<K, V> tree, 
+			int AMOUNT, 
+			Cursor<V> dataCur,
+			Function<V, K> getKey
+			) {
+		//-- comparison structure
+		TreeMap<K, V> compmap = new TreeMap<K, V>();
+		
+		//-- Insertion - generate test data		
+		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
+	
+		for (int i = 1; i <= AMOUNT; i++) {					
+			V entry = dataCur.next();
+			tree.insert(entry);
+			compmap.put(getKey.apply(entry), entry);  
+			if (i % (AMOUNT / 10) == 0) {
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
+				System.out.println("inserted: "+ entry);
+			}
 		}
 		
 		System.out.println("Resulting tree height: " + tree.height());
@@ -281,16 +312,17 @@ public class Test_ApproxQueries {
 				" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
 				" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
 		
+		
+		
 		Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
-		int approxSeen = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
+		int approxInspected = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
 		int approxPruned = approxCursorProfilingInfo.getElement2().values().stream().reduce(0, (x,y) -> x+y);
-		int approxLoaded = approxSeen - approxPruned;
 		
 		System.out.println("\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
 		Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
 		int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
 		System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
-		System.out.println("\t approx/exact touched: "+ approxLoaded +"("+approxSeen +")"+" / "+ exactTotal);
+		System.out.println("\t approx/exact touched: "+ approxInspected +"("+approxPruned +")"+" / "+ exactTotal);
 	}
 	
 	/** Exact computation of one query.
@@ -333,11 +365,7 @@ public class Test_ApproxQueries {
 			double nVal = vals.next();
 			agg = (double) coAggFun.invoke(agg, nVal);
 			eps = (double) coAggFun.epsilon();
-			relativeError = Math.abs(eps / agg);
-			
-			if(i < 0) {
-				System.out.println("i overflowed!"); // debug
-			}
+			relativeError = Math.abs(eps / agg); // TODO: this is probably not totally exact
 			/*
 			if(i % REPORT_INTERVAL == 0) {
 				System.out.println(i + ":\tval: " + nVal + "\t agg: " + agg + 
@@ -429,31 +457,113 @@ public class Test_ApproxQueries {
 		return result;
 	}
 	
-	public static BPlusTree createBTree(String container_prefix, int blockSize) {
-		//- construction of tree
-		BPlusTree tree = new BPlusTree(blockSize, 0.5, true);
-		//- prepare for initialisation (try initialisator with least parameters)
-		Container container = new BlockFileContainer(container_prefix, blockSize);
-		
-		Function<Pair<Integer, Double>, Integer> getDescriptorNew = (t -> t.getElement1());
-		xxl.core.functions.Function getDescriptor = FunJ8.toOld(getDescriptorNew);
-		
-		//- initialize
-		tree.initialize(getDescriptor, container, 10, 20);	
-		
-		//- finished
+	public static BTree createBTree(String container_prefix, int blockSize, xxl.core.functions.Function getDescriptor) {
+		BTree tree = new BTree();
+		Container blockContainer = new BlockFileContainer(container_prefix, blockSize);
+		Container nodeContainer = new ConverterContainer(
+				blockContainer,
+				tree.nodeConverter(
+						new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE),
+						IntegerConverter.DEFAULT_INSTANCE,
+						new ComparableComparator()
+						)
+			);
+		tree.initialize(getDescriptor, nodeContainer, 10, 20);
 		return tree;
 	}
 	
 	public static void bTreeTest() {
-		BPlusTree tree = createBTree("bplus_init_test03", 1024);
+				
+		Function<Pair<Integer, Double>, Interval1D> getDescriptorNew = (t -> new Interval1D(t.getElement1()));
+		xxl.core.functions.Function getDescriptor = FunJ8.toOld(getDescriptorNew);
 		
-		fill(tree, 10000);
-		
+		Function<Pair<Integer, Double>, Integer> getKey = (t -> t.getElement1());
+
+		//- create the tree
+		BTree tree = createBTree("bplus_init_test03", 1024, getDescriptor);
+		//- fill the tree
+		Map<Integer, Pair<Integer, Double>> compmap = fillXXLTree(tree, 100000, getKey, getDescriptor);
 		
 		//- close the container so that the metadata-file is written
-		tree.container().close();
+		// tree.container().close(); // only BPlusTree exposes this functionality
+//		((Container) tree.getContainer.invoke(tree.rootEntry)).close();
 	}
+	
+	public static Map<Integer, Pair<Integer,Double>> fillXXLTree(
+			Tree tree, 
+			int AMOUNT, 
+			Function<Pair<Integer, Double>, Integer> getKey, 
+			xxl.core.functions.Function getDescriptor) {
+		//-- comparison structure
+		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
+		
+		//-- Insertion - generate test data		
+		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
+	
+		Cursor<Pair<Integer, Double>> dataCur = data_squarePairs(random);
+		for (int i = 1; i <= AMOUNT; i++) {						
+//			Pair<Integer,Double> entry = new Pair<Integer, Double>(key, value);
+			Pair<Integer,Double> entry = dataCur.next();
+			tree.insert(entry);
+			compmap.put(getKey.apply(entry), entry);  
+			if (i % (AMOUNT / 10) == 0) {
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
+				System.out.println("inserted: "+ entry);
+			}
+		}
+		
+		System.out.println("Resulting tree height: " + tree.height());
+	
+		return compmap;
+	}
+	
+	/** Randomly created data set 1: Payload correlated with the key: payload ~ NormalDistribution(key*key, key) */ 
+	public static Cursor<Pair<Integer, Double>> data_squarePairs(Random rng) {
+		return new AbstractCursor<Pair<Integer,Double>>() {
+			@Override
+			protected boolean hasNextObject() { return true; }
+			
+			@Override
+			protected Pair<Integer, Double> nextObject() {
+				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
+				// double value = key * key + (rng.nextDouble() * 2 * key) - key; // overflowing variant, which leads to very high variance
+				double value = (long)key * (long)key + (rng.nextDouble() * 2 * key) - key;
+				return new Pair<Integer, Double>(key, value);
+			}
+		};		
+	}
+	
+
+	/** Randomly created data set 2: key and data uncorrelated and uniformly distributed */ 
+	public static Cursor<Pair<Integer, Double>> data_iidUniformPairs(Random rng) {
+		return new AbstractCursor<Pair<Integer,Double>>() {
+			@Override
+			protected boolean hasNextObject() { return true; }
+			
+			@Override
+			protected Pair<Integer, Double> nextObject() {
+				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
+				double value = VAL_LO + rng.nextDouble() * (VAL_HI - VAL_LO);
+				return new Pair<Integer, Double>(key, value);
+			}
+		};		
+	}
+	
+	/** Randomly created data set 3: pathological two peak distribution. -> high variance. */ 
+	public static Cursor<Pair<Integer, Double>> data_pathoTwoPeaks(Random rng) {
+		return new AbstractCursor<Pair<Integer,Double>>() {
+			@Override
+			protected boolean hasNextObject() { return true; }
+			
+			@Override
+			protected Pair<Integer, Double> nextObject() {
+				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
+				double value = rng.nextDouble() < 0.5d ? -VAL_HI : VAL_HI;
+				return new Pair<Integer, Double>(key, value);
+			}
+		};		
+	}
+
 
 	public static void main(String[] args) throws Exception {
 		
@@ -473,22 +583,35 @@ public class Test_ApproxQueries {
 		
 		
 		random = new CopyableRandom(155);
+
+		// bTreeTest();
+		
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree("insert_test");
+//		QuickTime.start("Insertion");
+//		
+//		fill(tree, 100000);
+//		QuickTime.stop();
 		
 		//- saving tree to metdata file 
-		String treename = "RS_pairs_big03";
+//		String treename = "RS_pairs_big03";
 //		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 1000000);
-		//- loading tree from metadata file and performing tests on it
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
+		//-- loading tree from metadata file and performing tests on it
+//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
+//		
+//		//+ single manual tests
+//		tree.setRNG(new CopyableRandom());
+//		System.out.println("--- tree random seed before querying: "+ tree.rng.getSeed());
+//		
+//		int key_lo = new Random().nextInt(KEY_HI);
+//		System.out.println("query: "+ new Interval<Integer>(key_lo, key_lo + 1000000));
+//		approxExactComparison(tree, key_lo, key_lo + 1000000, PRECISION_BOUND);
+//		
+//		//+ test suite
+//		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		tree.setRNG(new CopyableRandom());
-		System.out.println("--- tree random seed before querying: "+ tree.rng.getSeed());
-		
-		int key_lo = new Random().nextInt(KEY_HI);
-		System.out.println("query: "+ new Interval<Integer>(key_lo, key_lo + 1000000));
-		approxExactComparison(tree, key_lo, key_lo + 1000000, PRECISION_BOUND);
-		
-		
-		// approxExactComparisons(tree, PRECISION_BOUND, 20);
+		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
+		fillTestableMap(tree, 10000, data_pathoTwoPeaks(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
+		approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
 	}
 }

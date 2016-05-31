@@ -376,9 +376,12 @@ public class BPlusTree extends Tree {
      * @see #initialize (Function, Container, MeasuredConverter,
      *      MeasuredConverter, Function, Function, Function, Function)
      */
-    public BPlusTree initialize(final Function getKey,
-            final Container container, MeasuredConverter keyConverter,
-            MeasuredConverter dataConverter, final Function createSeparator,
+    public BPlusTree initialize(
+    		final Function getKey,
+            final Container container, 
+            MeasuredConverter keyConverter,
+            MeasuredConverter dataConverter, 
+            final Function createSeparator,
             final Function createKeyRange) {
         Function getSplitMinRatio = new Constant(this.minCapacityRatio);
         Function getSplitMaxRatio = new Constant(1.0);

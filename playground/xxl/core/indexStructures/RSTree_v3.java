@@ -43,7 +43,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V, P> {
+public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -68,8 +68,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 *   	) 
 	 *   Mini-Milestone: Augment QueryCursor of BPlusTree with profiling capabilities.
 	 *   Mini-Milestone (40%): Do real tests.
- *   		-> Create and save really big trees and then only load them for testing.
-	 *   		
+	 *		-> Create and save really big trees and then only load them for testing.
+	 *   	-> for profiling of logical IOs take a peek at: xxl.core.collections.containers.CounterContainer
+	 *   		(but that probably wont help)
+	 * 
 	 *   Mini-Milestone: Generalize Query-Types
 	 *   Mini-Milestone: Support removals
 	 *      
@@ -1129,8 +1131,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	}
 
 	/** The really lazy (and a bit desoriented) sampling cursor from the paper.
-	 * It now allows to batch sampling tries.  
+	 * It now allows to batch sampling tries. * 
 	 */
+	// TODO: load all nodes which will be pruned from disk. This needs to be optimized!
+	/*		-> Workaround: InnerSamplers now only load their associated node on demand (when they actually
+	 * 				get sampled) and not on construction time like before. */ 
+	// TODO: counts of inspected nodes are not quite right.
+	// TODO: UnbufferedSamplers only get counted as 1 node, although a whole subtree 
+	//		might need to get loaded for their initialisation.
 	public class ReallyLazySamplingCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
 		/** the query */
 		Interval<K> query;
@@ -1171,20 +1179,26 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 		}
 		
+		/** Returns condensed profiling information: number of nodes touched/pruned per level */ 
 		public Pair<Map<Integer,Integer>, Map<Integer, Integer>> getProfilingInformation() {
 			// process the profiling information
 			Map<Integer, Integer> touchedByLevel = new TreeMap<Integer, Integer>();
+			
+			System.out.println("- touched: "+ p_nodesTouched); // debug
+			System.out.println("- pruned: "+ p_nodesPruned); // debug
+			
+			
 			for(Pair<Integer, P> nodeId : p_nodesTouched) {
-				int l = nodeId.getElement1();
-				touchedByLevel.putIfAbsent(l, 0);
-				touchedByLevel.put(l, touchedByLevel.get(l)+1);
+				int level = nodeId.getElement1();
+				touchedByLevel.putIfAbsent(level, 0);
+				touchedByLevel.put(level, touchedByLevel.get(level)+1);
 			}
 			
 			Map<Integer, Integer> prunedByLevel = new TreeMap<Integer, Integer>();
 			for(Pair<Integer, P> nodeId : p_nodesPruned) {
-				int l = nodeId.getElement1();
-				prunedByLevel.putIfAbsent(l, 0);
-				prunedByLevel.put(l, prunedByLevel.get(l)+1);
+				int level = nodeId.getElement1();
+				prunedByLevel.putIfAbsent(level, 0);
+				prunedByLevel.put(level, prunedByLevel.get(level)+1);
 			}
 			
 			return new Pair<Map<Integer, Integer>, Map<Integer, Integer>>(touchedByLevel, prunedByLevel);
@@ -1408,14 +1422,17 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			Iterator<V> sampleIter;
 			int savedWeight;
 			
-			public InnerSampler(P nodeCID, int level) {
+			public InnerSampler(P nodeCID, int level, int savedWeight) {
 				this.nodeCID = nodeCID;
 				this.level = level;
-				InnerNode inode = (InnerNode) container.get(nodeCID);
-				assert inode.hasSampleBuffer();
-				this.savedWeight = inode.totalWeight();
+				this.savedWeight = savedWeight;
 				
-				sampleIter = inode.samples.iterator(); 
+				// do lazy initialization
+				this.sampleIter = null;
+				
+//				InnerNode inode = (InnerNode) container.get(nodeCID);
+//				assert inode.hasSampleBuffer();
+//				sampleIter = inode.samples.iterator(); 
 			}
 			
 			@Override
@@ -1424,8 +1441,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 
 			@Override
-			public SamplingResult tryToSample(int n) {
-				p_nodesTouched.add(new Pair<Integer, P>(level, nodeCID));
+			public SamplingResult tryToSample(int n) {				
+					
+				if(n > 0 && sampleIter == null) { // now actually load the node and initialize the sampler
+					p_nodesTouched.add(new Pair<Integer, P>(level, nodeCID));
+					InnerNode inode = (InnerNode) container.get(nodeCID);
+					assert inode.hasSampleBuffer();
+					sampleIter = inode.samples.iterator();
+				}
 				
 				List<V> samplesObtained = new LinkedList<V>();
 				
