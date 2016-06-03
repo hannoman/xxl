@@ -52,7 +52,7 @@ public class Test_ApproxQueries {
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
-	public static final double INCONFIDENCE = 0.10;
+	public static final double INCONFIDENCE = 0.05;
 	public static final double PRECISION_BOUND = 0.05;
 	static final int KEY_LO = 0;
 	static final int KEY_HI = 9000000; // 10000
@@ -550,7 +550,7 @@ public class Test_ApproxQueries {
 	}
 	
 	/** Randomly created data set 3: pathological two peak distribution. -> high variance. */ 
-	public static Cursor<Pair<Integer, Double>> data_pathoTwoPeaks(Random rng) {
+	public static Cursor<Pair<Integer, Double>> data_pathologicalTwoPeaks(Random rng) {
 		return new AbstractCursor<Pair<Integer,Double>>() {
 			@Override
 			protected boolean hasNextObject() { return true; }
@@ -610,7 +610,7 @@ public class Test_ApproxQueries {
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
-		fillTestableMap(tree, 10000, data_pathoTwoPeaks(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
+		fillTestableMap(tree, 10000, data_iidUniformPairs(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
 		approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
 	}

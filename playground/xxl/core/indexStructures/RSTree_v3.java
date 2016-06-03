@@ -1121,16 +1121,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	
 	}
 	
-	// public RSTree_v3<K, V, P>.ReallyLazySamplingCursor samplingRangeQuery(K lo, K hi, int samplingBatchSize){
 	public ProfilingCursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
 		Interval<K> query = new Interval<K>(lo, hi);
-//		List<P> initialCIDs = new LinkedList<P>(Arrays.asList(rootCID));
-//		List<Interval<K>> ranges = new LinkedList<Interval<K>>(Arrays.asList(universe));
-//		List<Integer> levels = new LinkedList<Integer>(Arrays.asList(rootHeight));
-//		
-//		return new ReallyLazySamplingCursor(query, initialCIDs, ranges, levels, samplingBatchSize);
-		
-		return new ReallyLazySamplingCursor(query, samplingBatchSize, initialCID, initialLevel, initialWeight);
+		return new ReallyLazySamplingCursor(query, samplingBatchSize, rootCID, rootHeight, universe, container.get(rootCID).totalWeight());
 	}
 
 	/** The really lazy (and a bit desoriented) sampling cursor from the paper.
@@ -1154,9 +1147,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		Set<Pair<Integer, P>> p_nodesTouched;		
 		/** Profiling information: nodes excluded from search because of being disjoint with the query. */
 		Set<Pair<Integer, P>> p_nodesPruned;
-		
-		/** Saves region information about the nodes present in frontier. */
-		List<Interval<K>> ranges;
 		
 		/** List of Samplers of the nodes in frontier. 
 		 * A Sampler encapsulates the state information that describes the process of sampling from a node. 
@@ -1196,12 +1186,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			this.samplers = samplers;		
 		}
 		
-		public ReallyLazySamplingCursor(Interval<K> query, int batchSize, P initialCID, int initialLevel, int initialWeight) {
-			ProtoSampler startSampler = new ProtoSampler(initialCID, initialLevel, initialWeight);
-			LinkedList<Sampler> startList = new LinkedList<Sampler>();
-			startList.add(startSampler);
-			
-			this(query, batchSize, startList); // grrrrrrrrrrrrrrrrrrrrrrr
+		public ReallyLazySamplingCursor(Interval<K> query, int batchSize, P initialCID, int initialLevel, Interval<K> range, int initialWeight) {
+			this(query, batchSize, new LinkedList<Sampler>());
+			Sampler firstSampler = new ProtoSampler(initialCID, initialLevel, range, initialWeight);
+			this.samplers.add(firstSampler);
 		}
 
 		/** Returns condensed profiling information: number of nodes touched/pruned per level */ 
@@ -1209,8 +1197,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			// process the profiling information
 			Map<Integer, Integer> touchedByLevel = new TreeMap<Integer, Integer>();
 			
-			System.out.println("- touched: "+ p_nodesTouched); // debug
-			System.out.println("- pruned: "+ p_nodesPruned); // debug
+//			System.out.println("- touched: "+ p_nodesTouched); // debug
+//			System.out.println("- pruned: "+ p_nodesPruned); // debug
 			
 			
 			for(Pair<Integer, P> nodeId : p_nodesTouched) {
@@ -1246,7 +1234,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				// .. and check on nodes which would get sampled whether they are disjoint with the query
 				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
-				if(toDraw.get(i) > 0 && !query.intersects(ranges.get(i))) {
+				Sampler sampler = samplers.get(i);
+				if(toDraw.get(i) > 0 && !query.intersects(sampler.getRange()) ) {
 					p_nodesPruned.add(samplers.get(i).getNodeIdentifier());
 					res = new SamplingResult();
 				} else {					
@@ -1260,16 +1249,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			int i = 0, removed = 0;
 			for(SamplingResult res : results) {				
 				if(res.replacementNeeded) {
-					Interval<K> parentRange = ranges.remove(i - removed);
 					samplers.remove(i - removed);
 					removed++;
 					
 					if(res.replacee != null) {
 						samplers.addAll(res.replacee.samplers);
-						for(Interval<K> range : res.replacee.ranges)
-							ranges.add(range.intersection(parentRange));
 						
-						// join the profiling information
+						// join the profiling information 
+						// FIXME: this is wrong as res.replacee.p_nodesTouched still gets modified afterwards 
 						p_nodesTouched.addAll(res.replacee.p_nodesTouched);
 						p_nodesPruned.addAll(res.replacee.p_nodesPruned);
 					}
@@ -1300,12 +1287,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Factory for Samplers - respectively different initialisation of
 		 * subclasses depending on the node contents.
 		 */
-		public Sampler createRealSampler(P nodeCID, int level) {
+		public Sampler createRealSampler(P nodeCID, int level, Interval<K> range) {
 			Node node = container.get(nodeCID);
 			if (node.isInner()) {
 				InnerNode inode = (InnerNode) node;
 				if (inode.hasSampleBuffer())
-					return new InnerSampler(nodeCID, level);
+					return new InnerSampler(nodeCID, level, range);
 				else {
 					// CHECK !!!
 					/* Mind that we can only create InnerNodes with buffers in the general case
@@ -1316,10 +1303,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					 * If our tree is built only from insertions, then this amounts too:
 					 * "branchingHi / 2 * leafHi / 2 < samplesPerNodeHi" (for non-roots)
 					 */
-					return new UnbufferedSampler(nodeCID, level);
+					return new UnbufferedSampler(nodeCID, level, range);
 				}
 			} else {
-				return new UnbufferedSampler(nodeCID, level);
+				return new UnbufferedSampler(nodeCID, level, range);
 			}
 		}
 
@@ -1329,6 +1316,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			public abstract int weight();
 			
 			public abstract Pair<Integer, P> getNodeIdentifier();
+
+			public abstract Interval<K> getRange();
 		}
 
 		public class ProtoSampler extends Sampler /* implements Decorator<Sampler> */ {
@@ -1336,13 +1325,21 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			P nodeCID;
 			int level;
 			int savedWeight;
+			Interval<K> range;
 
-			public ProtoSampler(P nodeCID, int level, int savedWeight) {
+			public ProtoSampler(P nodeCID, int level, Interval<K> range, int savedWeight) {
 				this.nodeCID = nodeCID;
 				this.level = level;
+				this.range = range;
+				
 				this.savedWeight = savedWeight;
-			}
+			}			
 			
+			@Override
+			public Interval<K> getRange() {
+				return range;
+			}
+
 			@Override
 			public int weight() {
 				if(realSampler == null)
@@ -1363,7 +1360,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					return new SamplingResult(samplesObtained);
 				} else {
 					if(realSampler == null) {						
-						realSampler = createRealSampler(nodeCID, level);
+						realSampler = createRealSampler(nodeCID, level, range);
 					}
 					return realSampler.tryToSample(n);
 				}
@@ -1388,6 +1385,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		public class UnbufferedSampler extends Sampler {
 			P nodeCID; // for profiling
 			int level; // for profiling
+			Interval<K> range;
 			List<V> uncategorized;
 			ArrayList<V> keepers;
 			
@@ -1399,9 +1397,10 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			 * on the first attempt to sample from an UnbufferedSampler.
 			 * But this should usually not matter much (hopefully).
 			 */
-			public UnbufferedSampler(P nodeCID, int level) {
+			public UnbufferedSampler(P nodeCID, int level, Interval<K> range) {
 				this.nodeCID = nodeCID;
 				this.level = level;
+				this.range = range;
 				
 				this.uncategorized = new LinkedList<V>();
 				//- fetch the values yourself - replacement for allValues (this is a right-to-left DFS traversal of the subtree)
@@ -1431,6 +1430,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				this.keepers = new ArrayList<V>(uncategorized.size());
 			}
 
+			@Override
+			public Interval<K> getRange() {
+				return range;
+			}
+			
 			@Override
 			public Pair<Integer, P> getNodeIdentifier() {
 				return new Pair<Integer, P>(level, nodeCID);
@@ -1508,6 +1512,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			public int weight() {
 				return uncategorized.size() + keepers.size();
 			}
+
 		}
 		
 		
@@ -1516,10 +1521,12 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			int level;
 			Iterator<V> sampleIter;
 			int savedWeight;
+			Interval<K> range;
 			
-			public InnerSampler(P nodeCID, int level) {
+			public InnerSampler(P nodeCID, int level, Interval<K> range) {
 				this.nodeCID = nodeCID;
-				this.level = level;				
+				this.level = level;
+				this.range = range;
 				
 				// do eager initialization here, as we now have ProtoSamplers
 				InnerNode inode = (InnerNode) container.get(nodeCID);				
@@ -1529,6 +1536,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 				
 				assert inode.hasSampleBuffer();
 				sampleIter = inode.samples.iterator(); 
+			}
+			
+			@Override
+			public Interval<K> getRange() {
+				return range;
 			}
 			
 			@Override
@@ -1556,10 +1568,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 					// FIXME: we need to calculate the ranges here too (???)
 					List<Sampler> protoSamplers = new LinkedList<Sampler>();
 					for(int j=0; j < inode.pagePointers.size(); j++) {
-						protoSamplers.add(new ProtoSampler(inode.pagePointers.get(j), level-1, inode.childWeights.get(j)));
+						protoSamplers.add(
+								new ProtoSampler(inode.pagePointers.get(j), level-1, inode.ranges.get(j), inode.childWeights.get(j)));
 					}
 					
-					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, protoSamplers, batchSize);
+					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, batchSize, protoSamplers);
 					
 					samplesObtained.addAll(subCursor.tryToSample(remaining));
 					
@@ -1573,7 +1586,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			public int weight() {
 				return savedWeight;
 			}
-			
+
 		}
 		
 		/** Field class to for results of sampling from a node. */
