@@ -53,13 +53,13 @@ public class Test_ApproxQueries {
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
 	public static final double INCONFIDENCE = 0.05;
-	public static final double PRECISION_BOUND = 0.01;
+	public static final double PRECISION_BOUND = 0.10;
 	static final int KEY_LO = 0;
 	static final int KEY_HI = 9000000; // 10000
 	static final double VAL_LO = 0;
 	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
 	
-	static final int BATCHSAMPLING_SIZE = 1;
+	static final int BATCHSAMPLING_SIZE = 20;
 	
 
 	/** Shared state of the RNG. Instanciated Once. */  
@@ -584,7 +584,7 @@ public class Test_ApproxQueries {
 		
 		
 		
-		random = new CopyableRandom();
+		random = new CopyableRandom(464);
 
 		// bTreeTest();
 		
