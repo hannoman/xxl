@@ -1257,6 +1257,8 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 						
 						// join the profiling information 
 						// FIXME: this is wrong as res.replacee.p_nodesTouched still gets modified afterwards 
+						assert res.replacee.p_nodesTouched.isEmpty();
+						//assert res.replacee.p_nodesPruned.isEmpty();
 						p_nodesTouched.addAll(res.replacee.p_nodesTouched);
 						p_nodesPruned.addAll(res.replacee.p_nodesPruned);
 					}
@@ -1311,25 +1313,33 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		}
 
 		public abstract class Sampler {
+			P nodeCID;
+			int level;
+						
+			public Sampler(P nodeCID, int level) {
+				super();
+				this.nodeCID = nodeCID;
+				this.level = level;
+			}
+
 			public abstract SamplingResult tryToSample(int n);
 			
 			public abstract int weight();
 			
-			public abstract Pair<Integer, P> getNodeIdentifier();
+			public Pair<Integer, P> getNodeIdentifier() {
+				return new Pair<Integer, P>(level, nodeCID);
+			}
 
 			public abstract Interval<K> getRange();
 		}
 
 		public class ProtoSampler extends Sampler /* implements Decorator<Sampler> */ {
 			Sampler realSampler = null;
-			P nodeCID;
-			int level;
 			int savedWeight;
 			Interval<K> range;
 
 			public ProtoSampler(P nodeCID, int level, Interval<K> range, int savedWeight) {
-				this.nodeCID = nodeCID;
-				this.level = level;
+				super(nodeCID, level);
 				this.range = range;
 				
 				this.savedWeight = savedWeight;
@@ -1383,8 +1393,6 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		 * Also this incorrectness would cascade.
 		 */
 		public class UnbufferedSampler extends Sampler {
-			P nodeCID; // for profiling
-			int level; // for profiling
 			Interval<K> range;
 			List<V> uncategorized;
 			ArrayList<V> keepers;
@@ -1398,8 +1406,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			 * But this should usually not matter much (hopefully).
 			 */
 			public UnbufferedSampler(P nodeCID, int level, Interval<K> range) {
-				this.nodeCID = nodeCID;
-				this.level = level;
+				super(nodeCID, level);
 				this.range = range;
 				
 				this.uncategorized = new LinkedList<V>();

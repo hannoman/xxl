@@ -48,18 +48,18 @@ import xxl.core.util.Triple;
  */
 public class Test_ApproxQueries {
 
-	public static final int BLOCK_SIZE = 4096;
+	public static final int BLOCK_SIZE = 1024;
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
 	public static final double INCONFIDENCE = 0.05;
-	public static final double PRECISION_BOUND = 0.05;
+	public static final double PRECISION_BOUND = 0.01;
 	static final int KEY_LO = 0;
 	static final int KEY_HI = 9000000; // 10000
 	static final double VAL_LO = 0;
 	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
 	
-	static final int BATCHSAMPLING_SIZE = 20;
+	static final int BATCHSAMPLING_SIZE = 1;
 	
 
 	/** Shared state of the RNG. Instanciated Once. */  
@@ -126,8 +126,10 @@ public class Test_ApproxQueries {
 		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
 		
 		//- set branching param fixed
-		int branchingParamHi = 20;
-		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
+//		int branchingParamHi = 20;
+//		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
+		int branchingParamHi = 8;
+		int branchingParamLo = 4;
 		
 		//- determine how much is left for samples
 		int innerSpaceLeft = BLOCK_SIZE;
@@ -582,7 +584,7 @@ public class Test_ApproxQueries {
 		
 		
 		
-		random = new CopyableRandom(155);
+		random = new CopyableRandom();
 
 		// bTreeTest();
 		
@@ -611,7 +613,7 @@ public class Test_ApproxQueries {
 		
 		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
 		fillTestableMap(tree, 10000, data_iidUniformPairs(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
-		approxExactComparisons(tree, PRECISION_BOUND, 20);
+		approxExactComparisons(tree, PRECISION_BOUND, 50);
 		
 	}
 }
