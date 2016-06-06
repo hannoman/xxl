@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
@@ -63,21 +64,22 @@ public class Test_TestableMap {
 		return tree;
 	}
 	
-	public static int positiveLookups(TestableMap<Integer, Integer> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_POSITIVE) {
+	public static <K extends Comparable<K>, V extends Comparable<V>> int positiveLookups(
+			TestableMap<K, V> tree, Map<K, V> compmap, int LOOKUP_TESTS_POSITIVE) {
 		// final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
 		long timeStart = System.nanoTime();
 		
 		System.out.println("-- Positive Lookups (perhaps duplicate) (#="+ LOOKUP_TESTS_POSITIVE +"):");		
 		//--- Lookup test
 		//-- positive lookups		
-		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		ArrayList<K> containedKeys = new ArrayList<K>(compmap.keySet());
 		int errors_positiveLookup = 0;
 		for(int i=1; i <= LOOKUP_TESTS_POSITIVE; i++) {
 			int keyNr = random.nextInt(containedKeys.size());
-			Integer key = containedKeys.get(keyNr);
+			K key = containedKeys.get(keyNr);
 			
-			List<Integer> treeAnswers = tree.get(key);
-			Integer mapAnswer = compmap.get(key);
+			List<V> treeAnswers = tree.get(key);
+			V mapAnswer = compmap.get(key);
 			if(!treeAnswers.contains(mapAnswer)) {
 				System.out.println("Didn't find value \""+ mapAnswer +"\" for key \""+ key +"\". Only: "+ treeAnswers.toString());
 				errors_positiveLookup++;
@@ -97,7 +99,8 @@ public class Test_TestableMap {
 		return errors_positiveLookup;
 	}
 	
-	public static int randomKeyLookups(TestableMap<Integer, Integer> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_RANDOM) {
+	public static <K extends Comparable<K>, V extends Comparable<V>> int randomKeyLookups(
+			TestableMap<K, V> tree, Map<K, V> compmap, int LOOKUP_TESTS_RANDOM, Cursor<K> testKeysCursor) {
 		long tsFunc = System.nanoTime();
 		long ttQuery = 0;
 		long ttCompMap = 0;
@@ -107,10 +110,10 @@ public class Test_TestableMap {
 		//-- (mostly) negative (= random) lookups		
 		int errors_randomLookup = 0;
 		for(int i=1; i <= LOOKUP_TESTS_RANDOM; i++) {
-			Integer key = random.nextInt();
+			K key = testKeysCursor.next();
 			
 			long tsQuerySingle = System.nanoTime();
-				List<Integer> treeAnswers = tree.get(key);
+				List<V> treeAnswers = tree.get(key);
 			ttQuery += System.nanoTime() - tsQuerySingle;
 			
 			long tsCompMapSingle = System.nanoTime();
@@ -140,12 +143,14 @@ public class Test_TestableMap {
 		return errors_randomLookup;
 	}
 	
-	public static Triple<Integer, Integer, Integer> rangeQueries(TestableMap<Integer, Integer> tree, Map<Integer,Integer> compmap, int RANGE_QUERY_TESTS) {
+	public static <K extends Comparable<K>, V extends Comparable<V>> Triple<Integer, Integer, Integer> rangeQueries(
+			TestableMap<K, V> tree, Map<K, V> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
 		System.out.println("-- RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
 		
-		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		compmap.
+		ArrayList<K> containedKeys = new ArrayList<K>(compmap.keySet());
 		containedKeys.sort(null);
 		
 		int error_false_positive = 0;
@@ -153,16 +158,16 @@ public class Test_TestableMap {
 		int error_both = 0;
 		
 		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
-			Integer lo = random.nextInt();
-			Integer hi = random.nextInt();
-			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
-			long possKeys = (long)hi - (long)lo + 1;
+			K lo = testKeysCursor.next();
+			K hi = testKeysCursor.next();
+			if(lo.compareTo(hi) > 0) { K tmp = lo; lo = hi; hi = tmp; }
+			long possKeys = (long)hi - (long)lo + 1; // FIXME
 			
 //			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query
-			Cursor<Integer> cur = tree.rangeQuery(lo, hi);			
-			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(cur));
+			Cursor<V> treeResultCursor = tree.rangeQuery(lo, hi);			
+			List<V> treeResult = new ArrayList<V>(Cursors.toList(treeResultCursor));
 			
 //			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
 			
@@ -171,8 +176,8 @@ public class Test_TestableMap {
 			int e_positives = 0;
 			
 			//-- Tests for false positives
-			for(Integer tVal : tRes)
-				if(!compmap.containsKey(tVal)) e_positives++;
+			for(V tVal : treeResult)
+				if(!compmap.containsValue(value)(tVal)) e_positives++;
 	
 			//--- Computing the comparison-result
 			int compLoIdx = HUtil.binFindES(containedKeys, lo);
@@ -184,11 +189,11 @@ public class Test_TestableMap {
 			
 			//-- Test for false negatives
 			for(Integer cVal : cRes)
-				if(Collections.binarySearch(tRes, cVal) < 0) e_negatives++;		
+				if(Collections.binarySearch(treeResult, cVal) < 0) e_negatives++;		
 	
 			//- classify error case
 			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				System.out.println("\tErronous: #rsize: "+ treeResult.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
 				if(e_negatives > 0 && e_positives > 0) error_both++;
 				else if(e_negatives > 0) error_false_negative++;
 				else if(e_positives > 0) error_false_positive++;
@@ -509,11 +514,13 @@ public class Test_TestableMap {
 	}
 
 
-	public static void <K extends Comparable<K>, V extends Comparable<V>> suite1_sanityTestAgainstMemoryMap(TestableMap<K, V> tree) {
-		DiscreteRandomNumber dataCursor = new xxl.core.cursors.sources.DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random), KEY_HI);
-		Map<K, V> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t));
+	public static void <K extends Comparable<K>, V extends Comparable<V>> suite1_sanityTestAgainstMemoryMap(
+			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor) {
+//		Cursor<Integer> dataCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random), KEY_HI);
+//		Function<V, K> getKey = (t -> t);
+		Map<K, V> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
 		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
-		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
+		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
 		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
 	}
 

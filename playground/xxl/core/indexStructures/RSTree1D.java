@@ -9,10 +9,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -20,8 +17,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Queue;
-import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -40,6 +35,7 @@ import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
+import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
@@ -926,6 +922,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		}
 	}
 	
+	// TODO: check: is this like the other range query semantics?
+	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
 	@Override
 	public ProfilingCursor<V> rangeQuery(K lo, K hi){
 		return new QueryCursor(lo, hi);
@@ -947,19 +945,23 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		// query
 		final K lo;
 		final K hi;			
+		final Interval1D<K> query;
 		
 		/** Profiling information: nodes touched. */
 		Set<Pair<Integer, P>> p_nodesTouched;		
-		
+		/** The heights on which the query was started. Is always initialised to rootHeight and doesn't change.
+		 * Needed for profiling, though. */
 		int startlevel;
 		
-		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node		
+		/** Path of expanded nodeCIDs */
+		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node
+		/** Path of chosen index in corresponding node in sNodes. */
 		Stack<Integer> sIdx; // sIdx.peek() =: current index
 		
-		
+		/** Single precomputed value. */
 		V precomputed;
 		
-		public QueryCursor(K lo, K hi, P startNode, int startlevel) {
+		private QueryCursor(K lo, K hi, P startNode, int startlevel) {
 			super();
 			this.startlevel = startlevel;
 			
@@ -979,6 +981,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		
 		public QueryCursor(K lo, K hi) {
 			this(lo, hi, rootCID, rootHeight);
+		}
+		
+		public QueryCursor(Interval<K> query) {
+			query.
 		}
 		
 		@Override
@@ -1115,6 +1121,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	
 	}
 	
+	/** Executes a sampling range query of the interval [lo (inclusive), hi (inclusive)] */
 	public ProfilingCursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
 		Interval<K> query = new Interval<K>(lo, hi);
 		return new ReallyLazySamplingCursor(query, samplingBatchSize, rootCID, rootHeight, universe, container.get(rootCID).totalWeight());

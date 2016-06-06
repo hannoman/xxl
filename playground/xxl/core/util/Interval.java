@@ -8,6 +8,7 @@ import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.FixedSizeConverter;
 
+/** (1-dimensional) Interval of a generic comparable type. Whether the borders are included can be specified. */  
 public class Interval<K extends Comparable<K>> {
 
 	public K lo, hi;
