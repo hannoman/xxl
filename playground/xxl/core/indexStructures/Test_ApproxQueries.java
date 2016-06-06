@@ -443,22 +443,6 @@ public class Test_ApproxQueries {
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
-	private static String resolveFilename(String fileName) throws FileNotFoundException {
-		String result;
-		
-		String testdata_dirname = "temp_data";
-//		 System.out.println("Trying to resolve to: \""+"<project dir>\\"+ testdata_dirname +"\\"+ fileName + "\"");
-
-		// and the whole thing in short
-		Path curpath = Paths.get("").toAbsolutePath();
-		if (!curpath.resolve(testdata_dirname).toFile().exists()) {
-			throw new FileNotFoundException("Error: Couldn't find \"" + testdata_dirname + "\" directory.");
-		}
-		result = curpath.resolve(testdata_dirname).resolve(fileName).toString();
-		System.out.println("resolved to: \"" + result + "\".");
-		return result;
-	}
-	
 	public static BTree createBTree(String container_prefix, int blockSize, xxl.core.functions.Function getDescriptor) {
 		BTree tree = new BTree();
 		Container blockContainer = new BlockFileContainer(container_prefix, blockSize);

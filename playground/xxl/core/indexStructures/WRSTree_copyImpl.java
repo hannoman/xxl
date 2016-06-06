@@ -43,6 +43,7 @@ import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
+import xxl.core.util.Triple;
 
 public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
@@ -422,8 +423,6 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 
 		public abstract int totalWeight();
 
-		protected abstract List<V> relevantValues(Interval<K> query);
-		
 		public abstract List<V> allValues();
 	}
 	
@@ -442,14 +441,6 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 		 * and branchingParam also be taken into account?
 		 */
 		public boolean hasSampleBuffer() { return samples != null; }
-
-		public boolean overflow() {
-			return pagePointers.size() > branchingHi;
-		}
-
-		public boolean underflow() {
-			return pagePointers.size() < branchingLo;
-		}
 
 		public boolean sampleUnderflow() {
 			return samples.size() < samplesPerNodeLo;			
@@ -554,8 +545,8 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			
 			//- check for split here
 			InsertionInfo insertionInfo = null;
-			if(overflow())
-				insertionInfo = split();
+			if(weightOverflow(curWeight, levelUnused))
+				insertionInfo = split(levelUnused);
 			else
 				insertionInfo = new InsertionInfo(totalWeight());
 			
@@ -563,9 +554,47 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			
 			return insertionInfo;
 		}
+		
+		/** Determines a feasible split position through linear search.
+		 * 
+		 * TODO: as of now only considers the quality of the left offspring node. Is this a problem?
+		 * 
+		 * @param targetWeight the weight per node which should be approached
+		 * @return the position of the node after which the child-list should be split
+		 */
+		protected Triple<Integer, Integer, Integer> determineSplitposition(int targetWeight) {
+			int curSum = 0;
+			int curSplitWeightMiss = 0;
+			
+			int bestSplitAfterPos = -1;
+			int bestRemLeftWeight = curSum;
+			int bestSplitWeightMiss = Math.abs(targetWeight - curSum);			
+			
+			for(int curSplitAfterPos = 0; curSplitAfterPos < pagePointers.size(); curSplitAfterPos++) {
+				curSum += childWeights.get(curSplitAfterPos);
+				curSplitWeightMiss = Math.abs(targetWeight - curSum);
+				
+				if(curSplitWeightMiss < bestSplitWeightMiss) {
+					bestSplitWeightMiss = curSplitWeightMiss;
+					bestSplitAfterPos = curSplitAfterPos;
+					bestRemLeftWeight = curSum;
+				}				
+			}
+			
+			int totalWeight = curSum;
+			
+			return new Triple<Integer, Integer, Integer>(bestSplitAfterPos, bestRemLeftWeight, totalWeight - bestRemLeftWeight);
+		}
 
-		public InsertionInfo split() {			
-			int splitPos = pagePointers.size() / 2; // B-Tree splitting == just split in the middle.
+		public InsertionInfo split(int level) {			
+			//- determine split position
+			//-- assume that the entry ranges are ordered and return the first split which satisfies the weight constraints
+			int targetWeight = HUtil.intPow(branchingParam, level) * leafParam;
+			Triple<Integer, Integer, Integer> splitLocalization = determineSplitposition(targetWeight);
+			
+			int splitPos = splitLocalization.getElement1();
+			int calcedWeightLeft = splitLocalization.getElement2(); 
+			int calcedWeightRight = splitLocalization.getElement3();
 			
 			InnerNode newode = new InnerNode();
 			
@@ -582,6 +611,10 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			//-- recalculate resulting weights again
 			int weightLeft = this.childWeights.stream().reduce(0, (x,y) -> x+y);
 			int weightRight = newode.childWeights.stream().reduce(0, (x,y) -> x+y);
+			
+			// .. and check again calculated weights
+			assert weightLeft == calcedWeightLeft;
+			assert weightRight == calcedWeightRight;
 			
 			//-- distribute samples among the resulting nodes
 			// we have to distinguish whether the resulting nodes still have buffers attached
@@ -617,11 +650,7 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			//- put new node into Container
 			P newodeCID = container.insert(newode);
 			
-			
-			
-			
 			// for now still return only the separator to be compliant with LeafNodes which can't determine their own boundaries.
-//				return new InsertionInfo(newodeCID, rangeLeft, rangeRight, weightLeft, weightRight);
 			assert rangeLeft.hiIn;
 			return new InsertionInfo(newodeCID, rangeLeft.hi, weightLeft, weightRight);
 		}
@@ -632,35 +661,6 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			for(P childCID : pagePointers)
 				allVals.addAll(container.get(childCID).allValues());
 			return allVals;
-		}
-		
-		/**
-		 * Returns all values relevant for a given query in this' node subtree. 
-		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
-		 * OPT: only called from xxl.core.indexStructures.WRSTree_copyImpl.SamplingCursor.addToFrontier(P) -> inline?
-		 */
-		protected List<V> relevantValues(Interval<K> query) {
-			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
-			for(int i : relevantChildIdxs(query)) {
-				Node child = container.get(pagePointers.get(i));
-				allValues.addAll(child.relevantValues(query));
-			}
-			return allValues;
-		}
-		
-		/**
-		 * Returns the indices of all childs relevant for a given query. 
-		 */
-		protected List<Integer> relevantChildIdxs(Interval<K> query) {
-			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) concatenation
-			for (int i = 0; i < ranges.size(); i++)
-				if(ranges.get(i).intersects(query))
-					relChilds.add(i);
-			return relChilds;
-		}
-		
-		protected List<P> relevantChildCIDs(Interval<K> query) {
-			return HUtil.getAll(relevantChildIdxs(query), pagePointers);
 		}
 		
 		/**
@@ -796,16 +796,16 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 		 * Returns all values relevant for a given query in this' node subtree. 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
 		 */
-		@Override
-		protected List<V> relevantValues(Interval<K> query) {
-			List<V> allValues = new LinkedList<V>();
-			for(V value : values) {
-				K key = getKey.apply(value);
-				if(query.contains(key))
-					allValues.add(value);
-			}
-			return allValues;
-		}
+//		@Override
+//		protected List<V> relevantValues(Interval<K> query) {
+//			List<V> allValues = new LinkedList<V>();
+//			for(V value : values) {
+//				K key = getKey.apply(value);
+//				if(query.contains(key))
+//					allValues.add(value);
+//			}
+//			return allValues;
+//		}
 		
 		/** Returns all values in the subtree originating from this node. */
 		public List<V> allValues() {

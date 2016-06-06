@@ -125,11 +125,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-
-	protected RSTree1D() {
-		
-	}
-	
 	public RSTree1D(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
@@ -610,29 +605,37 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
 		 * OPT: only called from xxl.core.indexStructures.RSTree1D.SamplingCursor.addToFrontier(P) -> inline?
 		 */
-		protected List<V> relevantValues(Interval<K> query) {
-			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
-			for(int i : relevantChildIdxs(query)) {
-				Node child = container.get(pagePointers.get(i));
-				allValues.addAll(child.relevantValues(query));
-			}
-			return allValues;
-		}
-		
-		/**
-		 * Returns the indices of all childs relevant for a given query. 
-		 */
-		protected List<Integer> relevantChildIdxs(Interval<K> query) {
-			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) concatenation
-			for (int i = 0; i < ranges.size(); i++)
-				if(ranges.get(i).intersects(query))
-					relChilds.add(i);
-			return relChilds;
-		}
-		
-		protected List<P> relevantChildCIDs(Interval<K> query) {
-			return HUtil.getAll(relevantChildIdxs(query), pagePointers);
-		}
+//		protected List<V> relevantValues(Interval<K> query) {
+//			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
+//			for(int i : relevantChildIdxs(query)) {
+//				Node child = container.get(pagePointers.get(i));
+//				allValues.addAll(child.relevantValues(query));
+//			}
+//			return allValues;
+//		}
+//		
+//		/**
+//		 * Returns the indices of all childs relevant for a given query. 
+//		 */
+//		/**
+//		 * @param query
+//		 * @return
+//		 */
+//		protected List<Integer> relevantChildIdxs(Interval<K> query) {
+//			List<Integer> relChilds = new LinkedList<Integer>(); // OPT use something which allows for O(1) concatenation
+//			for (int i = 0; i < ranges.size(); i++)
+//				if(ranges.get(i).intersects(query))
+//					relChilds.add(i);
+//			return relChilds;
+//		}
+//		
+//		/**
+//		 * @param query
+//		 * @return
+//		 */
+//		protected List<P> relevantChildCIDs(Interval<K> query) {
+//			return HUtil.getAll(relevantChildIdxs(query), pagePointers);
+//		}
 		
 		/**
 		 * Checks for a underflow in the sample buffer and repairs it.
