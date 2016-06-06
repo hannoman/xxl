@@ -1,8 +1,5 @@
 package xxl.core.indexStructures;
 
-import java.io.FileNotFoundException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +26,7 @@ import xxl.core.profiling.ProfilingCursor;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
 import xxl.core.util.CopyableRandom;
+import xxl.core.util.Interval;
 import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
@@ -110,8 +108,6 @@ public class Test_ApproxQueries {
 				" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
 				" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
 		
-		
-		
 		Pair<Map<Integer,Integer>, Map<Integer, Integer>> approxCursorProfilingInfo = approx.getElement4().getProfilingInformation();
 		int approxInspected = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
 		int approxPruned = approxCursorProfilingInfo.getElement2().values().stream().reduce(0, (x,y) -> x+y);
@@ -120,7 +116,8 @@ public class Test_ApproxQueries {
 		Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
 		int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
 		System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
-		System.out.println("\t approx/exact touched: "+ approxInspected +"("+approxPruned +")"+" / "+ exactTotal);
+		System.out.println("\t approx/exact touched: "+ approxInspected +" / "+ exactTotal);
+		System.out.println("\t query: "+ new Interval<Integer>(key_lo, key_hi));
 	}
 	
 	/** Exact computation of one query.

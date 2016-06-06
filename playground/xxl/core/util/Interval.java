@@ -39,8 +39,10 @@ public class Interval<K extends Comparable<K>> {
 	}
 	
 	public boolean contains(Interval<K> other) {
-		return borderCompare(lo, loIn, other.lo, other.loIn) <= 0
-			&& borderCompare(hi, hiIn, other.hi, other.hiIn) >= 0;
+		return (lo.compareTo(other.lo) < 0 || (lo.compareTo(other.lo) == 0 && (!other.loIn || loIn)))
+			&& (hi.compareTo(other.hi) > 0 || (hi.compareTo(other.hi) == 0 && (!other.hiIn || hiIn)));
+//		return borderCompare(lo, loIn, other.lo, other.loIn) <= 0
+//				&& borderCompare(hi, hiIn, other.hi, other.hiIn) >= 0;
 	}
 
 	public boolean contains(K key) {
@@ -59,31 +61,36 @@ public class Interval<K extends Comparable<K>> {
 	 * Similar to {@link xxl.core.util.Interval1D#contains(Object)} but the results are vice-versa.
 	 */
 	public int locate(K key) {
-		if(borderCompare(key, true, lo, loIn) < 0) return -1;
-		else if(borderCompare(key, true, hi, hiIn) > 0) return 1;
+		if(key.compareTo(lo) < 0 || (key.compareTo(lo) == 0 && !loIn)) return -1;
+		else if(key.compareTo(hi) > 0 || (key.compareTo(hi) == 0 && !hiIn)) return 1;
 		else return 0;
 	}
 	
 	public Interval<K> intersection(Interval<K> other) {
 		Interval<K> res = new Interval<K>();
-		if(borderCompare(lo, loIn, other.lo, other.loIn) >= 0) {
+		if(lo.compareTo(other.lo) < 0 || (lo.compareTo(other.lo) == 0 && (!other.loIn || loIn))) 
+		{ // this lower border smaller
+			res.lo = other.lo; 
+			res.loIn = other.loIn;			
+		} else 
+		{ // other lower border smaller
 			res.lo = lo; 
 			res.loIn = loIn;
-		} else {
-			res.lo = other.lo; 
-			res.loIn = other.loIn;
 		}
 		
-		if(borderCompare(hi, hiIn, other.hi, other.hiIn) <= 0) {
-			res.hi = hi; 
-			res.hiIn = hiIn;
-		} else {
+		if(hi.compareTo(other.hi) > 0 || (hi.compareTo(other.hi) == 0 && (!other.hiIn || hiIn))) 
+		{ // this upper border greater
 			res.hi = other.hi; 
 			res.hiIn = other.hiIn;
+		} else 
+		{ // other upper border greater
+			res.hi = hi; 
+			res.hiIn = hiIn;
 		}
 		
 		return res;
 	}
+
 	
 	public boolean intersects(Interval<K> other) {
 		return !intersection(other).isEmpty();
@@ -97,18 +104,22 @@ public class Interval<K extends Comparable<K>> {
 	
 	public Interval<K> union(Interval<K> other) {
 		Interval<K> res = new Interval<K>();
-		if(borderCompare(lo, loIn, other.lo, other.loIn) <= 0) {
+		if(lo.compareTo(other.lo) < 0 || (lo.compareTo(other.lo) == 0 && (!other.loIn || loIn))) 
+		{ // this lower border smaller
 			res.lo = lo; 
 			res.loIn = loIn;
-		} else {
+		} else 
+		{ // other lower border smaller
 			res.lo = other.lo; 
 			res.loIn = other.loIn;
 		}
 		
-		if(borderCompare(hi, hiIn, other.hi, other.hiIn) >= 0) {
+		if(hi.compareTo(other.hi) > 0 || (hi.compareTo(other.hi) == 0 && (!other.hiIn || hiIn))) 
+		{ // this upper border greater
 			res.hi = hi; 
 			res.hiIn = hiIn;
-		} else {
+		} else 
+		{ // other upper border greater
 			res.hi = other.hi; 
 			res.hiIn = other.hiIn;
 		}
@@ -148,16 +159,17 @@ public class Interval<K extends Comparable<K>> {
 		return s;
 	}
 	
-	private int borderCompare(K b1, boolean i1, K b2, boolean i2) {
-		int bCompare = b1.compareTo(b2);
-		if(bCompare != 0)
-			return bCompare;
-		else {
-			if(i1 && !i2) return -1;
-			else if(!i1 && i2) return 1;
-			else { assert i1 == i2; return 0; }
-		}
-	}
+	// naughty, naughty function...
+//	private int borderCompare(K b1, boolean i1, K b2, boolean i2) {
+//		int bCompare = b1.compareTo(b2);
+//		if(bCompare != 0)
+//			return bCompare;
+//		else {
+//			if(i1 && !i2) return -1;
+//			else if(!i1 && i2) return 1;
+//			else { assert i1 == i2; return 0; }
+//		}
+//	}
 		
 	public static <T extends Comparable<T>> Converter<Interval<T>> getConverter(Converter<T> kConv) {
 		@SuppressWarnings("serial")

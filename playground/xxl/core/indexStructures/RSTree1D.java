@@ -1070,7 +1070,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			
 			precomputed = curLNode.values.get(sIdx.peek());
 			if(!query.contains(getKey.apply(precomputed))) {
-				assert query.locate(getKey.apply(precomputed)) > 1;
+				assert query.locate(getKey.apply(precomputed)) > 0;
 				return false; // hit the high border
 			}
 			
