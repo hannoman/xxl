@@ -6,7 +6,7 @@ import java.nio.file.Paths;
 
 public class TestUtils {
 
-	private static String resolveFilename(String fileName) throws FileNotFoundException {
+	public static String resolveFilename(String fileName) throws FileNotFoundException {
 		String result;
 		
 		String testdata_dirname = "temp_data";

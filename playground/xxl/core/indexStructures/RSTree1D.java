@@ -149,7 +149,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	 * 		Default use: containerFactory = BlockFileContainer::new 
 	 * @throws IOException
 	 */
-	protected static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
+	public static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
 			String metaDataFilename, 
 			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
@@ -207,7 +207,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	 * @param dataFileName abolute path to the container backing this tree.
 	 * @throws IOException 
 	 */
-	protected void writeToMetaData(
+	public void writeToMetaData(
 			String metaDataFilename, 
 			String dataFileName,
 			Converter<K> keyConverter, 

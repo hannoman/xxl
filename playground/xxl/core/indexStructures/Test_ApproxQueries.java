@@ -1,13 +1,11 @@
 package xxl.core.indexStructures;
 
 import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -16,23 +14,21 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.comparators.ComparableComparator;
-import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
-import xxl.core.io.converters.BooleanConverter;
-import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
-import xxl.core.io.converters.FixedSizeConverter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.math.functions.AggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.ConfidenceAggregationFunction;
 import xxl.core.math.statistics.parametric.aggregates.StatefulAverage;
+import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.profiling.TestUtils;
+import xxl.core.profiling.TreeCreation;
 import xxl.core.util.CopyableRandom;
-import xxl.core.util.Interval;
 import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
@@ -68,219 +64,19 @@ public class Test_ApproxQueries {
 	/** Performs 100 comparisons between exact and approximate average queries. */
 	public static void s_pruning(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
 		random = new CopyableRandom(55);
-		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
 		approxExactComparisons(tree, PRECISION_BOUND, 100);
 	}
 
-	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generatd correctly. */ 
+	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generated correctly. */ 
 	public static void s_generation(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
 		random = new CopyableRandom(55);
-		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
 		for(Integer key : compMap.keySet()) {
 			System.out.println(key +": "+ compMap.get(key));
 		}
-	}
-	
-	private static void createAndSave_RS_pair(String metaDataFilename, String containerPrefix, int nTuples) throws IOException {
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix);
-		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, nTuples);
-		
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		
-		tree.writeToMetaData(metaDataFilename, containerPrefix, keyConverter, valueConverter);
-		
-		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
-	}
-
-	private static RSTree1D<Integer, Pair<Integer, Double>, Long> load_RS_pair(String metaDataFilename) throws IOException {
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
-		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
-		
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = RSTree1D.loadFromMetaData(
-				metaDataFilename, 
-				containerFactory, 
-				keyConverter, 
-				valueConverter, 
-				getKey);
-		
-		System.out.println("-- Tree successfully loaded from metadata-file: \""+ metaDataFilename +"\"");
-		
-		return tree;
-	}
-	
-	
-	private static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
-		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
-		
-		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
-		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
-				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
-		
-		//-- estimating parameters for the tree
-		//- fill leafes optimal
-		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
-		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
-		
-		//- set branching param fixed
-//		int branchingParamHi = 20;
-//		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
-		int branchingParamHi = 8;
-		int branchingParamLo = 4;
-		
-		//- determine how much is left for samples
-		int innerSpaceLeft = BLOCK_SIZE;
-		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
-		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
-		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
-		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
-		
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
-		//- set sample param for the remaining space optimal
-		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
-		int samplesPerNodeLo = samplesPerNodeHi / 4;		
-		
-		System.out.println("Initializing tree with parameters: ");
-		System.out.println("\t block size: \t"+ BLOCK_SIZE);
-		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
-		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
-		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
-
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
-						samplesPerNodeLo, 
-						samplesPerNodeHi, 
-						branchingParamLo, 
-						branchingParamHi, 
-						leafLo, 
-						leafHi, 
-						((Pair<Integer, Double> x) -> x.getFirst())
-					);
-		//- set the trees PRNG to a copy of this current state
-		tree.setRNG(random);
-				
-		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
-		
-		System.out.println("Initialization of the tree finished.");
-		return tree;
-	}
-
-	/** Tries to set the tree parameters so that actually unbuffered inner nodes can emerge. 
-	 * See {@link xxl.core.indexStructures.RSTree1D.ReallyLazySamplingCursor.createSampler(P)}
-	 * */
-	private static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(String testFile) {
-		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
-		
-		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
-		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
-				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
-		
-		//-- estimating parameters for the tree
-		//- fill leafes optimal
-//		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
-		int leafHi = 10;
-		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
-		
-		//- set branching param fixed
-		int branchingParamHi = 5;
-		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
-		
-		//- determine how much is left for samples
-		int innerSpaceLeft = BLOCK_SIZE;
-		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
-		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
-		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
-		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
-		
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
-		//- set sample param for the remaining space optimal
-		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
-		int samplesPerNodeLo = samplesPerNodeHi / 4;		
-		
-		System.out.println("Initializing tree with parameters: ");
-		System.out.println("\t block size: \t"+ BLOCK_SIZE);
-		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
-		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
-		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
-	
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
-						samplesPerNodeLo, 
-						samplesPerNodeHi, 
-						branchingParamLo, 
-						branchingParamHi, 
-						leafLo, 
-						leafHi, 
-						((Pair<Integer, Double> x) -> x.getFirst())
-					);
-				
-		//- set the trees PRNG to a copy of this current state
-		tree.setRNG(random);
-		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
-		
-		System.out.println("Initialization of the tree finished.");
-		return tree;
-	}
-
-	public static SortedMap<Integer, Pair<Integer,Double>> fill(TestableMap<Integer, Pair<Integer, Double>> tree, int AMOUNT) {		
-		//-- comparison structure
-		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
-		
-		//-- Insertion - generate test data		
-		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
-	
-		for (int i = 1; i <= AMOUNT; i++) {
-			// Data1: Payload correlated with the key: payload ~ NormalDistribution(key*key, key)
-			int key = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
-			double value = key * key + (random.nextDouble() * 2 * key) - key;
-						
-			Pair<Integer,Double> entry = new Pair<Integer, Double>(key, value);
-			tree.insert(entry);
-			compmap.put(tree.getGetKey().apply(entry), entry);
-			if (i % (AMOUNT / 10) == 0)
-				System.out.print((i / (AMOUNT / 100)) + "%, ");
-		}
-		
-		System.out.println("Resulting tree height: " + tree.height());
-	
-		return compmap;
-	}
-	
-	public static <K extends Comparable<K>, V> SortedMap<K, V> fillTestableMap(
-			TestableMap<K, V> tree, 
-			int AMOUNT, 
-			Cursor<V> dataCur,
-			Function<V, K> getKey
-			) {
-		//-- comparison structure
-		TreeMap<K, V> compmap = new TreeMap<K, V>();
-		
-		//-- Insertion - generate test data		
-		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
-	
-		for (int i = 1; i <= AMOUNT; i++) {					
-			V entry = dataCur.next();
-			tree.insert(entry);
-			compmap.put(getKey.apply(entry), entry);  
-			if (i % (AMOUNT / 10) == 0) {
-				System.out.print((i / (AMOUNT / 100)) + "%, ");
-				System.out.println("inserted: "+ entry);
-			}
-		}
-		
-		System.out.println("Resulting tree height: " + tree.height());
-	
-		return compmap;
 	}
 	
 	/** Computes the average of a range query once exactly and once approximately with large sample confidence < PRECISION_BOUND,
@@ -486,7 +282,7 @@ public class Test_ApproxQueries {
 		//-- Insertion - generate test data		
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
-		Cursor<Pair<Integer, Double>> dataCur = data_squarePairs(random);
+		Cursor<Pair<Integer, Double>> dataCur = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		for (int i = 1; i <= AMOUNT; i++) {						
 //			Pair<Integer,Double> entry = new Pair<Integer, Double>(key, value);
 			Pair<Integer,Double> entry = dataCur.next();
@@ -503,54 +299,6 @@ public class Test_ApproxQueries {
 		return compmap;
 	}
 	
-	/** Randomly created data set 1: Payload correlated with the key: payload ~ NormalDistribution(key*key, key) */ 
-	public static Cursor<Pair<Integer, Double>> data_squarePairs(Random rng) {
-		return new AbstractCursor<Pair<Integer,Double>>() {
-			@Override
-			protected boolean hasNextObject() { return true; }
-			
-			@Override
-			protected Pair<Integer, Double> nextObject() {
-				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
-				// double value = key * key + (rng.nextDouble() * 2 * key) - key; // overflowing variant, which leads to very high variance
-				double value = (long)key * (long)key + (rng.nextDouble() * 2 * key) - key;
-				return new Pair<Integer, Double>(key, value);
-			}
-		};		
-	}
-	
-
-	/** Randomly created data set 2: key and data uncorrelated and uniformly distributed */ 
-	public static Cursor<Pair<Integer, Double>> data_iidUniformPairs(Random rng) {
-		return new AbstractCursor<Pair<Integer,Double>>() {
-			@Override
-			protected boolean hasNextObject() { return true; }
-			
-			@Override
-			protected Pair<Integer, Double> nextObject() {
-				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
-				double value = VAL_LO + rng.nextDouble() * (VAL_HI - VAL_LO);
-				return new Pair<Integer, Double>(key, value);
-			}
-		};		
-	}
-	
-	/** Randomly created data set 3: pathological two peak distribution. -> high variance. */ 
-	public static Cursor<Pair<Integer, Double>> data_pathologicalTwoPeaks(Random rng) {
-		return new AbstractCursor<Pair<Integer,Double>>() {
-			@Override
-			protected boolean hasNextObject() { return true; }
-			
-			@Override
-			protected Pair<Integer, Double> nextObject() {
-				int key = KEY_LO + rng.nextInt(KEY_HI - KEY_LO);
-				double value = rng.nextDouble() < 0.5d ? -VAL_HI : VAL_HI;
-				return new Pair<Integer, Double>(key, value);
-			}
-		};		
-	}
-
-
 	public static void main(String[] args) throws Exception {
 		
 		
@@ -568,7 +316,7 @@ public class Test_ApproxQueries {
 		
 		
 		
-		random = new CopyableRandom(464);
+		
 
 		// bTreeTest();
 		
@@ -595,8 +343,12 @@ public class Test_ApproxQueries {
 //		//+ test suite
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
-		fillTestableMap(tree, 10000, data_iidUniformPairs(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
+		random = new CopyableRandom(464);
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+				TreeCreation.createRSTree(TestUtils.resolveFilename("filler_test"), 	);
+		tree.setRNG(random);
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		TreeCreation.fillTestableMap(tree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
 		approxExactComparisons(tree, PRECISION_BOUND, 50);
 		
 	}
