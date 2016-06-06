@@ -345,7 +345,7 @@ public class Test_ApproxQueries {
 		
 		random = new CopyableRandom(464);
 		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				TreeCreation.createRSTree(TestUtils.resolveFilename("filler_test"), 	);
+				TreeCreation.createRSTree(TestUtils.resolveFilename("filler_test"), 2048, 5, 20);
 		tree.setRNG(random);
 		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(tree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );

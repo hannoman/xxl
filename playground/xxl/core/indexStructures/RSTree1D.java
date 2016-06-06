@@ -384,8 +384,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 
 		public abstract int totalWeight();
 
-		protected abstract List<V> relevantValues(Interval<K> query);
-		
 		public abstract List<V> allValues();
 	}
 	
@@ -417,32 +415,17 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			return samples.size() < samplesPerNodeLo;			
 		}
 
-		/**
-		 * Determine the following node's CID on key's search path.
-		 * @param key the key to look for
-		 * @return P containerID of the next node
-		 */
-		public List<P> chooseSubtrees(K key) {
-			/*// 1d case
-			int pos = HUtil.binFindES(separators, key);
-			return pagePointers.get(pos);
-			*/
-			// stream syntax doesn't make it any shorter...
-//			return chooseSubtreesIdxs(key).stream().map(pagePointers::get).collect(Collectors.toCollection(LinkedList<P>::new));
-			return HUtil.getAll(chooseSubtreesIdxs(key), pagePointers);
-		}
-		
-		public List<Integer> chooseSubtreesIdxs(K key) {
-			List<Integer> relevantChilds = new LinkedList<Integer>();
-			for(int i=0; i < ranges.size(); i++)
-				if(ranges.get(i).contains(key))
-					relevantChilds.add(i);
-			return relevantChilds;
-		}
-		
+		// TODO: change to Interval syntax
 		public Integer chooseFirstSubtreeIdx(K key) {
 			for(int i=0; i < ranges.size(); i++)
 				if(ranges.get(i).contains(key))
+					return i;
+			return null;
+		}
+		
+		public Integer chooseFirstSubtreeIdx_Interval(Interval<K> query) {
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).intersects(query))
 					return i;
 			return null;
 		}
@@ -762,21 +745,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			return values.size();
 		}
 
-		/**
-		 * Returns all values relevant for a given query in this' node subtree. 
-		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
-		 */
-		@Override
-		protected List<V> relevantValues(Interval<K> query) {
-			List<V> allValues = new LinkedList<V>();
-			for(V value : values) {
-				K key = getKey.apply(value);
-				if(query.contains(key))
-					allValues.add(value);
-			}
-			return allValues;
-		}
-		
 		/** Returns all values in the subtree originating from this node. */
 		public List<V> allValues() {
 			return values;
@@ -922,11 +890,15 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		}
 	}
 	
-	// TODO: check: is this like the other range query semantics?
 	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
 	@Override
 	public ProfilingCursor<V> rangeQuery(K lo, K hi){
-		return new QueryCursor(lo, hi);
+		return new QueryCursor(new Interval<K>(lo, true, hi, false));
+	}
+	
+	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
+	public ProfilingCursor<V> rangeQuery(Interval<K> query){
+		return new QueryCursor(query);
 	}
 	
 	/* TODO: we need different range queries for R-trees:
@@ -935,22 +907,19 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	 * 		- Q is contained in R
 	 */
 	
-	/**
-	 * A query cursor for simple range queries.
+	/** A query cursor for simple range queries.
 	 * 
 	 * We won't subclass xxl.core.indexStructures.QueryCursor here as it is 
 	 * designed for queries over trees which inherit from xxl.core.indexStructures.Tree.
 	 */
 	public class QueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
-		// query
-		final K lo;
-		final K hi;			
-		final Interval1D<K> query;
+		/** Query interval. */
+		final Interval<K> query;
 		
 		/** Profiling information: nodes touched. */
 		Set<Pair<Integer, P>> p_nodesTouched;		
 		/** The heights on which the query was started. Is always initialised to rootHeight and doesn't change.
-		 * Needed for profiling, though. */
+		 * 		Needed for profiling, though. */
 		int startlevel;
 		
 		/** Path of expanded nodeCIDs */
@@ -961,30 +930,22 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		/** Single precomputed value. */
 		V precomputed;
 		
-		private QueryCursor(K lo, K hi, P startNode, int startlevel) {
+		private QueryCursor(Interval<K> query, P startNode, int startlevel) {
 			super();
-			this.startlevel = startlevel;
-			
-			// profiling
+			//- query
+			this.query = query;
+			//- profiling
 			p_nodesTouched = new HashSet<Pair<Integer,P>>();
-			// query
-			this.lo = lo;
-			this.hi = hi;
-						
+			this.startlevel = startlevel;
+			//- state
 			sNodes = new Stack<P>();
 			sNodes.push(startNode);
-			
 			sIdx = new Stack<Integer>();			
-						
 			precomputed = null; // the next value to spit out
 		}
 		
-		public QueryCursor(K lo, K hi) {
-			this(lo, hi, rootCID, rootHeight);
-		}
-		
 		public QueryCursor(Interval<K> query) {
-			query.
+			this(query, rootCID, rootHeight);
 		}
 		
 		@Override
@@ -1003,7 +964,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		}
 	
 		/** Marks the node currently on the head of the stack as touched for profiling. */
-		private void markedTouched() {
+		private void markTouched() {
 			p_nodesTouched.add(new Pair<Integer, P>(startlevel - sNodes.size() + 1, sNodes.peek()));
 		}
 		
@@ -1012,20 +973,20 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		public void open() {
 			// get the current node and lock it in the buffer
 			Node curNode = container.get(sNodes.peek(), false); // this should always be the root if we don't descend from a different node
-			markedTouched();
+			markTouched();
 			
 			while(curNode.isInner()) {
 				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-				int nextPos = curINode.chooseFirstSubtreeIdx(lo);
+				int nextPos = curINode.chooseFirstSubtreeIdx_Interval(query);
 				sIdx.push(nextPos);
 				
 				// descend to next node
 				P nextPID = curINode.pagePointers.get(nextPos);
 				sNodes.push(nextPID);
 				curNode = container.get(sNodes.peek(), false);
-				markedTouched();
+				markTouched();
 			}
 			
 			// now our node is a leaf and we just need to find the starting position			
@@ -1033,7 +994,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			
 			// find starting position
 			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunJ8.toOld(getKey));			
-			int pos = HUtil.binFindES(mappedList, lo);
+			int pos = HUtil.binFindES(mappedList, query.lo);
 			sIdx.push(pos);
 			
 			// regarding first computation of hasNext:
@@ -1055,7 +1016,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		private void descendToSmallest() {
 			// get the current node and fix it in the buffer
 			Node curNode = container.get(sNodes.peek(), false);			
-			markedTouched();
+			markTouched();
 			
 			while(curNode.isInner()) {
 				InnerNode curINode = (InnerNode) curNode;
@@ -1065,7 +1026,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
 				sNodes.push(nextPID);
 				curNode = container.get(sNodes.peek(), false);
-				markedTouched();
+				markTouched();
 			}
 			
 			// set the index in the leaf node too
@@ -1108,8 +1069,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			}
 			
 			precomputed = curLNode.values.get(sIdx.peek());
-			if(getKey.apply(precomputed).compareTo(hi) > 0) 
+			if(!query.contains(getKey.apply(precomputed))) {
+				assert query.locate(getKey.apply(precomputed)) > 1;
 				return false; // hit the high border
+			}
 			
 			return true;
 		}

@@ -48,6 +48,16 @@ public class Interval<K extends Comparable<K>> {
 		return locate(key) == 0;
 	}
 	
+	/** Checks where a point is located with respect to this interval.
+	 *
+	 * @param key The point to be tested.
+	 * @return Returns: <br>
+	 * 			<b>0</b> if the point is contained by this interval, <br>
+	 * 			<b>-1</b> if the point is located to the left of this interval <br>
+	 * 			<b> 1</b> if the point is located to the right of this interval <br>
+	 * <br>
+	 * Similar to {@link xxl.core.util.Interval1D#contains(Object)} but the results are vice-versa.
+	 */
 	public int locate(K key) {
 		if(borderCompare(key, true, lo, loIn) < 0) return -1;
 		else if(borderCompare(key, true, hi, hiIn) > 0) return 1;
