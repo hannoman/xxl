@@ -25,7 +25,7 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V, P> {
+public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
 	/** Standalone version of a weight-balanced B+-Tree.
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *
@@ -47,7 +47,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 
 	/** The leaf parameter <b>tK</b>, determining the amount of entries a leaf can contain.	<br>
 	 * Following inequalities hold:									<br>
- * 																	<br>
+	 * 																<br>
 	 * Number of entries in a leaf L =: e(L): 						<br>
 	 * 		tK <= e(L) < 2*tK 										<br>
 	 */ 

@@ -117,30 +117,14 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	/** Weight-information about the root. Root has no parent so it must be saved elsewhere. */
 //	int rootWeight; // for now don't track this information
 
+	/** Domain of the keys. */
+	Interval<K> universe;
+	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-//	public RSTree_v3(int samplesPerNode, int branchingParam, int leafLo, int leafHi, Function<V, K> getKey) {
-//		super();
-////		this.branchingParam = branchingParam;		
-//		this.getKey = getKey;
-//		
-//		this.leafLo = leafLo;
-//		this.leafHi = leafHi;
-//		
-//		//- setting defaults
-//		this.branchingLo = branchingParam / 2;
-//		this.branchingHi = branchingParam * 2;
-//		this.samplesPerNodeLo = samplesPerNode / 2;
-//		this.samplesPerNodeHi = samplesPerNode * 2;
-//		this.samplesPerNodeReplenishTarget = samplesPerNode;		
-//		this.rng = new Random();
-//	}
-
-	Interval<K> universe;
-	
 
 	public RSTree_v3(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
 		this.universe = universe;
@@ -157,8 +141,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		this.rng = new CopyableRandom();
 	}
 
-	/**
-	 * 
+	/** Loads a whole RSTree - that is in addition to the data, the correct parameters (branching factor, etc.)
+	 * 		of the tree from a metadata file. Just some things have to be given which can't be serialized or
+	 * 		determine the types.  
 	 * @param metaDataFilename The absolute path to the metaDataFileName. 
 	 * @param containerFactory Function which builds a container from an absolute filename. 
 	 * 		Allows exchanging of different wrapping containers in between.
@@ -215,7 +200,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		return instance;
 	}
 	
-	/**
+	/** Saves a tree to a metadata file. 
+	 * NOTE: The tree is not usable afterwards anymore as we have to explicitly call the close() method of the container
+	 * to make it write its metadata file.
 	 * 
 	 * @param metaDataFilename
 	 * @param dataFileName abolute path to the container backing this tree.
@@ -484,7 +471,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			return null;
 		}
 		
-		public InsertionInfo insert(V value, P thisCID, int level) {
+		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
 			K key = getKey.apply(value);
 			
 			//- insert in sublevel
@@ -493,7 +480,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			Node nextNode = container.get(nextCID);
 			int oldWeight = totalWeight(); 
 					
-			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, level-1); //== RECURSION ==
+			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, levelUnused-1); //== RECURSION ==
 			
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
 				// calculate the new ranges
