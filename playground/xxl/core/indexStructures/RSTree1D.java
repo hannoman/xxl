@@ -44,7 +44,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
+public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -126,7 +126,11 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
 
-	public RSTree_v3(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
+	protected RSTree1D() {
+		
+	}
+	
+	public RSTree1D(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -150,7 +154,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * 		Default use: containerFactory = BlockFileContainer::new 
 	 * @throws IOException
 	 */
-	protected static <K extends Comparable<K>, V, P> RSTree_v3<K, V, P> loadFromMetaData(
+	protected static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
 			String metaDataFilename, 
 			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
@@ -182,7 +186,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		int leafHi = metaData.readInt();
 		
 		//-- construct and initialize the tree
-		RSTree_v3<K, V, P> instance = new RSTree_v3<K, V, P>(universe, samplesPerNodeLo, samplesPerNodeHi, branchingLo, branchingHi, leafLo, leafHi, getKey);
+		RSTree1D<K, V, P> instance = new RSTree1D<K, V, P>(universe, samplesPerNodeLo, samplesPerNodeHi, branchingLo, branchingHi, leafLo, leafHi, getKey);
 		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
 		
 		//- read state parameters
@@ -604,7 +608,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/**
 		 * Returns all values relevant for a given query in this' node subtree. 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
-		 * OPT: only called from xxl.core.indexStructures.RSTree_v3.SamplingCursor.addToFrontier(P) -> inline?
+		 * OPT: only called from xxl.core.indexStructures.RSTree1D.SamplingCursor.addToFrontier(P) -> inline?
 		 */
 		protected List<V> relevantValues(Interval<K> query) {
 			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
@@ -633,7 +637,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 		/**
 		 * Checks for a underflow in the sample buffer and repairs it.
 		 * Repairing for InnerNodes is done by draining samples from the child nodes.
-		 * OPT: only called from xxl.core.indexStructures.RSTree_v3.InnerNode.split() -> inline?
+		 * OPT: only called from xxl.core.indexStructures.RSTree1D.InnerNode.split() -> inline?
 		 */
 		protected void repairSampleBuffer() {
 			if(sampleUnderflow()) {				
@@ -788,9 +792,9 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 	 * Instead it encapsulates all needed converters and hides them from the tree class (as the tree actually has 
 	 * no use for calling them directly.<br>
 	 * If one wants finer control over the constructed <tt>ConverterContainer</tt>, this class can be instantiated
-	 * by <tt>RSTree_v3<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
+	 * by <tt>RSTree1D<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
 	 * 
-	 * @see RSTree_v3#initialize_withReadyContainer(TypeSafeContainer)
+	 * @see RSTree1D#initialize_withReadyContainer(TypeSafeContainer)
 	 */
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
@@ -1315,7 +1319,7 @@ public class RSTree_v3<K extends Comparable<K>, V, P> implements TestableMap<K, 
 			}
 			
 			@Override
-			public RSTree_v3<K, V, P>.ReallyLazySamplingCursor.SamplingResult tryToSample(int n) {
+			public RSTree1D<K, V, P>.ReallyLazySamplingCursor.SamplingResult tryToSample(int n) {
 				if(n == 0) {
 					List<V> samplesObtained = new LinkedList<V>();
 					return new SamplingResult(samplesObtained);

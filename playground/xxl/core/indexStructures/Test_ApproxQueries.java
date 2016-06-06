@@ -66,14 +66,14 @@ public class Test_ApproxQueries {
 	public static CopyableRandom random = new CopyableRandom(42);	
 		
 	/** Performs 100 comparisons between exact and approximate average queries. */
-	public static void s_pruning(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree) {
+	public static void s_pruning(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
 		random = new CopyableRandom(55);
 		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
 		approxExactComparisons(tree, PRECISION_BOUND, 100);
 	}
 
 	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generatd correctly. */ 
-	public static void s_generation(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree) {
+	public static void s_generation(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
 		random = new CopyableRandom(55);
 		Map<Integer, Pair<Integer, Double>> compMap = fill(tree, NUMBER_OF_ELEMENTS);
 		for(Integer key : compMap.keySet()) {
@@ -82,7 +82,7 @@ public class Test_ApproxQueries {
 	}
 	
 	private static void createAndSave_RS_pair(String metaDataFilename, String containerPrefix, int nTuples) throws IOException {
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix);
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix);
 		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, nTuples);
 		
 		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
@@ -93,13 +93,13 @@ public class Test_ApproxQueries {
 		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
 	}
 
-	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> load_RS_pair(String metaDataFilename) throws IOException {
+	private static RSTree1D<Integer, Pair<Integer, Double>, Long> load_RS_pair(String metaDataFilename) throws IOException {
 		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
 		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
 		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
 		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
 		
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = RSTree_v3.loadFromMetaData(
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = RSTree1D.loadFromMetaData(
 				metaDataFilename, 
 				containerFactory, 
 				keyConverter, 
@@ -112,7 +112,7 @@ public class Test_ApproxQueries {
 	}
 	
 	
-	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
+	private static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree(String testFile) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -150,8 +150,8 @@ public class Test_ApproxQueries {
 		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree_v3<Integer, Pair<Integer,Double>, Long>(
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
@@ -172,9 +172,9 @@ public class Test_ApproxQueries {
 	}
 
 	/** Tries to set the tree parameters so that actually unbuffered inner nodes can emerge. 
-	 * See {@link xxl.core.indexStructures.RSTree_v3.ReallyLazySamplingCursor.createSampler(P)}
+	 * See {@link xxl.core.indexStructures.RSTree1D.ReallyLazySamplingCursor.createSampler(P)}
 	 * */
-	private static RSTree_v3<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(String testFile) {
+	private static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(String testFile) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -211,8 +211,8 @@ public class Test_ApproxQueries {
 		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 	
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree_v3<Integer, Pair<Integer,Double>, Long>(
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
@@ -288,7 +288,7 @@ public class Test_ApproxQueries {
 	 * Note that it might be possible that the SamplingCursor actually needs more tuples, as a high precision might dictate for
 	 * more samples than the result set actually has.
 	 * This is done N_QUERIES times. */
-	public static void approxExactComparisons(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, double PRECISION_BOUND, int N_QUERIES) {
+	public static void approxExactComparisons(RSTree1D<Integer, Pair<Integer, Double>, Long> tree, double PRECISION_BOUND, int N_QUERIES) {
 		for(int i=0; i < N_QUERIES; i++) {
 			// CHECK: is this a uniform distribution of intervals?
 			int key_lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
@@ -299,7 +299,7 @@ public class Test_ApproxQueries {
 		}		
 	}
 	
-	public static void approxExactComparison(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+	public static void approxExactComparison(RSTree1D<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
 		// approximate computation
 		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
 		
@@ -330,7 +330,7 @@ public class Test_ApproxQueries {
 	/** Exact computation of one query.
 	 * @return a pair <tt>(result, count)</tt> where count is the full number of entries satisfying the range query.
 	 */
-	public static Triple<Double,Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
+	public static Triple<Double,Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(RSTree1D<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
 //		double resultExact = (double) Cursors.last(new Aggregator(exactVals, new StatefulAverage()));
 		// exact computation
 		ProfilingCursor<Pair<Integer, Double>> exactQueryCursor = tree.rangeQuery(key_lo, key_hi);
@@ -349,7 +349,7 @@ public class Test_ApproxQueries {
 	
 	/** Computes an average-estimator with confidence according to the large sample assumption, 
 	 * from as much samples as needed to match PRECISION_BOUND. */
-	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(RSTree1D<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
 		int REPORT_INTERVAL = 1000;		
 		
 		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE);
@@ -382,7 +382,7 @@ public class Test_ApproxQueries {
 	
 	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
 	public static Triple<Integer, Integer, Integer> samplingCursorCorrectness(
-					RSTree_v3<Integer, Pair<Integer, Double>, Long> tree, 
+					RSTree1D<Integer, Pair<Integer, Double>, Long> tree, 
 					SortedMap<Integer,Pair<Integer, Double>> compmap, 
 					final int SAMPLING_QUERY_TESTS,
 					final int SAMPLE_SIZE) {
@@ -572,8 +572,8 @@ public class Test_ApproxQueries {
 		
 		//--- run the actual tests
 //		random = new Random();
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("RSTree_noUnbuffered_pairs01"));
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(resolveFilename("RSTree_someUnbufferred_pairs01"));
+//		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("RSTree_noUnbuffered_pairs01"));
+//		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree_withInnerUnbufferedNodes(resolveFilename("RSTree_someUnbufferred_pairs01"));
 //		SortedMap<Integer, Pair<Integer,Double>> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 //		samplingCursorCorrectness(tree, compmap, 10, 100);
 //		approxExactComparisons(tree, PRECISION_BOUND, 100);
@@ -588,7 +588,7 @@ public class Test_ApproxQueries {
 
 		// bTreeTest();
 		
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree("insert_test");
+//		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree("insert_test");
 //		QuickTime.start("Insertion");
 //		
 //		fill(tree, 100000);
@@ -598,7 +598,7 @@ public class Test_ApproxQueries {
 //		String treename = "RS_pairs_big03";
 //		createAndSave_RS_pair(resolveFilename(treename +"_meta"), resolveFilename(treename), 1000000);
 		//-- loading tree from metadata file and performing tests on it
-//		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
+//		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = load_RS_pair(resolveFilename(treename +"_meta"));
 //		
 //		//+ single manual tests
 //		tree.setRNG(new CopyableRandom());
@@ -611,7 +611,7 @@ public class Test_ApproxQueries {
 //		//+ test suite
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		RSTree_v3<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(resolveFilename("filler_test"));
 		fillTestableMap(tree, 10000, data_iidUniformPairs(random), ((Pair<Integer, Double> t) -> t.getElement1()) );
 		approxExactComparisons(tree, PRECISION_BOUND, 50);
 		

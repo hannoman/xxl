@@ -5,7 +5,7 @@ import java.util.function.Function;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
 
-public class wRSTree<K extends Comparable<K>,V,P> extends RSTree_v3<K,V,P> {
+public class wRSTree<K extends Comparable<K>,V,P> extends RSTree1D<K,V,P> {
 
 	public wRSTree(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
 		this.universe = universe;

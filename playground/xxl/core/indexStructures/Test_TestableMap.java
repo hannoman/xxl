@@ -69,9 +69,9 @@ public class Test_TestableMap {
 		return compmap;
 	}
 
-	private static WBTreeSA_v3<Integer, Integer, Long> createWBTree(String testFile) {
+	private static WBTree<Integer, Integer, Long> createWBTree(String testFile) {
 		
-		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
+		WBTree<Integer, Integer, Long> tree = new WBTree<Integer, Integer, Long>(
 				10, 										// leafParam
 				5, 											// branchingParam
 				(x -> x)); 									// getKey
@@ -88,7 +88,7 @@ public class Test_TestableMap {
 		return tree;
 	}
 	
-	private static RSTree_v3<Integer, Integer, Long> createRSTree(String testFile) {
+	private static RSTree1D<Integer, Integer, Long> createRSTree(String testFile) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -123,8 +123,8 @@ public class Test_TestableMap {
 		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 
-		RSTree_v3<Integer, Integer, Long> tree = 
-				new RSTree_v3<Integer, Integer, Long>(
+		RSTree1D<Integer, Integer, Long> tree = 
+				new RSTree1D<Integer, Integer, Long>(
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
@@ -158,7 +158,7 @@ public class Test_TestableMap {
 		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
 	}
 	
-	public static void s_approxQueries(RSTree_v3<Integer, Integer, Long> tree) {
+	public static void s_approxQueries(RSTree1D<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 		random = new Random();
 //		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
@@ -167,7 +167,7 @@ public class Test_TestableMap {
 	
 	
 	
-	public static void suite3(WBTreeSA_v3<Integer, Integer, Long> tree) {
+	public static void suite3(WBTree<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 		debugRangeQueries(tree);
 	}
@@ -312,7 +312,7 @@ public class Test_TestableMap {
 	}
 
 	public static Triple<Integer, Integer, Integer> samplingTest(
-		RSTree_v3<Integer, Integer, Long> tree, 
+		RSTree1D<Integer, Integer, Long> tree, 
 		Map<Integer,Integer> compmap, 
 		int SAMPLING_QUERY_TESTS) {
 		final int SAMPLE_SIZE = 100;
@@ -371,7 +371,7 @@ public class Test_TestableMap {
 	}
 	
 	public static Triple<Integer, Integer, Integer> samplingTest_fixedPrecision_average(
-			RSTree_v3<Integer, Integer, Long> tree, 
+			RSTree1D<Integer, Integer, Long> tree, 
 			Map<Integer,Integer> compmap, 
 			int FP_SAMPLING_QUERY_TESTS,
 			double TARGET_PRECISION) {
@@ -431,7 +431,7 @@ public class Test_TestableMap {
 			return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 		}
 
-	public static void testTree(WBTreeSA_v3<Integer, Integer, Long> tree) throws IOException {			
+	public static void testTree(WBTree<Integer, Integer, Long> tree) throws IOException {			
 		//-- comparison structure
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
@@ -529,7 +529,7 @@ public class Test_TestableMap {
 	/**
 	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
 	 */
-	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTreeSA_v3<Integer, Integer, Long> tree) {
+	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTree<Integer, Integer, Long> tree) {
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
 		//-- Insertion - generate test data
@@ -631,8 +631,8 @@ public class Test_TestableMap {
 			}
 	
 			//--- run the actual tests
-	//		WBTreeSA_v3<Integer, Integer, Long> tree = createWBTree(fileName);
-			RSTree_v3<Integer, Integer, Long> tree = createRSTree(fileName);		
+	//		WBTree<Integer, Integer, Long> tree = createWBTree(fileName);
+			RSTree1D<Integer, Integer, Long> tree = createRSTree(fileName);		
 			suite1(tree);
 	//		suite2(tree);
 //			s_approxQueries(tree);

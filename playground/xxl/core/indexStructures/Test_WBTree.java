@@ -33,9 +33,9 @@ public class Test_WBTree {
 	public static Random random;
 	
 	
-	private static WBTreeSA_v3<Integer, Integer, Long> createTree(String testFile) {
+	private static WBTree<Integer, Integer, Long> createTree(String testFile) {
 		
-		WBTreeSA_v3<Integer, Integer, Long> tree = new WBTreeSA_v3<Integer, Integer, Long>(
+		WBTree<Integer, Integer, Long> tree = new WBTree<Integer, Integer, Long>(
 				10, 										// leafParam
 				5, 											// branchingParam
 				(x -> x)); 									// getKey
@@ -46,11 +46,11 @@ public class Test_WBTree {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
 		
 		//-- Initialization with externally built Container
-//		Converter<WBTreeSA_v3<Integer, Integer, Long>.Node> nodeConverter = 
+//		Converter<WBTree<Integer, Integer, Long>.Node> nodeConverter = 
 //				tree.new NodeConverter(keyConverter, valueConverter, treeRawContainer.objectIdConverter());
 //		
-//		TypeSafeContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node> treeContainer = 
-//				new CastingContainer<Long, WBTreeSA_v3<Integer, Integer, Long>.Node>(
+//		TypeSafeContainer<Long, WBTree<Integer, Integer, Long>.Node> treeContainer = 
+//				new CastingContainer<Long, WBTree<Integer, Integer, Long>.Node>(
 //					new ConverterContainer(treeRawContainer, nodeConverter)
 //				); 
 //		
@@ -64,7 +64,7 @@ public class Test_WBTree {
 		return tree;
 	}
 
-	public static void suite1(WBTreeSA_v3<Integer, Integer, Long> tree) {
+	public static void suite1(WBTree<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 		random = new Random(55);
 		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
@@ -72,12 +72,12 @@ public class Test_WBTree {
 		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20);
 	}
 	
-	public static void suite2(WBTreeSA_v3<Integer, Integer, Long> tree) {
+	public static void suite2(WBTree<Integer, Integer, Long> tree) {
 		Map<Integer, Integer> compmap = fill(tree, NUMBER_OF_ELEMENTS);
 		debugRangeQueries(tree);
 	}
 	
-	public static Map<Integer,Integer> fill(WBTreeSA_v3<Integer, Integer, Long> tree, int amount) {
+	public static Map<Integer,Integer> fill(WBTree<Integer, Integer, Long> tree, int amount) {
 		//-- comparison structure
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
@@ -98,7 +98,7 @@ public class Test_WBTree {
 		return compmap;
 	}
 	
-	public static int positiveLookups(WBTreeSA_v3<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_POSITIVE) {
+	public static int positiveLookups(WBTree<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_POSITIVE) {
 		// final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
 		
 		System.out.println("-- Positive Lookups (perhaps duplicate) (#="+ LOOKUP_TESTS_POSITIVE +"):");		
@@ -127,7 +127,7 @@ public class Test_WBTree {
 		return errors_positiveLookup;
 	}
 	
-	public static int randomKeyLookups(WBTreeSA_v3<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_RANDOM) {
+	public static int randomKeyLookups(WBTree<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int LOOKUP_TESTS_RANDOM) {
 		System.out.println("-- Random Lookups from domain (mostly negative) (#="+ LOOKUP_TESTS_RANDOM +"):");
 		
 		List<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
@@ -152,7 +152,7 @@ public class Test_WBTree {
 		return errors_randomLookup;
 	}
 	
-	public static void testTree(WBTreeSA_v3<Integer, Integer, Long> tree) throws IOException {			
+	public static void testTree(WBTree<Integer, Integer, Long> tree) throws IOException {			
 		//-- comparison structure
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
@@ -273,15 +273,15 @@ public class Test_WBTree {
 
 		//--- run the actual tests
 		
-//		WBTreeSA_v3<Integer, Integer, Long> wbTree = createTree(fileName);		
+//		WBTree<Integer, Integer, Long> wbTree = createTree(fileName);		
 //		testTree(wbTree);
 		
-		WBTreeSA_v3<Integer, Integer, Long> wbTree = createTree(fileName);		
+		WBTree<Integer, Integer, Long> wbTree = createTree(fileName);		
 		suite1(wbTree);
 //		suite2(wbTree);
 	}
 
-	public static Triple<Integer, Integer, Integer> rangeQueries(WBTreeSA_v3<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int RANGE_QUERY_TESTS) {
+	public static Triple<Integer, Integer, Integer> rangeQueries(WBTree<Integer, Integer, Long> tree, Map<Integer,Integer> compmap, int RANGE_QUERY_TESTS) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
 		System.out.println("-- RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
@@ -346,7 +346,7 @@ public class Test_WBTree {
 	/**
 	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
 	 */
-	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTreeSA_v3<Integer, Integer, Long> tree) {
+	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTree<Integer, Integer, Long> tree) {
 		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
 		
 		//-- Insertion - generate test data

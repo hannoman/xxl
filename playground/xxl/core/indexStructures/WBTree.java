@@ -25,7 +25,7 @@ import xxl.core.io.converters.Converter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Triple;
 
-public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
+public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
 	/** Standalone version of a weight-balanced B+-Tree.
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *
@@ -84,7 +84,7 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in xxl) as inner class of this tree class.
 	*/
-	public WBTreeSA_v3(
+	public WBTree(
 			int leafParam, 
 			int branchingParam, 
 			Function<V, K> getKey) {
@@ -360,9 +360,9 @@ public class WBTreeSA_v3<K extends Comparable<K>, V, P> implements TestableMap<K
 	 * Instead it encapsulates all needed converters and hides them from the tree class (as the tree actually has 
 	 * no use for calling them directly.<br>
 	 * If one wants finer control over the constructed <tt>ConverterContainer</tt>, this class can be instantiated
-	 * by <tt>WBTreeSA_v3<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
+	 * by <tt>WBTree<K,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
 	 * 
-	 * @see WBTreeSA_v3#initialize_withReadyContainer(TypeSafeContainer)
+	 * @see WBTree#initialize_withReadyContainer(TypeSafeContainer)
 	 * @author Dominik Krappel
 	 */
 	public class NodeConverter extends Converter<Node> {
