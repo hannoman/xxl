@@ -3,22 +3,29 @@ package xxl.core.indexStructures;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.function.Function;
+import java.util.stream.Stream;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
+import xxl.core.collections.sweepAreas.SortMergeEquiJoinSA;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
+import xxl.core.cursors.joins.SortMergeEquivalenceJoin;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
+import xxl.core.spatial.cursors.Orenstein.Counter;
 import xxl.core.util.HUtil;
 import xxl.core.util.Pair;
 import xxl.core.util.Triple;
@@ -144,36 +151,69 @@ public class Test_TestableMap {
 	}
 	
 	public static <K extends Comparable<K>, V extends Comparable<V>> Triple<Integer, Integer, Integer> rangeQueries(
-			TestableMap<K, V> tree, Map<K, V> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
+			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
 		System.out.println("-- RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
-		
-		compmap.
-		ArrayList<K> containedKeys = new ArrayList<K>(compmap.keySet());
-		containedKeys.sort(null);
 		
 		int error_false_positive = 0;
 		int error_false_negative = 0;
 		int error_both = 0;
 		
 		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
+			//- determine query interval
 			K lo = testKeysCursor.next();
 			K hi = testKeysCursor.next();
 			if(lo.compareTo(hi) > 0) { K tmp = lo; lo = hi; hi = tmp; }
-			long possKeys = (long)hi - (long)lo + 1; // FIXME
+			
+//			long possKeys = (long)hi - (long)lo + 1; // FIXME
 			
 //			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
-			//-- execute the query
+			//-- execute the query on the tree
 			Cursor<V> treeResultCursor = tree.rangeQuery(lo, hi);			
 			List<V> treeResult = new ArrayList<V>(Cursors.toList(treeResultCursor));
 			
-//			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
+			//-- execute the query on the comparison map			
+			NavigableMap<K, List<V>> comparisonResultMap = compmap.subMap(lo, true, hi, true);
+			//- flatten
+			List<V> flattenedComparisonResult = new LinkedList<V>();
+			for(Map.Entry<K, List<V>> entry : comparisonResultMap.entrySet()) {
+				flattenedComparisonResult.addAll(entry.getValue());
+			}
 			
+			System.out.println("T-result (#="+ flattenedComparisonResult.size() +"): "+ flattenedComparisonResult);
+						
 			//-- Test current query
 			int e_negatives = 0;
 			int e_positives = 0;
+			
+//			ListIterator<V> treeResultIter = treeResult.listIterator();
+//			ListIterator<V> compResultIter = flattenedComparisonResult.listIterator();
+//			while(true) {
+//				if(!treeResultIter.hasNext()) {
+//					e_negatives += Cursors.count(compResultIter);
+//					break;
+//				} else if(!compResultIter.hasNext()) {
+//					e_positives += Cursors.count(treeResultIter);
+//					break;
+//				} else {
+//					if(treeResultIter.next().compareTo(compResultIter.next()) != 0) {
+//						e_negatives += 1;
+//						e_positives += 1;
+//					}
+//					Integer x = 5;
+//					Counter
+//				}
+//			}
+			
+			SortMergeEquiJoinSA<I> sweepArea0;
+			new SortMergeEquivalenceJoin<I, E>(treeResult, flattenedComparisonResult, sweepArea0, sweepArea1, comparator, newResult, type)
+			
+			for (Iterator iterator = flattenedComparisonResult.iterator(); iterator.hasNext();) {
+				V v = (V) iterator.next();
+				
+			}
 			
 			//-- Tests for false positives
 			for(V tVal : treeResult)

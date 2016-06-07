@@ -50,27 +50,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	 * 		-> nope, keep it that way, since it might be beneficial for batched operations in expansions,
 	 * 			and removals of multiple values wouldn't benefit from it.
 	 * 
-	 *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
-	 *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
-	 *   DONE Mini-Milestone 2: Implement lazy sampling query cursor
-	 *   Mini-Milestone 2.5: ReallyLazySamplingCursor should adjust batchSize dynamically to use |Frontier|.
-	 *   DONE Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
-	 *   	-> TODO: yet, ReallyLazySamplingCursor needs to count the leaf nodes which got visited indirectly (from an unbuffered
-	 *   			inner node) too.  
-	 *   
-	 *   Future: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
-	 *   			And to automatically construct a tree with optimally set parameters.
-	 *   	(first tries can be seen in xxl.core.indexStructures.Test_ApproxQueries.createRSTree(String)
-	 *   							and xxl.core.indexStructures.Test_ApproxQueries.createRSTree_withInnerUnbufferedNodes(String)
-	 *   	) 
-	 *   Mini-Milestone: Augment QueryCursor of BPlusTree with profiling capabilities.
-	 *   Mini-Milestone (40%): Do real tests.
-	 *		-> Create and save really big trees and then only load them for testing.
-	 *   	-> for profiling of logical IOs take a peek at: xxl.core.collections.containers.CounterContainer
-	 *   		(but that probably wont help)
-	 * 
-	 *   Mini-Milestone: Generalize Query-Types
-	 *   Mini-Milestone: Support removals
 	 *      
 	 *   
 	 * @param K type of the keys

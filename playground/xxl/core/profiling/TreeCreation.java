@@ -1,6 +1,8 @@
 package xxl.core.profiling;
 
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -27,25 +29,27 @@ public class TreeCreation {
 
 	/** General fill method which just takes its values from a data generating cursor. 
 	 * Returns a memory map for comparisons against the resulting data structure. */
-	public static <K extends Comparable<K>, V> SortedMap<K, V> fillTestableMap(
+	public static <K extends Comparable<K>, V> SortedMap<K, List<V>> fillTestableMap(
 			TestableMap<K, V> tree, 
 			int AMOUNT, 
 			Cursor<V> dataCursor,
 			Function<V, K> getKey
 			) {
 		//-- comparison structure
-		TreeMap<K, V> compmap = new TreeMap<K, V>();
+		TreeMap<K, List<V>> compmap = new TreeMap<K, List<V>>();
 		
 		//-- Insertion - generate test data		
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
 		for (int i = 1; i <= AMOUNT; i++) {					
-			V entry = dataCursor.next();
-			tree.insert(entry);
-			compmap.put(getKey.apply(entry), entry);  
+			V value = dataCursor.next();
+			K key = getKey.apply(value);
+			tree.insert(value);
+			compmap.putIfAbsent(key, new LinkedList<V>());
+			compmap.get(key).add(value);  
 			if (i % (AMOUNT / 10) == 0) {
 				System.out.print((i / (AMOUNT / 100)) + "%, ");
-				System.out.println("inserted: "+ entry);
+				System.out.println("inserted: "+ value);
 			}
 		}
 		
@@ -118,7 +122,7 @@ public class TreeCreation {
 		return tree;
 	}
 
-	public static WRSTree_copyImpl<Integer, Integer, Long> createWRSTree(
+	public static WRSTree_copyImpl<Integer, Pair<Integer, Double>, Long> createWRSTree(
 			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
