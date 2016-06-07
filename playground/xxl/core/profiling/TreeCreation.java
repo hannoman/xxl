@@ -12,6 +12,7 @@ import java.util.function.Function;
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.cursors.Cursor;
+import xxl.core.cursors.Cursors;
 import xxl.core.indexStructures.RSTree1D;
 import xxl.core.indexStructures.TestableMap;
 import xxl.core.indexStructures.WRSTree_copyImpl;
@@ -58,6 +59,48 @@ public class TreeCreation {
 		return compmap;
 	}
 
+	/** General fill method which just takes its values from a data generating cursor. 
+	 * Returns a memory map for comparisons against the resulting data structure. */
+	public static <K extends Comparable<K>, V, P> NavigableMap<K, List<V>> fillTestableMap_RS(
+			RSTree1D<K, V, P> tree, 
+			int AMOUNT, 
+			Cursor<V> dataCursor,
+			Function<V, K> getKey
+			) {
+		//-- comparison structure
+		TreeMap<K, List<V>> compmap = new TreeMap<K, List<V>>();
+		
+		//-- Insertion - generate test data		
+		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
+	
+		for (int i = 1; i <= AMOUNT; i++) {					
+			V value = dataCursor.next();
+			K key = getKey.apply(value);
+			
+			//- check whether the items really get inserted
+			int oldWeightByWeight = tree.weight();
+			int oldWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
+			tree.insert(value);
+			int newWeightByWeight = tree.weight();
+			int newWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
+			assert newWeightByWeight > oldWeightByWeight;
+			assert newWeightByValues > oldWeightByValues;
+			
+			
+			
+			
+			compmap.putIfAbsent(key, new LinkedList<V>());
+			compmap.get(key).add(value);  
+			if (i % (AMOUNT / 10) == 0) {
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
+				System.out.println("inserted: "+ value);
+			}
+		}
+		
+		System.out.println("Resulting tree height: " + tree.height());
+		return compmap;
+	}
+	
 	/** Creates a RSTree with fixed branching parameters and block size. Leaf and sample parameters are set space-optimal
 	 * with respect to them. 
 
@@ -188,7 +231,7 @@ public class TreeCreation {
 	 * 
 	 * Note: Does not set the PRNG-state of the tree.
 	 */
-	public static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(
+	public static TestableMap<K, V> createRSTree_withInnerUnbufferedNodes(
 			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
@@ -262,13 +305,13 @@ public class TreeCreation {
 		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
 	}
 
-	public static RSTree1D<Integer, Pair<Integer, Double>, Long> load_RSTree_pairsIntDouble(String metaDataFilename) throws IOException {
+	public static TestableMap<K, V> load_RSTree_pairsIntDouble(String metaDataFilename) throws IOException {
 		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
 		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
 		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
 		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
 		
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = RSTree1D.loadFromMetaData(
+		TestableMap<K, V> tree = RSTree1D.loadFromMetaData(
 				metaDataFilename, 
 				containerFactory, 
 				keyConverter, 

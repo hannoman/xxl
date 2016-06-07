@@ -700,6 +700,10 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 	@Override
 	public Function<V, K> getGetKey() {
 		return getKey;
+	}
+
+	ProfilingCursor<V> rangeQuery(Interval<K> query) {
+		return null;
 	} 
 	
 }

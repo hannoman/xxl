@@ -3,35 +3,30 @@ package xxl.core.indexStructures;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.stream.Stream;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
-import xxl.core.collections.sweepAreas.SortMergeEquiJoinSA;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
-import xxl.core.cursors.joins.SortMergeEquivalenceJoin;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
-import xxl.core.spatial.cursors.Orenstein.Counter;
 import xxl.core.util.HUtil;
+import xxl.core.util.Interval;
 import xxl.core.util.ListJoinOuter3way;
+import xxl.core.util.ListJoinOuter3way.JoinResult;
 import xxl.core.util.Pair;
 import xxl.core.util.Triple;
-import xxl.core.util.ListJoinOuter3way.JoinResult;
 import xxl.core.util.random.JavaDiscreteRandomWrapper;
 
 /**
@@ -79,7 +74,10 @@ public class Test_TestableMap {
 		// final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
 		long timeStart = System.nanoTime();
 		
-		System.out.println("-- Positive Lookups (perhaps duplicate) (#="+ LOOKUP_TESTS_POSITIVE +"):");		
+		System.out.println("========================================================================");
+		System.out.println("================== Positive Lookups (perhaps duplicate) (#="+ LOOKUP_TESTS_POSITIVE +"):");
+		System.out.println("========================================================================");
+		
 		//--- Lookup test
 		//-- positive lookups		
 		ArrayList<K> containedKeys = new ArrayList<K>(compmap.keySet());
@@ -92,16 +90,30 @@ public class Test_TestableMap {
 			List<V> mapAnswers = compmap.get(key);
 			//-- compute the difference between the resulsts
 			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
+
 			
 			if(!difference.rightAnti.isEmpty()) {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("FAILED.");				
+				System.out.println("-- query: \n\t"+ key);
+				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
+				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
 				System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
+				
 				errors_positiveLookup++;
+			} else {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("OK.");
+				System.out.println("-- query: \n\t"+ key);
+				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
+				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
 			}
 			
 		}		
 		
-		// System.out.println("Out of "+ LOOKUP_TESTS_POSITIVE +" (perhaps duplicate) positive lookups, failed on "+ errors_positiveLookup +" occasions.");		
-		System.out.println("\tfailed: "+ errors_positiveLookup);
+		// System.out.println("Out of "+ LOOKUP_TESTS_POSITIVE +" (perhaps duplicate) positive lookups, failed on "+ errors_positiveLookup +" occasions.");
+		System.out.println("\n\n========================================");
+		System.out.println("\tfailed: "+ errors_positiveLookup +"/"+ LOOKUP_TESTS_POSITIVE);
 		
 		long timeElapsed = System.nanoTime() - timeStart;
 		System.out.println("\ttime: "+ String.format("%8.2fms", ((double) timeElapsed / 1000000)) 
@@ -116,7 +128,9 @@ public class Test_TestableMap {
 		long ttQuery = 0;
 		long ttCompMap = 0;
 		
-		System.out.println("-- Random Lookups from domain (mostly negative) (#="+ LOOKUP_TESTS_RANDOM +"):");		
+		System.out.println("========================================================================");
+		System.out.println("================== Random Lookups from domain (mostly negative) (#="+ LOOKUP_TESTS_RANDOM +"):");
+		System.out.println("========================================================================");
 		
 		//-- (mostly) negative (= random) lookups		
 		int errors_randomLookup = 0;
@@ -128,26 +142,34 @@ public class Test_TestableMap {
 			ttQuery += System.nanoTime() - tsQuerySingle;
 			
 			long tsCompMapSingle = System.nanoTime();
-				List<V> mapAnswers = compmap.get(key);
+				List<V> mapAnswers = compmap.getOrDefault(key, new LinkedList<V>());
 			ttCompMap += System.nanoTime() - tsCompMapSingle;
 			
 			//-- compute the difference between the resulsts
 			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
 			
-			boolean errorOccured = false;
-			if(!difference.leftAnti.isEmpty()) {
-				System.out.println("-- false positives (# = "+ difference.leftAnti.size() +"): \n\t"+ difference.leftAnti);
-				errorOccured = true;
-			}
-			if(!difference.rightAnti.isEmpty()) {
-				System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
-				errorOccured = true;
+			if(!difference.leftAnti.isEmpty() || !difference.rightAnti.isEmpty()) {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("FAILED.");
+				System.out.println("-- query: \n\t"+ key);
+				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
+				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
+
+				if(!difference.leftAnti.isEmpty()) {
+					System.out.println("-- false positives (# = "+ difference.leftAnti.size() +"): \n\t"+ difference.leftAnti);
+				}
+				if(!difference.rightAnti.isEmpty()) {					
+					System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
+				}
+				errors_randomLookup++;
+			} else {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("OK.");
 			}
 			
-			if(errorOccured) errors_randomLookup++;
 		}
 //		System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");		
-		System.out.println("\tfailed: "+ errors_randomLookup);
+		System.out.println("\tfailed: "+ errors_randomLookup +"/"+ LOOKUP_TESTS_RANDOM);
 		
 		long ttFunc = System.nanoTime() - tsFunc;
 		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFunc / 1000000)) 
@@ -164,8 +186,9 @@ public class Test_TestableMap {
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
-		System.out.println("-- RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
-		
+		System.out.println("========================================================================");
+		System.out.println("================== RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
+		System.out.println("========================================================================");
 		int error_false_positive = 0;
 		int error_false_negative = 0;
 		int error_both = 0;
@@ -179,45 +202,54 @@ public class Test_TestableMap {
 //			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query on the tree
-			Cursor<V> treeResultCursor = tree.rangeQuery(lo, hi);			
-			List<V> treeResult = new ArrayList<V>(Cursors.toList(treeResultCursor));
+			Interval<K> query = new Interval<>(lo, true, hi, false);
+			Cursor<V> treeResultCursor = tree.rangeQuery(query);
+			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
 			
 			//-- execute the query on the comparison map			
-			NavigableMap<K, List<V>> comparisonResultMap = compmap.subMap(lo, true, hi, true);
+			NavigableMap<K, List<V>> comparisonResultMap = compmap.subMap(lo, true, hi, false);
 			//- flatten
-			List<V> flattenedComparisonResult = new LinkedList<V>();
+			List<V> mapAnswers = new LinkedList<V>();
 			for(Map.Entry<K, List<V>> entry : comparisonResultMap.entrySet()) {
-				flattenedComparisonResult.addAll(entry.getValue());
+				mapAnswers.addAll(entry.getValue());
 			}
 			
-			System.out.println("T-result (#="+ flattenedComparisonResult.size() +"): "+ flattenedComparisonResult);
-						
 			//-- Test current query
 			int e_negatives = 0;
 			int e_positives = 0;
 			
 			//-- compute the difference between the resulsts
-			JoinResult<V> difference = ListJoinOuter3way.join3way(treeResult, flattenedComparisonResult);
+			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
 			
-			if(!difference.leftAnti.isEmpty()) {
-				System.out.println("-- false positives (# = "+ difference.leftAnti.size() +"): \n\t"+ difference.leftAnti);
-				e_positives += difference.leftAnti.size();
-			}
-			if(!difference.rightAnti.isEmpty()) {
-				System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
-				e_negatives += difference.rightAnti.size();
+			if(!difference.leftAnti.isEmpty() || !difference.rightAnti.isEmpty()) {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("FAILED.");
+				System.out.println("-- query: \n\t"+ query);
+				System.out.println("-- tree result (# = "+ treeAnswers.size() +"): \n\t"+ treeAnswers);
+				System.out.println("-- comp result (# = "+ mapAnswers.size() +"): \n\t"+ mapAnswers);
+
+				if(!difference.leftAnti.isEmpty()) {
+					System.out.println("-- false positives (# = "+ difference.leftAnti.size() +"): \n\t"+ difference.leftAnti);
+					e_positives += difference.leftAnti.size();
+				}
+				if(!difference.rightAnti.isEmpty()) {
+					System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
+					e_negatives += difference.rightAnti.size();
+				}
+			} else {
+				System.out.print("#"+ i +":\t ");
+				System.out.println("OK.");
 			}
 			
 			//- classify error case
 			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ treeResult.size() +"; #compsize: "+ 
-									flattenedComparisonResult.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				System.out.println("\tErronous: #rsize: "+ treeAnswers.size() +"; #compsize: "+ 
+									mapAnswers.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
 				if(e_negatives > 0 && e_positives > 0) error_both++;
 				else if(e_negatives > 0) error_false_negative++;
 				else if(e_positives > 0) error_false_positive++;
-			}
-			
-		}		
+			}			
+		}	
 		
 		System.out.println("\tToo big results:   "+ error_false_positive);
 		System.out.println("\tToo small results: "+ error_false_negative);
@@ -525,7 +557,7 @@ public class Test_TestableMap {
 		//--- run the actual tests
 		random = new Random(55);
 //		WBTree<Integer, Integer, Long> tree = createWBTree(TestUtils.resolveFilename("wbtree_test_15"));
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20);
+		TestableMap<Integer, Pair<Integer, Double>> tree = TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20);
 //		WRSTree_copyImpl<Integer, Integer, Long> tree = TreeCreation.createWRSTree(TestUtils.resolveFilename("WRSTree_sanity"));
 		
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random, 10000));
@@ -540,12 +572,10 @@ public class Test_TestableMap {
 
 	public static <K extends Comparable<K>, V> void suite1_sanityTestAgainstMemoryMap(
 			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor) {
-//		Cursor<Integer> dataCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random), KEY_HI);
-//		Function<V, K> getKey = (t -> t);
-		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
-		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
-		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
-		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20, testKeysCursor);
+		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap_RS((RSTree1D<K, V, Long>) tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
+		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 30);
+//		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
+//		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20, testKeysCursor);
 	}
 
 //	public static void s2_approxQueries(RSTree1D<Integer, Integer, Long> tree) {

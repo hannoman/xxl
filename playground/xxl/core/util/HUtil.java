@@ -127,11 +127,19 @@ public class HUtil {
 	 */
 	public static <V> LinkedList<V> getAll_SequentialAccess(List<Integer> idxs, List<V> values) {
 		LinkedList<V> taken = new LinkedList<V>();
+		
 		ListIterator<V> valueIter = values.listIterator();
+		int valuesIdx = -1;
+		V value = null;
+		
+		int lastIdx = -1;
 		for(int idx : idxs) {
-			for (int i = 0; i < idx; i++) 
-				valueIter.next();
-			taken.add(valueIter.next());
+			assert idx >= lastIdx; lastIdx = idx; // ensure that the index list is sorted
+			while(valuesIdx < idx) {
+				value = valueIter.next();
+				valuesIdx++;
+			}
+			taken.add(value);
 		}
 		return taken;		
 	}

@@ -93,7 +93,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 //	int rootWeight; // for now don't track this information
 
 	/** Domain of the keys. */
-	Interval<K> universe;
+	public Interval<K> universe;
 	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
@@ -124,7 +124,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	 * 		Default use: containerFactory = BlockFileContainer::new 
 	 * @throws IOException
 	 */
-	public static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
+	public static <K extends Comparable<K>, V, P> TestableMap<K, V> loadFromMetaData(
 			String metaDataFilename, 
 			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
@@ -876,6 +876,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	}
 	
 	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
+	@Override
 	public ProfilingCursor<V> rangeQuery(Interval<K> query){
 		return new QueryCursor(query);
 	}
@@ -951,6 +952,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		@Override
 		public void open() {
 			// get the current node and lock it in the buffer
+			if(sNodes.peek() == null) return; // happens when tree is empty
 			Node curNode = container.get(sNodes.peek(), false); // this should always be the root if we don't descend from a different node
 			markTouched();
 			
@@ -1036,6 +1038,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	
 		/* We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
 		protected boolean hasNextObject() {		
+			if(sNodes.peek() == null) return false; // happens when tree is empty
 			LeafNode curLNode = (LeafNode) container.get(sNodes.peek());
 			sIdx.push(sIdx.pop() + 1); // = increment counter			
 	
@@ -1509,7 +1512,14 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		
 	}
 
-
+	public int weight() {
+		if(rootCID == null)
+			return 0;
+		else				
+			return container.get(rootCID).totalWeight();
+	}
+	
+	
 
 	//-------------------------------------------------------------------------------
 	//--- stupid stuff for interfaces

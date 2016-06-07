@@ -39,7 +39,7 @@ public class ListJoinOuter3way {
 		}
 	}
 	
-	public static <K extends Comparable<K>> JoinResult<K> listJoinOuter3way(List<K> list1, List<K> list2) {
+	public static <K extends Comparable<K>> JoinResult<K> sortedJoin3way(List<K> list1, List<K> list2) {
 		//- compute the full join		
 		Iterator<K> sortedInput0 = list1.iterator(); 
 		Iterator<K> sortedInput1 = list2.iterator();
@@ -59,31 +59,43 @@ public class ListJoinOuter3way {
 				type);
 
 		//- partition the tuples depending on where nulls occur
-		Function<Object[], Integer> groupFun = new Function<Object[], Integer>() {
-			@Override
-			public Integer apply(Object[] t) {
-				if(t[0] == null)
-					return 2;
-				else if(t[1] == null)
-					return 1;
-				else
-					return 0;
-			}
-		};  
-
-		List<Cursor<Object[]>> groups = Cursors.toList(new HashGrouper<Object[]>(join, FunJ8.toOld(groupFun)));
-
-		//- simplify the result
-		// for now simplify the joined pairs to single values (we don't have support for custom comparators anyway)
-//		List<Pair<K,K>> joined = Cursors.toList(new Mapper<Object[], Pair<K,K>>( FunJ8.toOld( (Object[] t) -> new Pair<K,K>((K) t[0], (K) t[1]) ), groups.get(0) ) );
-		List<K> joined = Cursors.toList(new Mapper<Object[], K>( FunJ8.toOld( (Object[] t) -> (K) t[0] ), groups.get(0) ) );
-		List<K> leftAnti  = Cursors.toList(new Mapper<Object[], K>( FunJ8.toOld( (Object[] t) -> (K) t[0] ), groups.get(1) ) );
-		List<K> rightAnti = Cursors.toList(new Mapper<Object[], K>( FunJ8.toOld( (Object[] t) -> (K) t[1] ), groups.get(2) ) );
-		
-//		return new Triple<List<Pair<K,K>>, List<K>, List<K>>(joined, leftAnti, rightAnti);
-		return new JoinResult<K>(joined, leftAnti, rightAnti);
+		return partitionOuterJoin(join);
 	}
 	
+	/** No need for K being Comparable. But its .equals is used. */
+	public static <K> JoinResult<K> join3way(List<K> list1, List<K> list2) {
+		BiPredicate<K,K> predNew = ( (x,y) -> x.equals(y) );
+		// NestedLoopsJoin(Iterator<? extends I> input0, Cursor<? extends I> input1, , Function<? super I,? extends E> newResult, NestedLoopsJoin.Type type)
+		NestedLoopsJoin<K, Object[]> join = new NestedLoopsJoin<K, Object[]>(
+			 list1.iterator(), 						// Iterator<K> input0
+			 new IterableCursor<K>(list2),			// Cursor<K> which needs to be resetable 
+			 FunJ8.toOld(predNew), 					// Predicate<? super I> predicate
+			 new Tuplify(), 						// Function<? super I,? extends E> newResult
+			 NestedLoopsJoin.Type.OUTER_JOIN);		// NestedLoopsJoin.Type type
+		 
+		//- partition the tuples depending on where nulls occur
+		return partitionOuterJoin(join);
+	}
+
+	/** Partitions the result of a full outer join into its 3 components: joined elements, left remainders, right remainders. */
+	public static <K> JoinResult<K> partitionOuterJoin(Cursor<Object[]> tuples) {
+		List<K> joined = new LinkedList<K>();
+		List<K> leftAnti = new LinkedList<K>();
+		List<K> rightAnti = new LinkedList<K>();
+		
+		while(tuples.hasNext()) {
+			Object[] t = tuples.next();
+			if(t[0] == null)
+				rightAnti.add((K) t[1]);
+			else if(t[1] == null)
+				leftAnti.add((K) t[0]);
+			else
+				joined.add((K) t[0]);
+		}
+		
+		return new JoinResult<K>(joined, leftAnti, rightAnti); 
+	}
+
 	/** Quick test. */
 	public static void main(String[] args) {
 		List<Integer> list1 = Arrays.asList(2,5,7,10,12,18);
@@ -103,41 +115,6 @@ public class ListJoinOuter3way {
 		System.out.println("-- joined:\n\t"+ resTrip.joined);
 		System.out.println("-- left anti:\n\t"+ resTrip.leftAnti);
 		System.out.println("-- right anti:\n\t"+ resTrip.rightAnti);
-	}
-	
-	
-	/** No need for K being Comparable. But its .equals is used. */
-	public static <K> JoinResult<K> join3way(List<K> list1, List<K> list2) {
-		BiPredicate<K,K> predNew = ( (x,y) -> x.equals(y) );
-		// NestedLoopsJoin(Iterator<? extends I> input0, Cursor<? extends I> input1, , Function<? super I,? extends E> newResult, NestedLoopsJoin.Type type)
-		NestedLoopsJoin<K, Object[]> join = new NestedLoopsJoin<K, Object[]>(
-			 list1.iterator(), 						// Iterator<K> input0
-			 new IterableCursor<K>(list2),			// Cursor<K> which needs to be resetable 
-			 FunJ8.toOld(predNew), 					// Predicate<? super I> predicate
-			 new Tuplify(), 						// Function<? super I,? extends E> newResult
-			 NestedLoopsJoin.Type.OUTER_JOIN);		// NestedLoopsJoin.Type type
-		 
-		//- partition the tuples depending on where nulls occur
-		return partitionOuterJoin(join);
-	}
-	
-	/** Partitions the result of a full outer join into its 3 components: joined elements, left remainders, right remainders. */
-	public static <K> JoinResult<K> partitionOuterJoin(Cursor<Object[]> tuples) {
-		List<K> joined = new LinkedList<K>();
-		List<K> leftAnti = new LinkedList<K>();
-		List<K> rightAnti = new LinkedList<K>();
-		
-		while(tuples.hasNext()) {
-			Object[] t = tuples.next();
-			if(t[0] == null)
-				rightAnti.add((K) t[1]);
-			else if(t[1] == null)
-				leftAnti.add((K) t[0]);
-			else
-				joined.add((K) t[0]);
-		}
-		
-		return new JoinResult<K>(joined, leftAnti, rightAnti); 
 	}
 	
 	

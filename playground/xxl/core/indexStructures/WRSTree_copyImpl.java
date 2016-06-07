@@ -1599,6 +1599,10 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 		return getKey;
 	}
 
+	ProfilingCursor<V> rangeQuery(Interval<K> query) {
+		return null;
+	}
+
 
 
 

@@ -68,7 +68,7 @@ public class Test_ApproxQueries {
 	}
 
 	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generated correctly. */ 
-	public static void s_generation(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
+	public static void s_generation(TestableMap<K, V> tree) {
 		random = new CopyableRandom(55);
 		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
@@ -123,7 +123,7 @@ public class Test_ApproxQueries {
 	/** Exact computation of one query.
 	 * @return a pair <tt>(result, count)</tt> where count is the full number of entries satisfying the range query.
 	 */
-	public static Triple<Double,Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(RSTree1D<Integer, Pair<Integer, Double>, Long> tree, int key_lo, int key_hi) {
+	public static Triple<Double,Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(TestableMap<K, V> tree, int key_lo, int key_hi) {
 //		double resultExact = (double) Cursors.last(new Aggregator(exactVals, new StatefulAverage()));
 		// exact computation
 		ProfilingCursor<Pair<Integer, Double>> exactQueryCursor = tree.rangeQuery(key_lo, key_hi);
