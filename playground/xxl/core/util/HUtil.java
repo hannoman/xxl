@@ -51,6 +51,17 @@ public class HUtil {
 	 * @return position <tt>i</tt>
 	 */
 	public static <T> int binFindES(List<? extends Comparable<? super T>> list, T key) {
+		int pos = binFindSomeInsertionPoint(list, key);
+		while(pos < list.size() && list.get(pos).equals(key))
+			pos++;
+		return pos;
+	}
+	
+	/** Wrapper for {@link Collections#binarySearch}.
+	 * Note that Collections.binarySearch stops as soon as it finds an equal element. 
+	 * The javadoc-comment for its return type is kinda misleading.
+	 */
+	private static <T> int binFindSomeInsertionPoint(List<? extends Comparable<? super T>> list, T key) {
 		int rawpos = Collections.binarySearch(list, key);		
 		if(rawpos < 0)
 			return -(rawpos + 1);
@@ -65,7 +76,7 @@ public class HUtil {
 	 * @return position <tt>i</tt>
 	 */
 	public static <T> int binFindSE(List<? extends Comparable<? super T>> list, T key) {
-		int pos = binFindES(list, key);
+		int pos = binFindSomeInsertionPoint(list, key);
 		while(pos >= 1 && list.get(pos-1).equals(key))
 			pos--;
 		return pos;

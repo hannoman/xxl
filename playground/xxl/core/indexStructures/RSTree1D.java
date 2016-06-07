@@ -394,14 +394,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			return samples.size() < samplesPerNodeLo;			
 		}
 
-		// TODO: change to Interval syntax
-		public Integer chooseFirstSubtreeIdx(K key) {
-			for(int i=0; i < ranges.size(); i++)
-				if(ranges.get(i).contains(key))
-					return i;
-			return null;
-		}
-		
 		public Integer chooseFirstSubtreeIdx_Interval(Interval<K> query) {
 			for(int i=0; i < ranges.size(); i++)
 				if(ranges.get(i).intersects(query))
@@ -410,7 +402,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		}
 		
 		public P chooseFirstSubtreeCID(K key) {
-			return pagePointers.get(chooseFirstSubtreeIdx(key));
+			return pagePointers.get(chooseFirstSubtreeIdx_Interval(new Interval<K>(key)));
 		}
 
 		@Override
@@ -700,16 +692,12 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		 */
 		public List<Integer> lookupIdxs(K key) {
 			List<Integer> idx = new LinkedList<Integer>();
-			
+
 			List<K> mappedList = new MappedList<V,K>(values, FunJ8.toOld(getKey));
-			
-			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
-			
-			if(pos >= 0) { // key found
-				while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
-					idx.add(pos);
-					pos++;
-				}				
+			int pos = HUtil.binFindSE(mappedList, key); // get starting position by binary search
+			while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
+				idx.add(pos);
+				pos++;
 			}
 			
 			return idx;
@@ -920,7 +908,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			//- state
 			sNodes = new Stack<P>();
 			sNodes.push(startNode);
-			sIdx = new Stack<Integer>();			
+			sIdx = new Stack<Integer>();
 			precomputed = null; // the next value to spit out
 		}
 		
@@ -975,7 +963,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			
 			// find starting position
 			List<K> mappedList = new MappedList<V,K>(curLNode.values, FunJ8.toOld(getKey));			
-			int pos = HUtil.binFindES(mappedList, query.lo);
+			int pos = HUtil.binFindSE(mappedList, query.lo); // CHECK!!
 			sIdx.push(pos);
 			
 			// regarding first computation of hasNext:

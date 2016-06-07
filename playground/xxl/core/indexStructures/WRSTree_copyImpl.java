@@ -771,14 +771,12 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			
 			List<K> mappedList = new MappedList<V,K>(values, FunJ8.toOld(getKey));
 			
-			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
+			int pos = HUtil.binFindSE(mappedList, key); // get starting position by binary search
 			
-			if(pos >= 0) { // key found
-				while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
-					idx.add(pos);
-					pos++;
-				}				
-			}
+			while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
+				idx.add(pos);
+				pos++;
+			}				
 			
 			return idx;
 		}
@@ -982,29 +980,24 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node		
 		Stack<Integer> sIdx; // sIdx.peek() =: current index
 		
-		
 		V precomputed;
 		
-		public QueryCursor(K lo, K hi, P startNode, int startlevel) {
+		private QueryCursor(Interval<K> query, P startNode, int startlevel) {
 			super();
-			this.startlevel = startlevel;
-			
-			// profiling
+			//- query
+			this.query = query;
+			//- profiling
 			p_nodesTouched = new HashSet<Pair<Integer,P>>();
-			// query
-			this.lo = lo;
-			this.hi = hi;
-						
+			this.startlevel = startlevel;
+			//- state
 			sNodes = new Stack<P>();
 			sNodes.push(startNode);
-			
 			sIdx = new Stack<Integer>();			
-						
 			precomputed = null; // the next value to spit out
 		}
 		
-		public QueryCursor(K lo, K hi) {
-			this(lo, hi, rootCID, rootHeight);
+		public QueryCursor(Interval<K> query) {
+			this(query, rootCID, rootHeight);
 		}
 		
 		@Override
@@ -1598,11 +1591,6 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 	public Function<V, K> getGetKey() {
 		return getKey;
 	}
-
-	ProfilingCursor<V> rangeQuery(Interval<K> query) {
-		return null;
-	}
-
 
 
 

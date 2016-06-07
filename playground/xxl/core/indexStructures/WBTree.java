@@ -13,6 +13,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.naming.OperationNotSupportedException;
+
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
@@ -22,7 +24,9 @@ import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.Converter;
+import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.HUtil;
+import xxl.core.util.Interval;
 import xxl.core.util.Triple;
 
 public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
@@ -318,19 +322,17 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 		 * @param key key to look for
 		 * @return list of indices i with "getKey(values[i]) == key" 
 		 */
-		public List<Integer> lookup(K key) {
+		public List<Integer> lookupIdxs(K key) {
 			List<Integer> idx = new LinkedList<Integer>();
 			
 			List<K> mappedList = new MappedList<V,K>(values, FunJ8.toOld(getKey));
 			
-			int pos = Collections.binarySearch(mappedList, key); // get starting position by binary search
+			int pos = HUtil.binFindSE(mappedList, key); // get starting position by binary search
 			
-			if(pos >= 0) { // key found
-				while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
-					idx.add(pos);
-					pos++;
-				}				
-			}
+			while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
+				idx.add(pos);
+				pos++;
+			}				
 			
 			return idx;
 		}
@@ -535,7 +537,7 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 		}		
 		LeafNode lnode = (LeafNode) container.get(nodeCID);
 		
-		List<Integer> hitIdx = lnode.lookup(key);
+		List<Integer> hitIdx = lnode.lookupIdxs(key);
 		Stream<V> results = hitIdx.stream().map(lnode.values::get);
 		ArrayList<V> resultsV = results.collect(Collectors.toCollection(ArrayList<V>::new));
 		
@@ -702,7 +704,8 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 		return getKey;
 	}
 
-	ProfilingCursor<V> rangeQuery(Interval<K> query) {
+	public ProfilingCursor<V> rangeQuery(Interval<K> query) {
+		assert false : "Operation not supported.";
 		return null;
 	} 
 	

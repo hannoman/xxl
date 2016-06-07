@@ -43,10 +43,11 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 10000;
+	public static final int NUMBER_OF_ELEMENTS = 100000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
-	public static final int KEY_LO = 0, KEY_HI = 10000;
+	public static final int KEY_LO = 0, KEY_HI = 1000000;
+	static final double VAL_LO = 0, VAL_HI = (KEY_HI * KEY_HI + KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static Random random = new Random(42);	
@@ -86,7 +87,8 @@ public class Test_TestableMap {
 			int keyNr = random.nextInt(containedKeys.size());
 			K key = containedKeys.get(keyNr);
 			
-			List<V> treeAnswers = tree.get(key);
+			// List<V> treeAnswers = tree.get(key);
+			List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
 			List<V> mapAnswers = compmap.get(key);
 			//-- compute the difference between the resulsts
 			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
@@ -102,11 +104,11 @@ public class Test_TestableMap {
 				
 				errors_positiveLookup++;
 			} else {
-				System.out.print("#"+ i +":\t ");
-				System.out.println("OK.");
-				System.out.println("-- query: \n\t"+ key);
-				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
-				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
+//				System.out.print("#"+ i +":\t ");
+//				System.out.println("OK.");
+//				System.out.println("-- query: \n\t"+ key);
+//				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
+//				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
 			}
 			
 		}		
@@ -138,7 +140,8 @@ public class Test_TestableMap {
 			K key = testKeysCursor.next();
 			
 			long tsQuerySingle = System.nanoTime();
-				List<V> treeAnswers = tree.get(key);
+//				List<V> treeAnswers = tree.get(key);
+				List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
 			ttQuery += System.nanoTime() - tsQuerySingle;
 			
 			long tsCompMapSingle = System.nanoTime();
@@ -163,8 +166,8 @@ public class Test_TestableMap {
 				}
 				errors_randomLookup++;
 			} else {
-				System.out.print("#"+ i +":\t ");
-				System.out.println("OK.");
+//				System.out.print("#"+ i +":\t ");
+//				System.out.println("OK.");
 			}
 			
 		}
@@ -202,7 +205,7 @@ public class Test_TestableMap {
 //			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query on the tree
-			Interval<K> query = new Interval<>(lo, true, hi, false);
+			Interval<K> query = new Interval<K>(lo, true, hi, false);
 			Cursor<V> treeResultCursor = tree.rangeQuery(query);
 			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
 			
@@ -237,8 +240,8 @@ public class Test_TestableMap {
 					e_negatives += difference.rightAnti.size();
 				}
 			} else {
-				System.out.print("#"+ i +":\t ");
-				System.out.println("OK.");
+//				System.out.print("#"+ i +":\t ");
+//				System.out.println("OK.");
 			}
 			
 			//- classify error case
@@ -533,7 +536,7 @@ public class Test_TestableMap {
 			
 			//-- Test for false negatives
 			for(Integer cVal : cRes) {
-				int pos = Collections.binarySearch(tRes, cVal);
+				int pos = Collections.binarySearch(tRes, cVal); // FIXME
 				if(pos < 0) // <==> not found
 					e_negatives++;					
 			}
@@ -555,7 +558,7 @@ public class Test_TestableMap {
 
 	public static void main(String[] args) throws Exception {
 		//--- run the actual tests
-		random = new Random(55);
+		random = new Random(44);
 //		WBTree<Integer, Integer, Long> tree = createWBTree(TestUtils.resolveFilename("wbtree_test_15"));
 		TestableMap<Integer, Pair<Integer, Double>> tree = TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20);
 //		WRSTree_copyImpl<Integer, Integer, Long> tree = TreeCreation.createWRSTree(TestUtils.resolveFilename("WRSTree_sanity"));
@@ -564,8 +567,8 @@ public class Test_TestableMap {
 		
 		// PROBLEM: Pair is not comparable per se...
 		suite1_sanityTestAgainstMemoryMap(tree, 
-				DataDistributions.data_iidUniformPairsIntDouble(random, 0, 10000, 0, 100000), 		// data
-				testKeysCursor																  		// test data
+				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
+				testKeysCursor																  					// test data
 				);
 //			s_approxQueries(tree);
 	}
@@ -573,9 +576,9 @@ public class Test_TestableMap {
 	public static <K extends Comparable<K>, V> void suite1_sanityTestAgainstMemoryMap(
 			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor) {
 		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap_RS((RSTree1D<K, V, Long>) tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
-		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 30);
-//		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
-//		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 20, testKeysCursor);
+		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
+		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
+		// rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 50, testKeysCursor); // take long
 	}
 
 //	public static void s2_approxQueries(RSTree1D<Integer, Integer, Long> tree) {

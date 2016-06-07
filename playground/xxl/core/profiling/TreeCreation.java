@@ -73,22 +73,24 @@ public class TreeCreation {
 		//-- Insertion - generate test data		
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
+//		int newWeightByWeight = tree.weight();
+//		int newWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
+		
 		for (int i = 1; i <= AMOUNT; i++) {					
 			V value = dataCursor.next();
 			K key = getKey.apply(value);
 			
-			//- check whether the items really get inserted
-			int oldWeightByWeight = tree.weight();
-			int oldWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
+//			//- check whether the items really get inserted
+//			int oldWeightByValues = newWeightByValues;
+//			int oldWeightByWeight = newWeightByWeight;
 			tree.insert(value);
-			int newWeightByWeight = tree.weight();
-			int newWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
-			assert newWeightByWeight > oldWeightByWeight;
-			assert newWeightByValues > oldWeightByValues;
+//			newWeightByWeight = tree.weight();
+//			newWeightByValues = Cursors.count(tree.rangeQuery(tree.universe));
+//			assert newWeightByWeight > oldWeightByWeight;
+//			assert newWeightByValues > oldWeightByValues;
 			
 			
-			
-			
+			//--
 			compmap.putIfAbsent(key, new LinkedList<V>());
 			compmap.get(key).add(value);  
 			if (i % (AMOUNT / 10) == 0) {
@@ -97,6 +99,7 @@ public class TreeCreation {
 			}
 		}
 		
+		System.out.println("Resulting tree weight (by weight): "+ tree.weight());
 		System.out.println("Resulting tree height: " + tree.height());
 		return compmap;
 	}

@@ -3,6 +3,8 @@ package xxl.core.indexStructures;
 import java.util.List;
 import java.util.function.Function;
 
+import javax.naming.OperationNotSupportedException;
+
 import xxl.core.collections.containers.Container;
 import xxl.core.cursors.Cursor;
 import xxl.core.indexStructures.RSTree1D.QueryCursor;
@@ -29,7 +31,7 @@ public interface TestableMap<K extends Comparable<K>, V> {
 
 	Cursor<V> rangeQuery(K lo, K hi);
 
-	ProfilingCursor<V> rangeQuery(Interval<K> query);
+	ProfilingCursor<V> rangeQuery(Interval<K> query); 
 	
 	
 }
