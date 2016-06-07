@@ -70,7 +70,7 @@ public class ListSAImplementor<E> extends AbstractSAImplementor<E> {
 	 * @throws IllegalArgumentException Throws an IllegalArgumentException
 	 * 		if something goes wrong with the insertion due to the passed argument.
 	 */
-	@Override
+	@Override	
 	public void insert(E o) throws IllegalArgumentException {
 		list.add(list.size(), o);
 	}

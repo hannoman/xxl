@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -29,7 +30,7 @@ public class TreeCreation {
 
 	/** General fill method which just takes its values from a data generating cursor. 
 	 * Returns a memory map for comparisons against the resulting data structure. */
-	public static <K extends Comparable<K>, V> SortedMap<K, List<V>> fillTestableMap(
+	public static <K extends Comparable<K>, V> NavigableMap<K, List<V>> fillTestableMap(
 			TestableMap<K, V> tree, 
 			int AMOUNT, 
 			Cursor<V> dataCursor,
@@ -251,7 +252,7 @@ public class TreeCreation {
 			int KEY_LO, int KEY_HI, double VAL_LO, double VAL_HI) throws IOException {
 		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix, 2048, 5, 20);
 		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		Map<Integer, Pair<Integer, Double>> compmap = TreeCreation.fillTestableMap(tree, nTuples, dataCursor, (t -> t.getElement1()));
+		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, nTuples, dataCursor, (t -> t.getElement1()));
 		
 		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
 		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
