@@ -100,7 +100,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public RSTree1D(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, int leafLo, int leafHi, Function<V, K> getKey) {
+	public RSTree1D(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, 
+			int leafLo, int leafHi, Function<V, K> getKey) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -434,7 +435,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
 				// calculate the new ranges
 				Interval<K> oldRange = ranges.get(pos);
-				Interval<K> rangeLeft = new Interval<K>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true); // CHECK
+				Interval<K> rangeLeft = new Interval<K>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true);
 				Interval<K> rangeRight = new Interval<K>(childInsertInfo.separator, false, oldRange.hi, oldRange.hiIn);
 				ranges.set(pos, rangeLeft);
 				ranges.add(pos+1, rangeRight);
@@ -670,20 +671,60 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 
 		/**
 		 * Splits the leaf in the middle.
+		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
 		 */
 		public InsertionInfo split() {
-			LeafNode newode = new LeafNode();
-			int remLeft = values.size() / 2;
-			int remRight = values.size() - remLeft;
+			//- find good splitting position
+			int targetPos = values.size() / 2;
+			K separator = getKey.apply(values.get(targetPos));
 			
-			newode.values = HUtil.splitOffRight(values, values.size() / 2, new ArrayList<V>());
-			K separator = getKey.apply(values.get(values.size()-1));
+			int sepLeftPos = targetPos;
+			while(sepLeftPos > 1 && separator.compareTo(getKey.apply(values.get(sepLeftPos-1))) == 0)
+				sepLeftPos--;
+			
+			int sepRightPos = targetPos;
+			while(sepRightPos < values.size() && separator.compareTo(getKey.apply(values.get(sepRightPos))) == 0)
+				sepRightPos++;
+			
+			int separatorPos;
+			if(targetPos - sepLeftPos <= sepRightPos - targetPos)
+				separatorPos = sepLeftPos;
+			else
+				separatorPos = sepRightPos;
+			
+			//- build new node
+			LeafNode newode = new LeafNode();
+			
+			int remLeft = separatorPos, remRight = values.size() - remLeft;
+			newode.values = HUtil.splitOffRight(values, remLeft, new ArrayList<V>());
+			K usedSeparator = getKey.apply(values.get(values.size()-1));
 			
 			//- put new node into Container
 			P newodeCID = container.insert(newode);
 			
 			return new InsertionInfo(newodeCID, separator, remLeft, remRight);
 		}
+		
+//		/**
+//		 * Splits the leaf in the middle.
+//		 * Wrong version with insufficient handling for duplicates.
+//		 */
+//		public InsertionInfo split() {
+//			LeafNode newode = new LeafNode();
+//			int separatorPos = values.size() / 2;
+//			K separator = getKey.apply(values.get(separatorPos));
+//			
+//			int remLeft = values.size() / 2;
+//			int remRight = values.size() - remLeft;
+//			
+//			newode.values = HUtil.splitOffRight(values, remLeft, new ArrayList<V>());
+//			K separator = getKey.apply(values.get(values.size()-1));
+//			
+//			//- put new node into Container
+//			P newodeCID = container.insert(newode);
+//			
+//			return new InsertionInfo(newodeCID, separator, remLeft, remRight);
+//		}
 		
 		/**
 		 * Returns the indices of the found values. 

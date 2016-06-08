@@ -30,4 +30,6 @@
 	-> Also duplicate handling of the trees should be specified better. (CURRENT)
 		-> check out SortMergeJoin and HashGrouper to implement the comparison, aand therefore SweepAreas.
 	
-* copy updated QueryCursor implementation from RSTree1D to WBTRee and WRSTree_copyImpl	   
+* copy updated QueryCursor implementation from RSTree1D to WBTRee and WRSTree_copyImpl
+
+* simplify/unify TreeCreation.createRSTree_withInnerUnbufferedNodes and TreeCreation.createRSTree	   

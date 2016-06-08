@@ -21,6 +21,7 @@ import xxl.core.io.converters.IntegerConverter;
 import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
+import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.ListJoinOuter3way;
@@ -46,11 +47,11 @@ public class Test_TestableMap {
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
-	public static final int KEY_LO = 0, KEY_HI = 1000000;
-	static final double VAL_LO = 0, VAL_HI = (KEY_HI * KEY_HI + KEY_HI);
+	public static final int KEY_LO = 0, KEY_HI = 10000000;
+	static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
-	public static Random random = new Random(42);	
+	public static CopyableRandom random = new CopyableRandom(42);	
 	
 	private static WBTree<Integer, Integer, Long> createWBTree(String testFile) {
 		
@@ -140,8 +141,8 @@ public class Test_TestableMap {
 			K key = testKeysCursor.next();
 			
 			long tsQuerySingle = System.nanoTime();
-//				List<V> treeAnswers = tree.get(key);
-				List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
+				List<V> treeAnswers = tree.get(key);
+//				List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
 			ttQuery += System.nanoTime() - tsQuerySingle;
 			
 			long tsCompMapSingle = System.nanoTime();
@@ -558,9 +559,11 @@ public class Test_TestableMap {
 
 	public static void main(String[] args) throws Exception {
 		//--- run the actual tests
-		random = new Random(44);
+		random = new CopyableRandom(4444);
 //		WBTree<Integer, Integer, Long> tree = createWBTree(TestUtils.resolveFilename("wbtree_test_15"));
-		TestableMap<Integer, Pair<Integer, Double>> tree = TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20);
+		TestableMap<Integer, Pair<Integer, Double>> tree = 
+				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20, random);
+		
 //		WRSTree_copyImpl<Integer, Integer, Long> tree = TreeCreation.createWRSTree(TestUtils.resolveFilename("WRSTree_sanity"));
 		
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random, 10000));

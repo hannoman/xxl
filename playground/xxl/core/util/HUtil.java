@@ -19,7 +19,7 @@ public class HUtil {
 	/** Splits off the right part of a list and appends it to another given list.
 	 * 
 	 * @param inList the list to split
-	 * @param remLeft number of elements to keep in the list to split. targetList gets the elements from <b><tt>remLeft</tt></b> up to <b><tt>inList.size()</tt></b>
+	 * @param remLeft number of elements to keep in the list to split. targetList gets the elements from <b><tt>remLeft</tt></b> up to <b><tt>inList.size() - 1</tt></b>
 	 * @param targetList the (already instanciated list) where the split off elements should be added to
 	 * @return the modified <tt>targetList</tt>
 	 */

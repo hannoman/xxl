@@ -110,7 +110,7 @@ public class TreeCreation {
 	 * Note: Does not set the PRNG-state of the tree.
 	 */
 	public static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree(
-			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
+			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -161,7 +161,8 @@ public class TreeCreation {
 						leafHi, 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
-				
+		//-- set the PRNG state
+		tree.setRNG(rng);
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
 		
@@ -169,73 +170,13 @@ public class TreeCreation {
 		return tree;
 	}
 
-	public static WRSTree_copyImpl<Integer, Pair<Integer, Double>, Long> createWRSTree(
-			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
-		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
-		
-		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
-		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
-				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
-		
-		//-- estimating parameters for the tree
-		//- fill leafes optimal
-		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
-		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
-		
-		//- set branching param fixed
-//		int branchingParamHi = 20;
-//		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
-//		int branchingParamHi = 8;
-//		int branchingParamLo = 4;
-		int branchingParamHi = branchingParamHiWish;
-		int branchingParamLo = branchingParamLoWish;
-		
-		//- determine how much is left for samples
-		int innerSpaceLeft = BLOCK_SIZE;
-		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
-		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
-		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
-		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
-		
-		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
-		//- set sample param for the remaining space optimal
-		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
-		int samplesPerNodeLo = samplesPerNodeHi / 4;		
-		
-		System.out.println("Initializing tree with parameters: ");
-		System.out.println("\t block size: \t"+ BLOCK_SIZE);
-		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
-		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
-		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
-
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
-						samplesPerNodeLo, 
-						samplesPerNodeHi, 
-						branchingParamLo, 
-						branchingParamHi, 
-						leafLo, 
-						leafHi, 
-						((Pair<Integer, Double> x) -> x.getFirst())
-					);
-				
-		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
-		
-		System.out.println("Initialization of the tree finished.");
-		return tree;
-	}
-	
 	/** Tries to set the tree parameters so that actually unbuffered inner nodes can emerge. 
 	 * See {@link xxl.core.indexStructures.RSTree1D.ReallyLazySamplingCursor.createSampler(P)}
 	 * 
 	 * Note: Does not set the PRNG-state of the tree.
 	 */
-	public static TestableMap<K, V> createRSTree_withInnerUnbufferedNodes(
-			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
+	public static <K extends Comparable<K>,V> TestableMap<K, V> createRSTree_withInnerUnbufferedNodes(
+		String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -285,6 +226,69 @@ public class TreeCreation {
 						leafHi, 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
+		
+		//-- set the PRNG state
+		tree.setRNG(rng);
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		
+		
+		System.out.println("Initialization of the tree finished.");
+		return tree;
+	}
+
+	public static WRSTree_copyImpl<Integer, Pair<Integer, Double>, Long> createWRSTree(
+		String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
+		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
+		
+		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
+		FixedSizeConverter<Pair<Integer,Double>> valueConverter = 
+				new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+		FixedSizeConverter<Interval<Integer>> rangeConverter = Interval.getConverter(keyConverter);
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
+		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
+		
+		//- set branching param fixed
+//		int branchingParamHi = 20;
+//		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
+//		int branchingParamHi = 8;
+//		int branchingParamLo = 4;
+		int branchingParamHi = branchingParamHiWish;
+		int branchingParamLo = branchingParamLoWish;
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getSerializedSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+		
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+
+		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
+						samplesPerNodeLo, 
+						samplesPerNodeHi, 
+						branchingParamLo, 
+						branchingParamHi, 
+						leafLo, 
+						leafHi, 
+						((Pair<Integer, Double> x) -> x.getFirst())
+					);
 				
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
@@ -292,7 +296,7 @@ public class TreeCreation {
 		System.out.println("Initialization of the tree finished.");
 		return tree;
 	}
-
+	
 	public static void createAndSave_RSTree_pairsIntDouble(
 			String metaDataFilename, String containerPrefix, int nTuples, CopyableRandom random,
 			int KEY_LO, int KEY_HI, double VAL_LO, double VAL_HI) throws IOException {
