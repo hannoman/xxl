@@ -22,6 +22,14 @@
  * 
  *   Mini-Milestone: Generalize Query-Types
  *   Mini-Milestone: Support removals
+
+========== Futures ==========
+
+* extend to Hilbert-RTrees
+ 
+========== Further testing ==========
+
+* compare to exact BTree query
  
 ========== Other ==========
 

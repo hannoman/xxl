@@ -92,6 +92,9 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	/** Domain of the keys. */
 	public Interval<K> universe;
 	
+	/** Amount of duplicate key values allowed. 0 for no restriction. */
+	int nDuplicatesAllowed = 1;
+	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
@@ -249,14 +252,14 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	/**
 	 * Insertion. 
 	 */
-	public void insert(V value) {
+	public boolean insert(V value) {
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
 			root.values = new ArrayList<V>(leafHi);
 			root.values.add(value);
 			rootHeight = 0;
 			rootCID = container.insert(root);
-			return;
+			return true;
 		} else {
 			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
 			

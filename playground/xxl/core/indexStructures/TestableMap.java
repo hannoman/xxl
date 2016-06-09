@@ -17,8 +17,9 @@ public interface TestableMap<K extends Comparable<K>, V> {
 
 	/**
 	 * Insertion. 
+	 * @return 
 	 */
-	public void insert(V value);
+	public boolean insert(V value);
 
 	/**
 	 * Lookup.

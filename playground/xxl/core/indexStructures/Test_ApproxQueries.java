@@ -3,6 +3,7 @@ package xxl.core.indexStructures;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -46,13 +47,14 @@ public class Test_ApproxQueries {
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
-	public static final double INCONFIDENCE = 0.05;
+	public static final double INCONFIDENCE = 0.10;
 	public static final double PRECISION_BOUND = 0.10;
 	static final int KEY_LO = 0;
 	static final int KEY_HI = 9000000; // 10000
 	static final double VAL_LO = 0;
 	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
 	static final int N_COMPARISONS = 100;
+	static int verbosity = 1;
 	
 	static final int BATCHSAMPLING_SIZE = 20;
 	
@@ -74,7 +76,7 @@ public class Test_ApproxQueries {
 //		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 //		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
 //		for(Integer key : compMap.keySet()) {
-//			System.out.println(key +": "+ compMap.get(key));
+//			outputln(1, key +": "+ compMap.get(key));
 //		}
 //	}
 	
@@ -111,7 +113,7 @@ public class Test_ApproxQueries {
 		double estimatedError = approx.getElement2();
 		double realError = Math.abs( (approx.getElement1() - exact.getElement1() ) / exact.getElement1() );
 				
-		System.out.println("approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
+		outputln(1, "approx/exact: aggregate: "+ approx.getElement1() +" / "+ exact.getElement1() +
 				" - #entries needed: "+ approx.getElement3() +"/"+ exact.getElement2() + 
 				" - estimated error: "+ String.format("%2.4f", estimatedError * 100) +"%"+
 				" - real error: "+      String.format("%2.4f", realError      * 100) +"%");
@@ -120,12 +122,12 @@ public class Test_ApproxQueries {
 		int approxInspected = approxCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
 		int approxPruned = approxCursorProfilingInfo.getElement2().values().stream().reduce(0, (x,y) -> x+y);
 		
-		System.out.println("\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
+		outputln(4, "\t approx: nodes touched: "+ approxCursorProfilingInfo.getElement1() +" - nodes pruned: "+ approxCursorProfilingInfo.getElement2());
 		Pair<Map<Integer,Integer>, Map<Integer, Integer>> exactCursorProfilingInfo = exact.getElement3().getProfilingInformation();
 		int exactTotal = exactCursorProfilingInfo.getElement1().values().stream().reduce(0, (x,y) -> x+y);
-		System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
-		System.out.println("\t approx/exact touched: "+ approxInspected +" / "+ exactTotal);
-		System.out.println("\t query: "+ new Interval<Integer>(key_lo, key_hi));
+		outputln(4, "\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
+		outputln(1, "\t approx/exact touched: "+ approxInspected +" / "+ exactTotal);
+		outputln(3, "\t query: "+ new Interval<Integer>(key_lo, key_hi));
 		
 		return new Pair<Integer, Integer>(approxInspected, exactTotal);
 	}
@@ -174,7 +176,7 @@ public class Test_ApproxQueries {
 			relativeError = Math.abs(eps / agg); // TODO: this is probably not totally exact
 			/*
 			if(i % REPORT_INTERVAL == 0) {
-				System.out.println(i + ":\tval: " + nVal + "\t agg: " + agg + 
+				outputln(1, i + ":\tval: " + nVal + "\t agg: " + agg + 
 						"\t eps: "+ eps +"\t relError: "+ String.format("%3.3f", (Math.abs(relativeError) / 100)) +"%");
 			}
 			*/			
@@ -192,7 +194,7 @@ public class Test_ApproxQueries {
 					final int SAMPLE_SIZE) {
 		
 		//-- rangeQuery tests
-		System.out.println("-- SamplingQuery Tests (#queries: "+ SAMPLING_QUERY_TESTS +"; #samples per query: "+ SAMPLE_SIZE +"):");
+		outputln(1, "-- SamplingQuery Tests (#queries: "+ SAMPLING_QUERY_TESTS +"; #samples per query: "+ SAMPLE_SIZE +"):");
 		
 		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
 		containedKeys.sort(null);
@@ -207,13 +209,13 @@ public class Test_ApproxQueries {
 			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
 			long possKeys = (long)hi - (long)lo + 1;
 			
-			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+			outputln(1, "Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query
 			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(lo, hi, BATCHSAMPLING_SIZE), SAMPLE_SIZE);			
 			List<Pair<Integer, Double>> tRes = new ArrayList<Pair<Integer, Double>>(Cursors.toList(sampCur));
 			
-			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
+			outputln(1, "T-result (#="+ tRes.size() +"): "+ tRes);
 			
 			//-- Test current query
 			int e_negatives = 0;
@@ -229,21 +231,21 @@ public class Test_ApproxQueries {
 //			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
 			SortedMap<Integer, Pair<Integer, Double>> cResMap = compmap.subMap(lo, hi);
 			
-			System.out.println("C-result (#="+ cResMap.size() +"): "+ cResMap);			
+			outputln(1, "C-result (#="+ cResMap.size() +"): "+ cResMap);			
 							
 			//- classify error case
 			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cResMap.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				outputln(1, "\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cResMap.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
 				if(e_negatives > 0 && e_positives > 0) error_both++;
 				else if(e_negatives > 0) error_false_negative++;
 				else if(e_positives > 0) error_false_positive++;
 			} else {
-				System.out.println("ok.");
+				outputln(1, "ok.");
 			}
 			
 		}		
 		
-		System.out.println("\tToo big results:   "+ error_false_positive);
+		outputln(1, "\tToo big results:   "+ error_false_positive);
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
@@ -288,23 +290,28 @@ public class Test_ApproxQueries {
 		TreeMap<Integer, Pair<Integer,Double>> compmap = new TreeMap<Integer, Pair<Integer,Double>>();
 		
 		//-- Insertion - generate test data		
-		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
+		outputln(1, "-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
 		Cursor<Pair<Integer, Double>> dataCur = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		for (int i = 1; i <= AMOUNT; i++) {						
-//			Pair<Integer,Double> entry = new Pair<Integer, Double>(key, value);
 			Pair<Integer,Double> entry = dataCur.next();
 			tree.insert(entry);
 			compmap.put(getKey.apply(entry), entry);  
 			if (i % (AMOUNT / 10) == 0) {
-				System.out.print((i / (AMOUNT / 100)) + "%, ");
-				System.out.println("inserted: "+ entry);
+				output(1, (i / (AMOUNT / 100)) + "%, ");
+				outputln(1, "inserted: "+ entry);
 			}
 		}
 		
-		System.out.println("Resulting tree height: " + tree.height());
+		outputln(1, "Resulting tree height: " + tree.height());
 	
 		return compmap;
+	}
+	
+	private static void outputln(int minVerbosity, String s) { output(minVerbosity, s +"\n"); }
+	
+	private static void output(int minVerbosity, String s) {
+		if(verbosity >= minVerbosity) System.out.print(s);
 	}
 	
 	public static void main(String[] args) throws Exception {
@@ -339,24 +346,25 @@ public class Test_ApproxQueries {
 //		
 //		//+ single manual tests
 //		tree.setRNG(new CopyableRandom());
-//		System.out.println("--- tree random seed before querying: "+ tree.rng.getSeed());
+//		outputln(1, "--- tree random seed before querying: "+ tree.rng.getSeed());
 //		
 //		int key_lo = new Random().nextInt(KEY_HI);
-//		System.out.println("query: "+ new Interval<Integer>(key_lo, key_lo + 1000000));
+//		outputln(1, "query: "+ new Interval<Integer>(key_lo, key_lo + 1000000));
 //		approxExactComparison(tree, key_lo, key_lo + 1000000, PRECISION_BOUND);
 //		
 //		//+ test suite
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		long seed = 4644;
+		long seed = new Random().nextLong();
 		random = new CopyableRandom(seed);
 		
 		Cursor<Pair<Integer, Double>> dataCursor = null; 
 		
-		System.out.println("-- filling RSTree..");
+		outputln(1, "-- filling RSTree..");
 		RSTree1D<Integer, Pair<Integer, Double>, Long> rsTree = 
 				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(seed));
-		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(rsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = rsTree;
 //---------------------------------------------------------		
@@ -365,10 +373,11 @@ public class Test_ApproxQueries {
 //		leafentries: 	43 - 170
 //		samples: 	20 - 83
 		
-		System.out.println("-- filling WRSTree..");
+		outputln(1, "-- filling WRSTree..");
 		WRSTree1D<Integer, Pair<Integer, Double>, Long> wrsTree = 
 				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(seed));
-		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(wrsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 // ---------------------------------------------------------
@@ -379,19 +388,19 @@ public class Test_ApproxQueries {
 		
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 
-		System.out.println("\n\n===================== sampling RSTree:\n");
+		outputln(1, "\n\n===================== sampling RSTree:\n");
 		random = new CopyableRandom(seed); // reset seed for next batch of queries
 		Pair<Integer, Integer> rsTouched = approxExactComparisons(rsTree, PRECISION_BOUND, INCONFIDENCE, N_COMPARISONS);
-		System.out.println("\n\n===================== sampling WRSTree:\n");
+		outputln(1, "\n\n===================== sampling WRSTree:\n");
 		random = new CopyableRandom(seed); // reset seed for next batch of queries
 		Pair<Integer, Integer> wrsTouched = approxExactComparisons(wrsTree, PRECISION_BOUND, INCONFIDENCE, N_COMPARISONS);
 		
 //		assert rsTouched.getElement2() == wrsTouched.getElement2();
 		
-		System.out.println("\n\n\n---------------------------------");
-		System.out.println("exact query touched (control) RS/WRS: "+ rsTouched.getElement2() +" / "+ wrsTouched.getElement2());
-		System.out.println("total nodes RSTree: \t"+ rsTouched.getElement1());
-		System.out.println("total nodes WRSTree: \t"+ wrsTouched.getElement1());
+		outputln(1, "\n\n\n---------------------------------");
+		outputln(1, "exact query touched (control) RS/WRS: "+ rsTouched.getElement2() +" / "+ wrsTouched.getElement2());
+		outputln(1, "total nodes RSTree: \t"+ rsTouched.getElement1());
+		outputln(1, "total nodes WRSTree: \t"+ wrsTouched.getElement1());
 		
 	}
 }

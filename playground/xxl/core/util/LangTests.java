@@ -8,6 +8,9 @@ import java.util.List;
 public class LangTests {
 
 	public static void main(String[] args) {
+		main2();
+	}
+	public static void main1(String[] args) {
 		
 		Integer[] a1 = {5,10,15};
 //		List l1 = Arrays.asList(a1);
@@ -45,7 +48,16 @@ public class LangTests {
 		System.out.print("XXLSystem.getDataPath(): ");
 		try { System.out.println(XXLSystem.getDataPath(new String[0])); } 
 		catch (RuntimeException e) { System.out.println(e.toString()); }
-		
-		
+	}
+	
+	public static void main2() {
+		System.out.print("Huhuhuhuhua");
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.print("\b \b ramen");
 	}
 }
