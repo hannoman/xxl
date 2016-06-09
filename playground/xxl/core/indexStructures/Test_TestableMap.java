@@ -39,7 +39,7 @@ import xxl.core.util.random.JavaDiscreteRandomWrapper;
  */
 public class Test_TestableMap {
 
-	public static final int BLOCK_SIZE = 1024;
+	public static final int BLOCK_SIZE = 2048;
 //	public static final float MIN_RATIO = 0.5f;
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
@@ -560,25 +560,38 @@ public class Test_TestableMap {
 	public static void main(String[] args) throws Exception {
 		//--- run the actual tests
 		random = new CopyableRandom(4444);
-//		WBTree<Integer, Integer, Long> tree = createWBTree(TestUtils.resolveFilename("wbtree_test_15"));
-		TestableMap<Integer, Pair<Integer, Double>> tree = 
-				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 5, 20, random);
+
 		
-//		WRSTree_copyImpl<Integer, Integer, Long> tree = TreeCreation.createWRSTree(TestUtils.resolveFilename("WRSTree_sanity"));
+		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
 		
-		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(random, 10000));
+		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
+				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(random));
+// ---------------------------------------------------------
+//		block size: 	2048
+//		branching:	 tA: 12 ~ (4 - 47)
+//		leafentries:	 tK: 85 ~ (42 - 169)
+//		samples:	 20 - 83
 		
-		// PROBLEM: Pair is not comparable per se...
-		suite1_sanityTestAgainstMemoryMap(tree, 
+//		TestableMap<Integer, Pair<Integer, Double>> rsTree = 
+//				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(random));
+// ---------------------------------------------------------		
+//		block size: 	2048
+//		branching: 	4 - 47
+//		leafentries: 	43 - 170
+//		samples: 	20 - 83
+		
+		
+		
+		suite1_sanityTestAgainstMemoryMap(wrsTree, 
 				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
 				testKeysCursor																  					// test data
 				);
-//			s_approxQueries(tree);
+
 	}
 
 	public static <K extends Comparable<K>, V> void suite1_sanityTestAgainstMemoryMap(
 			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor) {
-		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap_RS((RSTree1D<K, V, Long>) tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
+		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
 		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
 		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
 		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 50, testKeysCursor); // take long

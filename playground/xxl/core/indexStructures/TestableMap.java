@@ -29,8 +29,6 @@ public interface TestableMap<K extends Comparable<K>, V> {
 
 	Function<V, K> getGetKey();
 
-	Cursor<V> rangeQuery(K lo, K hi);
-
 	ProfilingCursor<V> rangeQuery(Interval<K> query); 
 	
 	

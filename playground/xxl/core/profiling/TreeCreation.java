@@ -15,7 +15,7 @@ import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.indexStructures.RSTree1D;
 import xxl.core.indexStructures.TestableMap;
-import xxl.core.indexStructures.WRSTree_copyImpl;
+import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.DoubleConverter;
@@ -147,18 +147,18 @@ public class TreeCreation {
 		System.out.println("Initializing tree with parameters: ");
 		System.out.println("\t block size: \t"+ BLOCK_SIZE);
 		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
-		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 
 		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
 				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
-						samplesPerNodeLo, 
-						samplesPerNodeHi, 
-						branchingParamLo, 
+						branchingParamLo, // universe
 						branchingParamHi, 
 						leafLo, 
 						leafHi, 
+						samplesPerNodeLo, 
+						samplesPerNodeHi, 
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
 		//-- set the PRNG state
@@ -217,13 +217,13 @@ public class TreeCreation {
 	
 		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
 				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
-						samplesPerNodeLo, 
-						samplesPerNodeHi, 
-						branchingParamLo, 
+						branchingParamLo, // universe
 						branchingParamHi, 
 						leafLo, 
 						leafHi, 
+						samplesPerNodeLo, 
+						samplesPerNodeHi, 
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
 		
@@ -237,8 +237,8 @@ public class TreeCreation {
 		return tree;
 	}
 
-	public static WRSTree_copyImpl<Integer, Pair<Integer, Double>, Long> createWRSTree(
-		String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish) {
+	public static WRSTree1D<Integer, Pair<Integer, Double>, Long> createWRSTree(
+		String testFile, int BLOCK_SIZE, int branchingParam, Integer leafParam, CopyableRandom rng) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -248,24 +248,25 @@ public class TreeCreation {
 		
 		//-- estimating parameters for the tree
 		//- fill leafes optimal
-		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
-		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
+		if(leafParam == null) { // auto set
+			int leafsMaxFitting = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getSerializedSize();
+			leafParam = (leafsMaxFitting + 1) / 2;
+		}
+		int leafLoBound = leafParam / 2;
+		int leafHiBound = leafParam * 2 - 1;
 		
 		//- set branching param fixed
-//		int branchingParamHi = 20;
-//		int branchingParamLo = (int) Math.ceil((double)branchingParamHi / 4.0);
-//		int branchingParamHi = 8;
-//		int branchingParamLo = 4;
-		int branchingParamHi = branchingParamHiWish;
-		int branchingParamLo = branchingParamLoWish;
+		int branchingLoBound = branchingParam / 4 + 1;
+		int branchingHiBound = branchingParam * 4 - 1;
+		
 		
 		//- determine how much is left for samples
 		int innerSpaceLeft = BLOCK_SIZE;
 		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
 		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
-		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingParamHi; // ranges of children
-		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingParamHi; // childCIDs 
-		innerSpaceLeft -= IntegerConverter.SIZE * branchingParamHi; // weights
+		innerSpaceLeft -= rangeConverter.getSerializedSize() * branchingHiBound; // ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingHiBound; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingHiBound; // weights
 		
 		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
 		//- set sample param for the remaining space optimal
@@ -274,22 +275,22 @@ public class TreeCreation {
 		
 		System.out.println("Initializing tree with parameters: ");
 		System.out.println("\t block size: \t"+ BLOCK_SIZE);
-		System.out.println("\t branching: \t"+ branchingParamLo +" - "+ branchingParamHi);
-		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
-		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+		System.out.println("\t branching:\t tA: "+ branchingParam +" ~ ("+ branchingLoBound +" - "+ branchingHiBound +")");
+		System.out.println("\t leafentries:\t tK: "+ leafParam +" ~ ("+ leafLoBound +" - "+ leafHiBound +")");
+		System.out.println("\t samples:\t "+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
 
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				new RSTree1D<Integer, Pair<Integer,Double>, Long>(
-						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), // universe
+		WRSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+				new WRSTree1D<Integer, Pair<Integer,Double>, Long>(
+						branchingParam, // universe
+						leafParam, 
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
-						branchingParamLo, 
-						branchingParamHi, 
-						leafLo, 
-						leafHi, 
+						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
 						((Pair<Integer, Double> x) -> x.getFirst())
 					);
-				
+		
+		//-- set the PRNG state
+		tree.setRNG(rng);
 		//-- Initialization with container creation inside the tree
 		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
 		

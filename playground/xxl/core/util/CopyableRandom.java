@@ -37,6 +37,11 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 		super(seed);
 //		this.seed.set((seed ^ multiplier) & mask);
 	}
+	
+	/** Copy constructor. */
+	public CopyableRandom(CopyableRandom other) {
+		this(other.getSeed());
+	}
 
 	/* copy of superclasses code, as you can seed the seed changes */
 	@Override
@@ -85,7 +90,7 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 		return seed ^ multiplier;
 	}
 
-	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getState()} instead. */
+	/** Returns the raw seed for this PRNG. As Random does not have any method to set it in raw mode use {@link getSeed()} instead. */
 	protected long getRawState() {
 		return seed.get();
 	}

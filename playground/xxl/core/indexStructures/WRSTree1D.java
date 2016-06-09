@@ -37,11 +37,11 @@ import xxl.core.functions.FunJ8;
 import xxl.core.indexStructures.RSTree1D.InsertionInfo;
 import xxl.core.indexStructures.RSTree1D.LeafNode;
 import xxl.core.indexStructures.RSTree1D.ReallyLazySamplingCursor;
-import xxl.core.indexStructures.WRSTree_copyImpl.ReallyLazySamplingCursor.InnerSampler;
-import xxl.core.indexStructures.WRSTree_copyImpl.ReallyLazySamplingCursor.ProtoSampler;
-import xxl.core.indexStructures.WRSTree_copyImpl.ReallyLazySamplingCursor.Sampler;
-import xxl.core.indexStructures.WRSTree_copyImpl.ReallyLazySamplingCursor.SamplingResult;
-import xxl.core.indexStructures.WRSTree_copyImpl.ReallyLazySamplingCursor.UnbufferedSampler;
+import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.InnerSampler;
+import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.ProtoSampler;
+import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.Sampler;
+import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.SamplingResult;
+import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.UnbufferedSampler;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
@@ -53,7 +53,7 @@ import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 import xxl.core.util.Triple;
 
-public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
+public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, V> {
 	/** First Implementation of the weight balanced RS-Tree for 1-dimensional data. */
 
 	/** How many samples per node should be kept = parameter s. 
@@ -112,7 +112,7 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public WRSTree_copyImpl(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingParam, int leafParam, Function<V, K> getKey) {
+	public WRSTree1D(int branchingParam, int leafParam, int samplesPerNodeLo, int samplesPerNodeHi, Interval<K> universe, Function<V, K> getKey) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -122,9 +122,9 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 		
 		//- old fixed values from RSTree: no changes on leaf insertion logic needed with those
 		this.leafLo = leafParam / 2;
-		this.leafHi = leafParam * 2 - 1; // RSTree defines upper bound inclusive, WBTree not. This is to keep it compatible.
+		this.leafHi = leafParam * 2 - 1; // RSTree defines upper bound inclusive, WBTree not. "-1" to keep it compatible.
 		
-		//-
+		//- unused
 		this.branchingLoBound = branchingParam / 4 + 1;
 		this.branchingHiBound = branchingParam * 4 - 1;
 		
@@ -542,7 +542,7 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 			int targetWeight = HUtil.intPow(branchingParam, level) * leafParam;
 			Triple<Integer, Integer, Integer> splitLocalization = determineSplitposition(targetWeight);
 			
-			int splitPos = splitLocalization.getElement1();
+			int splitPos = splitLocalization.getElement1() + 1;
 			int calcedWeightLeft = splitLocalization.getElement2(); 
 			int calcedWeightRight = splitLocalization.getElement3();
 			
@@ -907,11 +907,11 @@ public class WRSTree_copyImpl<K extends Comparable<K>, V, P> implements Testable
 	 * 		- Q is contained in R
 	 */
 	
-	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
-	@Override
-	public ProfilingCursor<V> rangeQuery(K lo, K hi){
-		return new QueryCursor(new Interval<K>(lo, true, hi, false));
-	}
+//	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
+//	@Override
+//	public ProfilingCursor<V> rangeQuery(K lo, K hi){
+//		return new QueryCursor(new Interval<K>(lo, true, hi, false));
+//	}
 
 	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
 	@Override

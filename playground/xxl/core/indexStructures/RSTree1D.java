@@ -40,7 +40,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
+public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -97,8 +97,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public RSTree1D(Interval<K> universe, int samplesPerNodeLo, int samplesPerNodeHi, int branchingLo, int branchingHi, 
-			int leafLo, int leafHi, Function<V, K> getKey) {
+	public RSTree1D(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, 
+			int samplesPerNodeHi, Interval<K> universe, Function<V, K> getKey) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -154,7 +154,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		int leafHi = metaData.readInt();
 		
 		//-- construct and initialize the tree
-		RSTree1D<K, V, P> instance = new RSTree1D<K, V, P>(universe, samplesPerNodeLo, samplesPerNodeHi, branchingLo, branchingHi, leafLo, leafHi, getKey);
+		RSTree1D<K, V, P> instance = new RSTree1D<K, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey);
 		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
 		
 		//- read state parameters
@@ -892,11 +892,11 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		}
 	}
 	
-	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
-	@Override
-	public ProfilingCursor<V> rangeQuery(K lo, K hi){
-		return new QueryCursor(new Interval<K>(lo, true, hi, false));
-	}
+//	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
+//	@Override
+//	public ProfilingCursor<V> rangeQuery(K lo, K hi){
+//		return new QueryCursor(new Interval<K>(lo, true, hi, false));
+//	}
 	
 	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
 	@Override
