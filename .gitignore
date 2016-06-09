@@ -10,5 +10,6 @@ test-output/*
 .settings/*
 /bin
 /doc/
-/temp_data/
+/temp_data/*
+!/temp_data/uploaddummy
 /javadoc/
