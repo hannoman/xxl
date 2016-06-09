@@ -89,9 +89,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 	/** Remember how high the tree is... */
 	int rootHeight;
 
-	/** Weight-information about the root. Root has no parent so it must be saved elsewhere. */
-//	int rootWeight; // for now don't track this information
-
 	/** Domain of the keys. */
 	public Interval<K> universe;
 	
@@ -249,8 +246,6 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		this.rng = rng;
 	}
 	
-	
-
 	/**
 	 * Insertion. 
 	 */
@@ -265,7 +260,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		} else {
 			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
 			
-			if(insertionInfo.isSplit) { // new root
+			if(insertionInfo.isSplit) { // new root - actually create a new root "manually"
 				InnerNode newroot = new InnerNode();
 				
 				newroot.ranges = new ArrayList<Interval<K>>(branchingHi);
@@ -435,7 +430,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
 				// calculate the new ranges
 				Interval<K> oldRange = ranges.get(pos);
-				Interval<K> rangeLeft = new Interval<K>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true);
+				Interval<K> rangeLeft = new Interval<K>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true); // CHECK
 				Interval<K> rangeRight = new Interval<K>(childInsertInfo.separator, false, oldRange.hi, oldRange.hiIn);
 				ranges.set(pos, rangeLeft);
 				ranges.add(pos+1, rangeRight);
@@ -674,14 +669,13 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
 		 */
 		public InsertionInfo split() {
-			//- find good splitting position
+			//- find good splitting position, this is more complicated as expected because of duplicates.
 			int targetPos = values.size() / 2;
 			K separator = getKey.apply(values.get(targetPos));
 			
 			int sepLeftPos = targetPos;
 			while(sepLeftPos > 1 && separator.compareTo(getKey.apply(values.get(sepLeftPos-1))) == 0)
-				sepLeftPos--;
-			
+				sepLeftPos--;			
 			int sepRightPos = targetPos;
 			while(sepRightPos < values.size() && separator.compareTo(getKey.apply(values.get(sepRightPos))) == 0)
 				sepRightPos++;
@@ -739,7 +733,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			while(pos < values.size() && key.compareTo(getKey.apply(values.get(pos))) == 0) {
 				idx.add(pos);
 				pos++;
-			}
+			}				
 			
 			return idx;
 		}
@@ -1303,7 +1297,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements TestableMap<K, V
 			}
 			
 			@Override
-			public RSTree1D<K, V, P>.ReallyLazySamplingCursor.SamplingResult tryToSample(int n) {
+			public ReallyLazySamplingCursor.SamplingResult tryToSample(int n) {
 				if(n == 0) {
 					List<V> samplesObtained = new LinkedList<V>();
 					return new SamplingResult(samplesObtained);
