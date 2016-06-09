@@ -42,7 +42,7 @@ import xxl.core.util.Triple;
  */
 public class Test_ApproxQueries {
 
-	public static final int BLOCK_SIZE = 1024;
+	public static final int BLOCK_SIZE = 2048;
 	public static final int NUMBER_OF_ELEMENTS = 100000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
@@ -52,6 +52,7 @@ public class Test_ApproxQueries {
 	static final int KEY_HI = 9000000; // 10000
 	static final double VAL_LO = 0;
 	static final double VAL_HI = (KEY_HI * KEY_HI + KEY_HI); // 100000000.0
+	static final int N_COMPARISONS = 100;
 	
 	static final int BATCHSAMPLING_SIZE = 20;
 	
@@ -60,42 +61,49 @@ public class Test_ApproxQueries {
 	public static CopyableRandom random = new CopyableRandom(42);	
 		
 	/** Performs 100 comparisons between exact and approximate average queries. */
-	public static void s_pruning(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
-		random = new CopyableRandom(55);
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
-		approxExactComparisons(tree, PRECISION_BOUND, 100);
-	}
+//	public static void s_pruning(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
+//		random = new CopyableRandom(55);
+//		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
+//		approxExactComparisons(tree, PRECISION_BOUND, 100);
+//	}
 
 	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generated correctly. */ 
-	public static void s_generation(TestableMap<K, V> tree) {
-		random = new CopyableRandom(55);
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
-		for(Integer key : compMap.keySet()) {
-			System.out.println(key +": "+ compMap.get(key));
-		}
-	}
+//	public static void s_generation(TestableMap<K, V> tree) {
+//		random = new CopyableRandom(55);
+//		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
+//		for(Integer key : compMap.keySet()) {
+//			System.out.println(key +": "+ compMap.get(key));
+//		}
+//	}
 	
 	/** Computes the average of a range query once exactly and once approximately with large sample confidence < PRECISION_BOUND,
 	 * then compares the amount of tuples needed. 
 	 * Note that it might be possible that the SamplingCursor actually needs more tuples, as a high precision might dictate for
 	 * more samples than the result set actually has.
-	 * This is done N_QUERIES times. */
-	public static void approxExactComparisons(SamplableMap<Integer, Pair<Integer, Double>> tree, double PRECISION_BOUND, int N_QUERIES) {
+	 * This is done N_QUERIES times. 
+	 * @return */
+	public static Pair<Integer, Integer> approxExactComparisons(
+			SamplableMap<Integer, Pair<Integer, Double>> tree, double PRECISION_BOUND, double INCONFIDENCE, int N_QUERIES) {
+		int totalTouchedApprox = 0; int totalTouchedExact = 0;
 		for(int i=0; i < N_QUERIES; i++) {
 			// CHECK: is this a uniform distribution of intervals?
 			int key_lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			int key_hi = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			if(key_lo > key_hi) { int tmp = key_lo; key_lo = key_hi; key_hi = tmp; } // swap 
 
-			approxExactComparison(tree, key_lo, key_hi, PRECISION_BOUND);
-		}		
+			Pair<Integer, Integer> nodesTouched = approxExactComparison(tree, key_lo, key_hi, PRECISION_BOUND, INCONFIDENCE);
+			totalTouchedApprox += nodesTouched.getElement1();
+			totalTouchedExact  += nodesTouched.getElement2();
+		}
+		return new Pair<Integer, Integer>(totalTouchedApprox, totalTouchedExact);
 	}
 	
-	public static void approxExactComparison(SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+	public static Pair<Integer,Integer> approxExactComparison(
+			SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		// approximate computation
-		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND);
+		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND, INCONFIDENCE);
 		
 		// exact computation						
 		Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact = exact1(tree, key_lo, key_hi);
@@ -118,6 +126,8 @@ public class Test_ApproxQueries {
 		System.out.println("\t exact : nodes touched: "+ exactCursorProfilingInfo.getElement1() +" - nodes pruned: "+ exactCursorProfilingInfo.getElement2());
 		System.out.println("\t approx/exact touched: "+ approxInspected +" / "+ exactTotal);
 		System.out.println("\t query: "+ new Interval<Integer>(key_lo, key_hi));
+		
+		return new Pair<Integer, Integer>(approxInspected, exactTotal);
 	}
 	
 	/** Exact computation of one query.
@@ -143,7 +153,7 @@ public class Test_ApproxQueries {
 	/** Computes an average-estimator with confidence according to the large sample assumption, 
 	 * from as much samples as needed to match PRECISION_BOUND. */
 	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(
-			SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND) {
+			SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		int REPORT_INTERVAL = 1000;		
 		
 		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE);
@@ -338,31 +348,50 @@ public class Test_ApproxQueries {
 //		//+ test suite
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		random = new CopyableRandom(464);
+		long seed = 4644;
+		random = new CopyableRandom(seed);
 		
-		Cursor<Pair<Integer, Double>> dataCursor = 
-				DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Cursor<Pair<Integer, Double>> dataCursor = null; 
 		
-//		TestableMap<Integer, Pair<Integer, Double>> rsTree = 
-//				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(random));
+		System.out.println("-- filling RSTree..");
+		RSTree1D<Integer, Pair<Integer, Double>, Long> rsTree = 
+				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(seed));
+		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		TreeCreation.fillTestableMap(rsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
+//		SamplableMap<Integer, Pair<Integer,Double>> tree = rsTree;
 //---------------------------------------------------------		
 //		block size: 	2048
 //		branching: 	4 - 47
 //		leafentries: 	43 - 170
 //		samples: 	20 - 83
 		
-		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
-				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), 2048, 12, null, new CopyableRandom(random));
+		System.out.println("-- filling WRSTree..");
+		WRSTree1D<Integer, Pair<Integer, Double>, Long> wrsTree = 
+				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(seed));
+		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		TreeCreation.fillTestableMap(wrsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
+//		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 // ---------------------------------------------------------
 //		block size: 	2048
 //		branching:	 tA: 12 ~ (4 - 47)
 //		leafentries:	 tK: 85 ~ (42 - 169)
 //		samples:	 20 - 83
 		
-		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
-		
-		TreeCreation.fillTestableMap(tree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
+//		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 
-		approxExactComparisons(tree, PRECISION_BOUND, 50);	
+		System.out.println("\n\n===================== sampling RSTree:\n");
+		random = new CopyableRandom(seed); // reset seed for next batch of queries
+		Pair<Integer, Integer> rsTouched = approxExactComparisons(rsTree, PRECISION_BOUND, INCONFIDENCE, N_COMPARISONS);
+		System.out.println("\n\n===================== sampling WRSTree:\n");
+		random = new CopyableRandom(seed); // reset seed for next batch of queries
+		Pair<Integer, Integer> wrsTouched = approxExactComparisons(wrsTree, PRECISION_BOUND, INCONFIDENCE, N_COMPARISONS);
+		
+//		assert rsTouched.getElement2() == wrsTouched.getElement2();
+		
+		System.out.println("\n\n\n---------------------------------");
+		System.out.println("exact query touched (control) RS/WRS: "+ rsTouched.getElement2() +" / "+ wrsTouched.getElement2());
+		System.out.println("total nodes RSTree: \t"+ rsTouched.getElement1());
+		System.out.println("total nodes WRSTree: \t"+ wrsTouched.getElement1());
+		
 	}
 }
