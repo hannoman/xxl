@@ -44,7 +44,7 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 100000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
 	public static final int KEY_LO = 0, KEY_HI = 10000000;
@@ -581,7 +581,7 @@ public class Test_TestableMap {
 		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap_RS((RSTree1D<K, V, Long>) tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey());
 		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
 		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);
-		// rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 50, testKeysCursor); // take long
+		rangeQueries(tree, compmap, NUMBER_OF_ELEMENTS / 50, testKeysCursor); // take long
 	}
 
 //	public static void s2_approxQueries(RSTree1D<Integer, Integer, Long> tree) {
