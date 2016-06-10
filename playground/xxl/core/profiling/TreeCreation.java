@@ -99,7 +99,7 @@ public class TreeCreation {
 			}
 		}
 		
-		System.out.println("Resulting tree weight (by weight): "+ tree.weight());
+		System.out.println("Resulting tree weight (by weight): "+ tree.totalWeight());
 		System.out.println("Resulting tree height: " + tree.height());
 		return compmap;
 	}

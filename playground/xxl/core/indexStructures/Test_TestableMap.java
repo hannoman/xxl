@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
@@ -44,11 +45,11 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 10000;
+	public static final int NUMBER_OF_ELEMENTS = 50000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
-	public static final int KEY_LO = 0, KEY_HI = 10000000;
-	static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
+	public static final int KEY_LO = 0, KEY_HI = 100;
+	public static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static CopyableRandom random = new CopyableRandom(42);	
@@ -559,13 +560,13 @@ public class Test_TestableMap {
 
 	public static void main(String[] args) throws Exception {
 		//--- run the actual tests
-		random = new CopyableRandom(4444);
-
+		random = new CopyableRandom(119066442596134L);
+		System.out.println("seed: "+ random.getSeed());
 		
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
 		
-		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
-				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(random));
+//		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
+//				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(random));
 // ---------------------------------------------------------
 //		block size: 	2048
 //		branching:	 tA: 12 ~ (4 - 47)
@@ -574,6 +575,18 @@ public class Test_TestableMap {
 		
 //		TestableMap<Integer, Pair<Integer, Double>> rsTree = 
 //				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(random));
+		RSTree1D<Integer, Pair<Integer, Double>, Long> rsTree = 
+				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(random));
+		rsTree.nDuplicatesAllowed = 5;
+		
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = 
+				TreeCreation.fillTestableMap(rsTree, NUMBER_OF_ELEMENTS, dataCursor, rsTree.getGetKey());
+		
+		System.out.println("resulting weight: "+ rsTree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
+		
+		LinkedList<Integer> collect = Cursors.toList(rsTree.rangeQuery(rsTree.universe)).stream().map(Pair::getElement1).collect(Collectors.toCollection(LinkedList::new));
+		System.out.println(collect);
 // ---------------------------------------------------------		
 //		block size: 	2048
 //		branching: 	4 - 47
@@ -582,10 +595,10 @@ public class Test_TestableMap {
 		
 		
 		
-		suite1_sanityTestAgainstMemoryMap(wrsTree, 
-				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
-				testKeysCursor																  					// test data
-				);
+//		suite1_sanityTestAgainstMemoryMap(rsTree, 
+//				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
+//				testKeysCursor																  					// test data
+//				);
 
 	}
 

@@ -35,7 +35,6 @@ import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
-import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
@@ -261,8 +260,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 			rootCID = container.insert(root);
 			return true;
 		} else {
-			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
-			
+			Node root = container.get(rootCID);
+			int oldWeight = root.totalWeight();
+			InsertionInfo insertionInfo = root.insert(value, rootCID, rootHeight);		
+						
 			if(insertionInfo.isSplit) { // new root - actually create a new root "manually"
 				InnerNode newroot = new InnerNode();
 				
@@ -283,11 +284,16 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 				// fill the root node with samples again
 				if(newroot.totalWeight() > samplesPerNodeHi) {
 					newroot.samples = new LinkedList<V>();
-					newroot.repairSampleBuffer();
+					newroot.repairSampleBuffer();					
 				}
 				
 				rootCID = container.insert(newroot);
 				rootHeight++;
+				return true; // if the root got split we automatically know that the insertion was successful
+			} else { //.. otherwise we have to check explicitly 
+				int curWeight = root.totalWeight();
+				boolean insertionSuccessful = curWeight > oldWeight;
+				return insertionSuccessful;
 			}
 			
 		}		
@@ -329,7 +335,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		// 			boolean insertionSuccessful = true;  
 		
 		P newnodeCID = null;
-//		Interval<K> rangeLeft = null, rangeRight = null;
+//		Interval<K> rangeLeft = null, rangeRight = null; // ranges get computed as intersections in the parent
 		K separator = null;
 		int weightLeft = -1;
 		int weightRight = -1;		
@@ -648,19 +654,29 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		}
 
 		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
+			//- find insertion position
 			K key = getKey.apply(value);
-			
-			//- insert new element // OPT: support for duplicate free trees
 			int insertPos = HUtil.binFindES(new MappedList<V,K>(values, FunJ8.toOld(getKey)), key);
+			//- check for duplicates
+			if(nDuplicatesAllowed > 0) {
+				int nDupsFound = 0;
+				for(int i = insertPos; i > 0 && getKey.apply(values.get(i-1)).compareTo(key) == 0; i--)
+					nDupsFound++;
+				if(nDupsFound >= nDuplicatesAllowed)
+					return new InsertionInfo(totalWeight()); // return early
+			}
+			
+			//- insert new element
 			values.add(insertPos, value);
 			
+			//- check for split
 			InsertionInfo insertInfo = null;
 			if(overflow())
 				insertInfo = split();
 			else
 				insertInfo = new InsertionInfo(values.size());
 			
-			// update container contents of self
+			//- update container contents of self
 			container.update(thisCID, this);
 			container.unfix(thisCID);
 			
@@ -1538,7 +1554,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		
 	}
 
-	public int weight() {
+	public int totalWeight() {
 		if(rootCID == null)
 			return 0;
 		else				
