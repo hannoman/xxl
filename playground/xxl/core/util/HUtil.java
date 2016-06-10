@@ -57,18 +57,6 @@ public class HUtil {
 		return pos;
 	}
 	
-	/** Wrapper for {@link Collections#binarySearch}.
-	 * Note that Collections.binarySearch stops as soon as it finds an equal element. 
-	 * The javadoc-comment for its return type is kinda misleading.
-	 */
-	private static <T> int binFindSomeInsertionPoint(List<? extends Comparable<? super T>> list, T key) {
-		int rawpos = Collections.binarySearch(list, key);		
-		if(rawpos < 0)
-			return -(rawpos + 1);
-		else
-			return rawpos;
-	}
-	
 	/** Finds the position <tt>i</tt> so that <tt>A[i-1] < key <= A[i]</tt>.
 	 * 
 	 * @param list sorted list
@@ -80,6 +68,18 @@ public class HUtil {
 		while(pos >= 1 && list.get(pos-1).equals(key))
 			pos--;
 		return pos;
+	}
+
+	/** Wrapper for {@link Collections#binarySearch}.
+	 * Note that Collections.binarySearch stops as soon as it finds an equal element. 
+	 * The javadoc-comment for its return type is kinda misleading.
+	 */
+	private static <T> int binFindSomeInsertionPoint(List<? extends Comparable<? super T>> list, T key) {
+		int rawpos = Collections.binarySearch(list, key);		
+		if(rawpos < 0)
+			return -(rawpos + 1);
+		else
+			return rawpos;
 	}
 	
 	public static <T, C extends Comparable<? super T>> int binFindL(C[] arr, T key) {

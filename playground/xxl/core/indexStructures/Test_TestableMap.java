@@ -45,10 +45,10 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 50000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
-	public static final int KEY_LO = 0, KEY_HI = 100;
+	public static final int KEY_LO = 0, KEY_HI = 1000;
 	public static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
@@ -560,7 +560,7 @@ public class Test_TestableMap {
 
 	public static void main(String[] args) throws Exception {
 		//--- run the actual tests
-		random = new CopyableRandom(119066442596134L);
+		random = new CopyableRandom(); // 119066442596134L
 		System.out.println("seed: "+ random.getSeed());
 		
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));

@@ -688,7 +688,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
 		 */
 		public InsertionInfo split() {
-			//- find good splitting position, this is more complicated as expected because of duplicates.
+			//- find good splitting position, this is more complicated because of duplicates.
 			int targetPos = values.size() / 2;
 			K separator = getKey.apply(values.get(targetPos));
 			
@@ -715,7 +715,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 			//- put new node into Container
 			P newodeCID = container.insert(newode);
 			
-			return new InsertionInfo(newodeCID, separator, remLeft, remRight);
+			return new InsertionInfo(newodeCID, usedSeparator, remLeft, remRight);
 		}
 		
 //		/**
