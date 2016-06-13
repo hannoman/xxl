@@ -1,0 +1,17 @@
+Vorteile vs. Nachteile den Hilbert-Baum selbst zu implementieren:
+
+
+
+Pro Selbstimplementierung:
+    - einfacher zu verstehen / weniger Code aus XXL zu lesen und zu verstehen
+    - BulkLoading selbst zu implementieren, was bei den anderen Bäumen auch nicht gemacht wurde
+        (und wofür evtl. die Architektur schlecht geeignet ist)
+    - QueryCursor und SamplingCursor können Level der Zugriffe protokollieren
+
+
+Pro XXL-Implementierung (Vererbung):
+    - BulkLoading wird mitgeliefert
+    - Level der Zugriffe nicht ohne Weiteres auslesbar.
+        Allerdings evtl. über einen Container-Wrapper machbar, da die XXL-Nodes Level-Informationen enthalten
+    - bei Selbstimplementierung würde wahrscheinlich sowieso generisches Interface verletzt werden, da wir
+        Kalkulationen in Java nur sinnvoll auf einem konkreten Typ ausführen können (--> DoublePointRectangle)

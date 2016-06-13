@@ -31,7 +31,12 @@
 ========== Futures ==========
 
 * extend to Hilbert-RTrees
- 
+	1.) implement Hilbert-R-Trees in general
+	2.) test on dataset with 2 dimensions (see xxl.core.spatial.SpaceFillingCurves.hilbert2d(int, int) )
+ 	3.) do space-filling hilbert curves for higher dimensions (not present in XXL at the moment)
+ 		(3 dimensions needed to run the tests like in the paper (GeoLife: latitude, longitude, timestamp))
+ 		
+ 		
 ========== Further testing ==========
 
 * compare to exact BTree query

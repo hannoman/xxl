@@ -11,7 +11,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -40,35 +39,10 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-import xxl.core.spatial.rectangles.DoublePointRectangle;
-import xxl.core.spatial.rectangles.FixedPointRectangle;
-
-public class HilbertRTreeSA<V, P> 
-	// DoublePointRectangle (respectively any hypercubes) are not comparable naturally, so we can't support Comparable
-	/* implements SamplableMap<xxl.core.spatial.rectangles.DoublePointRectangle, V> */ 
-{
+public class HilbertRTreeSA<V, P> implements SamplableMap<DoublePointRectangle, V> {
 
     /** The data dimension. */
     int dimension;	
-    
-    /** The splitting policy: "s-to-(s+1)" */
-    int splitPolicy;
-    
-    /** Computes the bounding boxes of the elements. */
-    Function<V, FixedPointRectangle> getBoundingBox;
-    
-    /** Space-filling curve. 
-     * For arbitrary dimensional hilbert curves, perhaps see: https://github.com/aioaneid/uzaygezen
-     * */
-    Function<FixedPointRectangle, Long> getSFCKey;
-    
-//    /** Precision of the space-filling curve. */
-//    long precision = 1 << 20;
-
-//    /** Ubiquitious getKey function which maps from values (V) to keys (DoublePointRectangle). */
-//	public Function<V, DoublePointRectangle> getKey;
-    
-    
     
 	/** How many samples per node should be kept = parameter s. 
 	 * The buffers must have between s/2 and 2*s items at all times. */
@@ -84,6 +58,9 @@ public class HilbertRTreeSA<V, P>
 //	final int branchingParam;
 	final int branchingLo, branchingHi;	
 	final int leafLo, leafHi;	
+	
+	/** Ubiquitious getKey function which maps from values (V) to keys (DoublePointRectangle). */
+	public Function<V, DoublePointRectangle> getKey;
 
 	/** Container of the tree (and everything). 
 	 * This is a ConvertableContainer which spits out nodes. */
@@ -100,7 +77,7 @@ public class HilbertRTreeSA<V, P>
 	int rootHeight;
 
 	/** Domain of the keys. */
-	public DoublePointRectangle universe;
+	public Interval<DoublePointRectangle> universe;
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
 	final int nDuplicatesAllowed;
@@ -111,7 +88,7 @@ public class HilbertRTreeSA<V, P>
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
 	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, 
-			int samplesPerNodeHi, DoublePointRectangle universe, Function<V, DoublePointRectangle> getKey, int nDuplicatesAllowed) {
+			int samplesPerNodeHi, Interval<DoublePointRectangle> universe, Function<V, DoublePointRectangle> getKey, int nDuplicatesAllowed) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -127,117 +104,117 @@ public class HilbertRTreeSA<V, P>
 		this.rng = new CopyableRandom();
 	}
 
-//	/** Loads a whole RSTree - that is in addition to the data, the correct parameters (branching factor, etc.)
-//	 * 		of the tree from a metadata file. Just some things have to be given which can't be serialized or
-//	 * 		determine the types.  
-//	 * @param metaDataFilename The absolute path to the metaDataFileName. 
-//	 * @param containerFactory Function which builds a container from an absolute filename. 
-//	 * 		Allows exchanging of different wrapping containers in between.
-//	 * 		Default use: containerFactory = BlockFileContainer::new 
-//	 * @throws IOException
-//	 */
-//	public static <DoublePointRectangle extends Comparable<DoublePointRectangle>, V, P> TestableMap<DoublePointRectangle, V> loadFromMetaData(
-//			String metaDataFilename, 
-//			Function<String, Container> containerFactory,  
-//			Converter<DoublePointRectangle> keyConverter, 
-//			Converter<V> valueConverter,
-//			Function<V,DoublePointRectangle> getKey) throws IOException {
-//		//-- open the metaData-file
-//		if(!new File(metaDataFilename).exists())
-//			throw new FileNotFoundException("Metadata not found at: \""+ metaDataFilename +"\".");
-//		FileInputStream metaDataFileStream = new FileInputStream(metaDataFilename);
-//		DataInput metaData = new DataInputStream(metaDataFileStream);
-//		
-//		//-- load the raw container
-//		String dataFileName = metaData.readUTF();
-//		// there is no file without suffix, so dont check this here
-//		/* if(!new File(dataFileName).exists()) {
-//			metaDataFileStream.close();
-//			throw new FileNotFoundException("Container files couldn't be loaded from: \""+ dataFileName +"\".");
-//		} */
-//			
-//		Container rawContainer = containerFactory.apply(dataFileName);
-//				
-//		//-- read the constructor/topological parameters
-//		Interval<DoublePointRectangle> universe = Interval.getConverter(keyConverter).read(metaData);
-//		int samplesPerNodeLo = metaData.readInt();
-//		int samplesPerNodeHi = metaData.readInt();
-//		int branchingLo = metaData.readInt();
-//		int branchingHi = metaData.readInt();
-//		int leafLo = metaData.readInt();
-//		int leafHi = metaData.readInt();
-//		int nDuplicatesAllowed = metaData.readInt();
-//		
-//		//-- construct and initialize the tree
-//		HilbertRTreeSA<DoublePointRectangle, V, P> instance = new HilbertRTreeSA<DoublePointRectangle, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
-//		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
-//		
-//		//- read state parameters
-//		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
-//		int rootHeight = metaData.readInt();
-//		CopyableRandom rng = new CopyableRandom(); new ConvertableConverter().read(metaData, rng);
-//		
-//		//- .. and force them into the instance
-//		instance.rootCID = rootCID;
-//		instance.rootHeight = rootHeight;
-//		instance.setRNG(rng);
-//		
-//		//-- finish
-//		metaDataFileStream.close();
-//		return instance;
-//	}
-//	
-//	/** Saves a tree to a metadata file. 
-//	 * NOTE: The tree is not usable afterwards anymore as we have to explicitly call the close() method of the container
-//	 * to make it write its metadata file.
-//	 * 
-//	 * @param metaDataFilename
-//	 * @param dataFileName abolute path to the container backing this tree.
-//	 * @throws IOException 
-//	 */
-//	public void writeToMetaData(
-//			String metaDataFilename, 
-//			String dataFileName,
-//			Converter<DoublePointRectangle> keyConverter, 
-//			Converter<V> valueConverter
-//			) throws IOException {
-//		//-- open the metaData file
-//		if(new File(metaDataFilename).exists()) {
-//			System.out.println("Warning: metadata file \""+ metaDataFilename +"\" already exists.");
-//			System.out.println("Deleting old metadata file.");
-//			// throw new FileAlreadyExistsException(metaDataFilename);
-//			new File(metaDataFilename).delete();
-//		}		
-//		FileOutputStream metaDataFileStream = new FileOutputStream(metaDataFilename, false);
-//		DataOutput metaData = new DataOutputStream(metaDataFileStream);
-//		
-//		//- write the container file prefix
-//		// there is no file without suffix, so dont check this here
-//		/* if(!new File(dataFileName).exists()) {
-//			metaDataFileStream.close();
-//			throw new FileNotFoundException("No container files found at: \""+ dataFileName +"\".");
-//		} */ 
-//
-//		container.close(); // CHECK: to get the container to write its metadata we need to close it :/
-//		metaData.writeUTF(dataFileName);
-//
-//		//-- write the constructor/topological parameters
-//		Interval.getConverter(keyConverter).write(metaData, universe);
-//		metaData.writeInt(samplesPerNodeLo);
-//		metaData.writeInt(samplesPerNodeHi);
-//		metaData.writeInt(branchingLo);
-//		metaData.writeInt(branchingHi);
-//		metaData.writeInt(leafLo);
-//		metaData.writeInt(leafHi);
-//		metaData.writeInt(nDuplicatesAllowed);
-//		
-//		//-- write state parameters
-//		container.objectIdConverter().write(metaData, rootCID);
-//		metaData.writeInt(rootHeight);
-//		new ConvertableConverter<CopyableRandom>().write(metaData, rng);
-//
-//		metaDataFileStream.close();
-//	}
+	/** Loads a whole RSTree - that is in addition to the data, the correct parameters (branching factor, etc.)
+	 * 		of the tree from a metadata file. Just some things have to be given which can't be serialized or
+	 * 		determine the types.  
+	 * @param metaDataFilename The absolute path to the metaDataFileName. 
+	 * @param containerFactory Function which builds a container from an absolute filename. 
+	 * 		Allows exchanging of different wrapping containers in between.
+	 * 		Default use: containerFactory = BlockFileContainer::new 
+	 * @throws IOException
+	 */
+	public static <DoublePointRectangle extends Comparable<DoublePointRectangle>, V, P> TestableMap<DoublePointRectangle, V> loadFromMetaData(
+			String metaDataFilename, 
+			Function<String, Container> containerFactory,  
+			Converter<DoublePointRectangle> keyConverter, 
+			Converter<V> valueConverter,
+			Function<V,DoublePointRectangle> getKey) throws IOException {
+		//-- open the metaData-file
+		if(!new File(metaDataFilename).exists())
+			throw new FileNotFoundException("Metadata not found at: \""+ metaDataFilename +"\".");
+		FileInputStream metaDataFileStream = new FileInputStream(metaDataFilename);
+		DataInput metaData = new DataInputStream(metaDataFileStream);
+		
+		//-- load the raw container
+		String dataFileName = metaData.readUTF();
+		// there is no file without suffix, so dont check this here
+		/* if(!new File(dataFileName).exists()) {
+			metaDataFileStream.close();
+			throw new FileNotFoundException("Container files couldn't be loaded from: \""+ dataFileName +"\".");
+		} */
+			
+		Container rawContainer = containerFactory.apply(dataFileName);
+				
+		//-- read the constructor/topological parameters
+		Interval<DoublePointRectangle> universe = Interval.getConverter(keyConverter).read(metaData);
+		int samplesPerNodeLo = metaData.readInt();
+		int samplesPerNodeHi = metaData.readInt();
+		int branchingLo = metaData.readInt();
+		int branchingHi = metaData.readInt();
+		int leafLo = metaData.readInt();
+		int leafHi = metaData.readInt();
+		int nDuplicatesAllowed = metaData.readInt();
+		
+		//-- construct and initialize the tree
+		HilbertRTreeSA<DoublePointRectangle, V, P> instance = new HilbertRTreeSA<DoublePointRectangle, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
+		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
+		
+		//- read state parameters
+		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
+		int rootHeight = metaData.readInt();
+		CopyableRandom rng = new CopyableRandom(); new ConvertableConverter().read(metaData, rng);
+		
+		//- .. and force them into the instance
+		instance.rootCID = rootCID;
+		instance.rootHeight = rootHeight;
+		instance.setRNG(rng);
+		
+		//-- finish
+		metaDataFileStream.close();
+		return instance;
+	}
+	
+	/** Saves a tree to a metadata file. 
+	 * NOTE: The tree is not usable afterwards anymore as we have to explicitly call the close() method of the container
+	 * to make it write its metadata file.
+	 * 
+	 * @param metaDataFilename
+	 * @param dataFileName abolute path to the container backing this tree.
+	 * @throws IOException 
+	 */
+	public void writeToMetaData(
+			String metaDataFilename, 
+			String dataFileName,
+			Converter<DoublePointRectangle> keyConverter, 
+			Converter<V> valueConverter
+			) throws IOException {
+		//-- open the metaData file
+		if(new File(metaDataFilename).exists()) {
+			System.out.println("Warning: metadata file \""+ metaDataFilename +"\" already exists.");
+			System.out.println("Deleting old metadata file.");
+			// throw new FileAlreadyExistsException(metaDataFilename);
+			new File(metaDataFilename).delete();
+		}		
+		FileOutputStream metaDataFileStream = new FileOutputStream(metaDataFilename, false);
+		DataOutput metaData = new DataOutputStream(metaDataFileStream);
+		
+		//- write the container file prefix
+		// there is no file without suffix, so dont check this here
+		/* if(!new File(dataFileName).exists()) {
+			metaDataFileStream.close();
+			throw new FileNotFoundException("No container files found at: \""+ dataFileName +"\".");
+		} */ 
+
+		container.close(); // CHECK: to get the container to write its metadata we need to close it :/
+		metaData.writeUTF(dataFileName);
+
+		//-- write the constructor/topological parameters
+		Interval.getConverter(keyConverter).write(metaData, universe);
+		metaData.writeInt(samplesPerNodeLo);
+		metaData.writeInt(samplesPerNodeHi);
+		metaData.writeInt(branchingLo);
+		metaData.writeInt(branchingHi);
+		metaData.writeInt(leafLo);
+		metaData.writeInt(leafHi);
+		metaData.writeInt(nDuplicatesAllowed);
+		
+		//-- write state parameters
+		container.objectIdConverter().write(metaData, rootCID);
+		metaData.writeInt(rootHeight);
+		new ConvertableConverter<CopyableRandom>().write(metaData, rng);
+
+		metaDataFileStream.close();
+	}
 	
 	
 	/** Initialize the tree with a raw container (e.g. <tt>BlockFileContainer</tt>) and the needed converters.
@@ -281,12 +258,11 @@ public class HilbertRTreeSA<V, P>
 			if(insertionInfo.isSplit) { // new root - actually create a new root "manually"
 				InnerNode newroot = new InnerNode();
 				
-				// FIXME
-//				newroot.ranges = new ArrayList<Interval<DoublePointRectangle>>(branchingHi);
-//				//- calculate new ranges
-//				Pair<Interval<DoublePointRectangle>, Interval<DoublePointRectangle>> newRanges = universe.split(insertionInfo.separator, true);				
-//				newroot.ranges.add(newRanges.getElement1());
-//				newroot.ranges.add(newRanges.getElement2());
+				newroot.ranges = new ArrayList<Interval<DoublePointRectangle>>(branchingHi);
+				//- calculate new ranges
+				Pair<Interval<DoublePointRectangle>, Interval<DoublePointRectangle>> newRanges = universe.split(insertionInfo.separator, true);				
+				newroot.ranges.add(newRanges.getElement1());
+				newroot.ranges.add(newRanges.getElement2());
 				//- adjust the rest
 				newroot.pagePointers = new ArrayList<P>(branchingHi);
 				newroot.pagePointers.add(rootCID);
@@ -314,7 +290,11 @@ public class HilbertRTreeSA<V, P>
 		}		
 	}
 
-	/** Lookup. */
+	/**
+	 * Lookup.
+	 */
+	// TODO: problems when there are more than leafHi duplicates of one key k. These could get saved in a leaf with range ]k,k] = 0
+	//			which would never get sampled.
 	public List<V> get(DoublePointRectangle key) {
 		if(rootCID == null) return new LinkedList<V>(); // tree empty
 		
@@ -373,23 +353,17 @@ public class HilbertRTreeSA<V, P>
 		
 		public boolean isInner() { return !isLeaf(); }
 		
-		public abstract InsertionInfo insert(Long hvKey, V value, P thisCID, int level);
+		public abstract InsertionInfo insert(V value, P thisCID, int level);
 
 		protected abstract List<V> drainSamples(int amount);
 
 		public abstract int totalWeight();
 
 		public abstract List<V> allValues();
-
-		public Collection<? extends V> get(DoublePointRectangle key) {
-			// TODO Auto-generated method stub
-			return null;
-		}
 	}
 	
 	public class InnerNode extends Node {		
-		public List<Interval<Long>> lhvRanges;
-		public List<DoublePointRectangle> areaRanges;
+		public List<Interval<DoublePointRectangle>> ranges;
 		public List<P> pagePointers;
 		public List<Integer> childWeights;
 		
@@ -416,26 +390,15 @@ public class HilbertRTreeSA<V, P>
 			return samples.size() < samplesPerNodeLo;			
 		}
 
-		/** Lookup. */
-		public List<V> get(DoublePointRectangle key, int level) {
-			List<V> results = new LinkedList<V>();
-			for(P nextNodeCID : chooseSubtreeCIDs(key)) {
-				Node nextNode = container.get(nextNodeCID);
-				results.addAll(nextNode.get(key));
-			}		
-			return results;
+		public Integer chooseFirstSubtreeIdx_Interval(Interval<DoublePointRectangle> query) {
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).intersects(query))
+					return i;
+			return null;
 		}
 		
-		public List<Integer> chooseSubtreeIdxs(DoublePointRectangle query) {
-			List<Integer> idxs = new LinkedList<Integer>(); 
-			for(int i=0; i < areaRanges.size(); i++)
-				if(areaRanges.get(i).overlaps(query))
-					idxs.add(i);
-			return idxs;
-		}
-		
-		public List<P> chooseSubtreeCIDs(DoublePointRectangle key) {
-			return HUtil.getAll(chooseSubtreeIdxs(key), pagePointers);
+		public P chooseFirstSubtreeCID(DoublePointRectangle key) {
+			return pagePointers.get(chooseFirstSubtreeIdx_Interval(new Interval<DoublePointRectangle>(key)));
 		}
 
 		@Override
@@ -445,33 +408,32 @@ public class HilbertRTreeSA<V, P>
 		}
 
 		/** Abstract the determination of choosing which child node to insert a record into. */
-		protected Integer findInsertionPos(Long hv) {
+		protected Integer findInsertionPos(DoublePointRectangle key) {
 			// return the index of the first range which could contain the key 
-			for(int i=0; i < lhvRanges.size(); i++)
-				if(lhvRanges.get(i).contains(hv))
+			for(int i=0; i < ranges.size(); i++)
+				if(ranges.get(i).contains(key))
 					return i;
 			return null;
 		}
 		
-		public InsertionInfo insert(Long hvKey, V value, P thisCID, int levelUnused) {
-			FixedPointRectangle areaKey = getBoundingBox.apply(value);
+		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
+			DoublePointRectangle key = getKey.apply(value);
 			
 			//- insert in sublevel
-			int pos = findInsertionPos(hvKey);
+			int pos = findInsertionPos(key);
 			P nextCID = pagePointers.get(pos);
 			Node nextNode = container.get(nextCID);
 			int oldWeight = totalWeight(); 
 					
-			InsertionInfo childInsertInfo = nextNode.insert(hvKey, value, nextCID, levelUnused-1); //== RECURSION ==
+			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, levelUnused-1); //== RECURSION ==
 			
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
 				// calculate the new ranges
-				// FIXME
-				Interval<DoublePointRectangle> oldRange = lhvRanges.get(pos);
+				Interval<DoublePointRectangle> oldRange = ranges.get(pos);
 				Interval<DoublePointRectangle> rangeLeft = new Interval<DoublePointRectangle>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true); // CHECK
 				Interval<DoublePointRectangle> rangeRight = new Interval<DoublePointRectangle>(childInsertInfo.separator, false, oldRange.hi, oldRange.hiIn);
-				lhvRanges.set(pos, rangeLeft);
-				lhvRanges.add(pos+1, rangeRight);
+				ranges.set(pos, rangeLeft);
+				ranges.add(pos+1, rangeRight);
 				
 				// adjust the rest
 				pagePointers.add(pos+1, childInsertInfo.newnodeCID);
@@ -488,7 +450,8 @@ public class HilbertRTreeSA<V, P>
 			if(insertionTookPlace) {
 				if(hasSampleBuffer()) {  
 					/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
-					 * with the newly inserted item. */
+					 * with the newly inserted item.
+					 * QUE: This is like it is described in the paper, but perhaps we can improve on this? */ 
 					double p = 1.0 / (double)curWeight;
 					for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); ) {
 						sampleIter.next();
@@ -520,9 +483,9 @@ public class HilbertRTreeSA<V, P>
 			
 			//- split separators
 			// separators[splitPos] becomes the separator between the offspring 
-			newode.lhvRanges = HUtil.splitOffRight(lhvRanges, splitPos, new ArrayList<Interval<DoublePointRectangle>>()); // CHECK LinkedList seems to make more sense here
-			Interval<DoublePointRectangle> rangeLeft = lhvRanges.stream().reduce(Interval<DoublePointRectangle>::union).get();
-			Interval<DoublePointRectangle> rangeRight = newode.lhvRanges.stream().reduce(Interval<DoublePointRectangle>::union).get();
+			newode.ranges = HUtil.splitOffRight(ranges, splitPos, new ArrayList<Interval<DoublePointRectangle>>()); // CHECK LinkedList seems to make more sense here
+			Interval<DoublePointRectangle> rangeLeft = ranges.stream().reduce(Interval<DoublePointRectangle>::union).get();
+			Interval<DoublePointRectangle> rangeRight = newode.ranges.stream().reduce(Interval<DoublePointRectangle>::union).get();
 			
 			//- split pointers and weights
 			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
@@ -680,19 +643,10 @@ public class HilbertRTreeSA<V, P>
 		public boolean underflow() {
 			return values.size() < leafLo;
 		}
-		
-		@Override
-		public List<V> get(DoublePointRectangle key) {
-			List<V> results = new LinkedList<V>();
-			for(V value : values)
-				if(getBoundingBox.apply(value).overlaps(key))
-					results.add(value);
-			return results;
-		}
 
-		public InsertionInfo insert(Long V value, P thisCID, int levelUnused) {
+		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
 			//- find insertion position
-			DoublePointRectangle lhKey = getKey.apply(value);
+			DoublePointRectangle key = getKey.apply(value);
 			int insertPos = HUtil.binFindES(new MappedList<V,DoublePointRectangle>(values, FunJ8.toOld(getKey)), key);
 			//- check for duplicates
 			if(nDuplicatesAllowed > 0) {
@@ -867,9 +821,9 @@ public class HilbertRTreeSA<V, P>
 			int nChildren = dataInput.readInt();
 
 			// -- read separators
-			node.lhvRanges = new LinkedList<Interval<DoublePointRectangle>>();
+			node.ranges = new LinkedList<Interval<DoublePointRectangle>>();
 			for(int i=0; i < nChildren; i++) { // only #childs-1 separators!
-				node.lhvRanges.add(rangeConverter.read(dataInput));
+				node.ranges.add(rangeConverter.read(dataInput));
 			}
 			
 			// -- read the ContainerIDs of the IndexEntries
@@ -921,7 +875,7 @@ public class HilbertRTreeSA<V, P>
 			dataOutput.writeInt(node.pagePointers.size());
 
 			// -- write separators
-			for (Interval<DoublePointRectangle> range : node.lhvRanges) {
+			for (Interval<DoublePointRectangle> range : node.ranges) {
 				rangeConverter.write(dataOutput, range);
 			}
 
@@ -966,8 +920,6 @@ public class HilbertRTreeSA<V, P>
 	 * 		- Q is contained in R
 	 */
 	
-
-
 	/** A query cursor for simple range queries.
 	 * 
 	 * We won't subclass xxl.core.indexStructures.QueryCursor here as it is 
@@ -1541,7 +1493,7 @@ public class HilbertRTreeSA<V, P>
 					List<Sampler> protoSamplers = new LinkedList<Sampler>();
 					for(int j=0; j < inode.pagePointers.size(); j++) {
 						protoSamplers.add(
-								new ProtoSampler(inode.pagePointers.get(j), level-1, inode.lhvRanges.get(j), inode.childWeights.get(j)));
+								new ProtoSampler(inode.pagePointers.get(j), level-1, inode.ranges.get(j), inode.childWeights.get(j)));
 					}
 					
 					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, batchSize, protoSamplers, p_nodesTouched, p_nodesPruned);

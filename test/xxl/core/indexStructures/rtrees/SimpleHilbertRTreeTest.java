@@ -129,7 +129,7 @@ public class SimpleHilbertRTreeTest {
 		final Rectangle query = new DoublePointRectangle(queryObject, queryObject);
 		return new Comparator () {
 			public int compare (Object candidate1, Object candidate2) {
-				Rectangle r1 =( (HilbertRTree.ORSeparator) ((Candidate) candidate1).descriptor() ).getIndexEntryMBR();
+				Rectangle r1 = ( (HilbertRTree.ORSeparator) ((Candidate) candidate1).descriptor() ).getIndexEntryMBR();
 				Rectangle r2 = ( (HilbertRTree.ORSeparator) ((Candidate) candidate2).descriptor() ).getIndexEntryMBR();				
 				double d1 = query.distance(r1, 2);
 				double d2 = query.distance(r2, 2);
