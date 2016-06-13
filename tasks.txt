@@ -23,6 +23,11 @@
  *   Mini-Milestone: Generalize Query-Types
  *   Mini-Milestone: Support removals
 
+========== Important Bugfixes ==========
+
+* ReallyLazySamplingCursor doesn't permute results enough
+* OPT: The drawings perhaps permute too much 
+
 ========== Futures ==========
 
 * extend to Hilbert-RTrees
@@ -30,14 +35,19 @@
 ========== Further testing ==========
 
 * compare to exact BTree query
- 
+
+-- datasets:
+
+* GEO is perhaps handleble with single insertions
+	but OSM is probably much too large..
+	 
 ========== Other ==========
 
 * sanity tests of data structures (Test_TestableMap & Test_ApproxQueries) are not well implemented, as there is
-	no so far no support to save multiple values in the comparison structure.
-	-> Also duplicate handling of the trees should be specified better. (CURRENT)
+	no so far no support to save multiple values in the comparison structure. (DONE)
+	-> Also duplicate handling of the trees should be specified better. (DONE)
 		-> check out SortMergeJoin and HashGrouper to implement the comparison, aand therefore SweepAreas.
 	
 * copy updated QueryCursor implementation from RSTree1D to WBTRee and WRSTree_copyImpl
 
-* simplify/unify TreeCreation.createRSTree_withInnerUnbufferedNodes and TreeCreation.createRSTree	   
+* OPT LOW: simplify/unify TreeCreation.createRSTree_withInnerUnbufferedNodes and TreeCreation.createRSTree	   

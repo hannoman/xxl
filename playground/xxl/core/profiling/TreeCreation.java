@@ -35,7 +35,8 @@ public class TreeCreation {
 			TestableMap<K, V> tree, 
 			int AMOUNT, 
 			Cursor<V> dataCursor,
-			Function<V, K> getKey
+			Function<V, K> getKey,
+			int nDuplicatesAllowed // to be coherent with the tre implementation
 			) {
 		//-- comparison structure
 		TreeMap<K, List<V>> compmap = new TreeMap<K, List<V>>();
@@ -48,7 +49,10 @@ public class TreeCreation {
 			K key = getKey.apply(value);
 			tree.insert(value);
 			compmap.putIfAbsent(key, new LinkedList<V>());
-			compmap.get(key).add(value);  
+			List<V> valueList = compmap.get(key);
+			if(nDuplicatesAllowed > 0 && valueList.size() < nDuplicatesAllowed)
+				valueList.add(value);
+				
 			if (i % (AMOUNT / 10) == 0) {
 				System.out.print((i / (AMOUNT / 100)) + "%, ");
 				System.out.println("inserted: "+ value);
@@ -110,7 +114,7 @@ public class TreeCreation {
 	 * Note: Does not set the PRNG-state of the tree.
 	 */
 	public static RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree(
-			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng) {
+			String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng, int nDuplicatesAllowed) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -159,7 +163,8 @@ public class TreeCreation {
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
-						((Pair<Integer, Double> x) -> x.getFirst())
+						((Pair<Integer, Double> x) -> x.getFirst()),
+						nDuplicatesAllowed
 					);
 		//-- set the PRNG state
 		tree.setRNG(rng);
@@ -175,8 +180,8 @@ public class TreeCreation {
 	 * 
 	 * Note: Does not set the PRNG-state of the tree.
 	 */
-	public static <K extends Comparable<K>,V> TestableMap<K, V> createRSTree_withInnerUnbufferedNodes(
-		String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng) {
+	public static <K extends Comparable<K>,V> RSTree1D<Integer, Pair<Integer, Double>, Long> createRSTree_withInnerUnbufferedNodes(
+		String testFile, int BLOCK_SIZE, int branchingParamLoWish, int branchingParamHiWish, CopyableRandom rng, int nDuplicatesAllowed) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -224,7 +229,8 @@ public class TreeCreation {
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
-						((Pair<Integer, Double> x) -> x.getFirst())
+						((Pair<Integer, Double> x) -> x.getFirst()),
+						nDuplicatesAllowed
 					);
 		
 		//-- set the PRNG state
@@ -238,7 +244,7 @@ public class TreeCreation {
 	}
 
 	public static WRSTree1D<Integer, Pair<Integer, Double>, Long> createWRSTree(
-		String testFile, int BLOCK_SIZE, int branchingParam, Integer leafParam, CopyableRandom rng) {
+		String testFile, int BLOCK_SIZE, int branchingParam, Integer leafParam, CopyableRandom rng, int nDuplicatesAllowed) {
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		FixedSizeConverter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;		
@@ -286,7 +292,8 @@ public class TreeCreation {
 						samplesPerNodeLo, 
 						samplesPerNodeHi, 
 						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
-						((Pair<Integer, Double> x) -> x.getFirst())
+						((Pair<Integer, Double> x) -> x.getFirst()),
+						nDuplicatesAllowed
 					);
 		
 		//-- set the PRNG state
@@ -298,37 +305,37 @@ public class TreeCreation {
 		return tree;
 	}
 	
-	public static void createAndSave_RSTree_pairsIntDouble(
-			String metaDataFilename, String containerPrefix, int nTuples, CopyableRandom random,
-			int KEY_LO, int KEY_HI, double VAL_LO, double VAL_HI) throws IOException {
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix, 2048, 5, 20);
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, nTuples, dataCursor, (t -> t.getElement1()));
-		
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		
-		tree.writeToMetaData(metaDataFilename, containerPrefix, keyConverter, valueConverter);
-		
-		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
-	}
-
-	public static TestableMap<K, V> load_RSTree_pairsIntDouble(String metaDataFilename) throws IOException {
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
-		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
-		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
-		
-		TestableMap<K, V> tree = RSTree1D.loadFromMetaData(
-				metaDataFilename, 
-				containerFactory, 
-				keyConverter, 
-				valueConverter, 
-				getKey);
-		
-		System.out.println("-- Tree successfully loaded from metadata-file: \""+ metaDataFilename +"\"");
-		
-		return tree;
-	}
+//	public static void createAndSave_RSTree_pairsIntDouble(
+//			String metaDataFilename, String containerPrefix, int nTuples, CopyableRandom random,
+//			int KEY_LO, int KEY_HI, double VAL_LO, double VAL_HI) throws IOException {
+//		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = createRSTree(containerPrefix, 2048, 5, 20);
+//		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, nTuples, dataCursor, (t -> t.getElement1()));
+//		
+//		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+//		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+//		
+//		tree.writeToMetaData(metaDataFilename, containerPrefix, keyConverter, valueConverter);
+//		
+//		System.out.println("-- Tree successfully written to metadata-file: \""+ metaDataFilename +"\"");
+//	}
+//
+//	public static TestableMap<K, V> load_RSTree_pairsIntDouble(String metaDataFilename) throws IOException {
+//		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+//		Converter<Pair<Integer, Double>> valueConverter = new PairConverterFixedSized<Integer, Double>(IntegerConverter.DEFAULT_INSTANCE, DoubleConverter.DEFAULT_INSTANCE);
+//		Function<String, Container> containerFactory = (s -> new BlockFileContainer(s));
+//		Function<Pair<Integer, Double>, Integer> getKey = ((Pair<Integer, Double> x) -> x.getFirst());
+//		
+//		TestableMap<K, V> tree = RSTree1D.loadFromMetaData(
+//				metaDataFilename, 
+//				containerFactory, 
+//				keyConverter, 
+//				valueConverter, 
+//				getKey);
+//		
+//		System.out.println("-- Tree successfully loaded from metadata-file: \""+ metaDataFilename +"\"");
+//		
+//		return tree;
+//	}
 
 }

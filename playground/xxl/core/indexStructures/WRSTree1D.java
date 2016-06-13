@@ -1,27 +1,16 @@
 package xxl.core.indexStructures;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Queue;
-import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -34,15 +23,6 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.functions.FunJ8;
-import xxl.core.indexStructures.RSTree1D.InsertionInfo;
-import xxl.core.indexStructures.RSTree1D.LeafNode;
-import xxl.core.indexStructures.RSTree1D.ReallyLazySamplingCursor;
-import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.InnerSampler;
-import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.ProtoSampler;
-import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.Sampler;
-import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.SamplingResult;
-import xxl.core.indexStructures.WRSTree1D.ReallyLazySamplingCursor.UnbufferedSampler;
-import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
@@ -107,18 +87,23 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 	/** Domain of the keys. */
 	Interval<K> universe;
 	
+	/** Amount of duplicate key values allowed. 0 for no restriction. */
+	final int nDuplicatesAllowed;
+	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public WRSTree1D(int branchingParam, int leafParam, int samplesPerNodeLo, int samplesPerNodeHi, Interval<K> universe, Function<V, K> getKey) {
+	public WRSTree1D(int branchingParam, int leafParam, int samplesPerNodeLo, int samplesPerNodeHi, 
+					 Interval<K> universe, Function<V, K> getKey, int nDuplicatesAllowed) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
 		this.branchingParam = branchingParam;
 		this.leafParam = leafParam;
 		this.getKey = getKey;
+		this.nDuplicatesAllowed = nDuplicatesAllowed;
 		
 		//- old fixed values from RSTree: no changes on leaf insertion logic needed with those
 		this.leafLo = leafParam / 2;
@@ -269,16 +254,18 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 	/**
 	 * Insertion. 
 	 */
-	public void insert(V value) {
+	public boolean insert(V value) {
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
 			root.values = new ArrayList<V>(leafHi);
 			root.values.add(value);
 			rootHeight = 0;
 			rootCID = container.insert(root);
-			return;
+			return true;
 		} else {
-			InsertionInfo insertionInfo = container.get(rootCID).insert(value, rootCID, rootHeight);			
+			Node root = container.get(rootCID);
+			int oldWeight = root.totalWeight();
+			InsertionInfo insertionInfo = root.insert(value, rootCID, rootHeight);		
 			
 			if(insertionInfo.isSplit) { // new root - actually create a new root "manually"
 				InnerNode newroot = new InnerNode();
@@ -305,6 +292,11 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 				
 				rootCID = container.insert(newroot);
 				rootHeight++;
+				return true; // if the root got split we automatically know that the insertion was successful
+			} else { //.. otherwise we have to check explicitly 
+				int curWeight = root.totalWeight();
+				boolean insertionSuccessful = curWeight > oldWeight;
+				return insertionSuccessful;
 			}
 			
 		}		
@@ -445,7 +437,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			return null;
 		}
 		
-		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
+		public InsertionInfo insert(V value, P thisCID, int level) {
 			K key = getKey.apply(value);
 			
 			//- insert in sublevel
@@ -454,7 +446,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			Node nextNode = container.get(nextCID);
 			int oldWeight = totalWeight(); 
 					
-			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, levelUnused-1); //== RECURSION ==
+			InsertionInfo childInsertInfo = nextNode.insert(value, nextCID, level-1); //== RECURSION ==
 			
 			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
 				// calculate the new ranges
@@ -495,8 +487,8 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			
 			//- check for split here
 			InsertionInfo insertionInfo = null;
-			if(weightOverflow(curWeight, levelUnused))
-				insertionInfo = split(levelUnused);
+			if(weightOverflow(curWeight, level))
+				insertionInfo = split(level);
 			else
 				insertionInfo = new InsertionInfo(totalWeight());
 			
@@ -675,19 +667,29 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 		}
 
 		public InsertionInfo insert(V value, P thisCID, int levelUnused) {
+			//- find insertion position
 			K key = getKey.apply(value);
-			
-			//- insert new element // OPT: support for duplicate free trees
 			int insertPos = HUtil.binFindES(new MappedList<V,K>(values, FunJ8.toOld(getKey)), key);
+			//- check for duplicates
+			if(nDuplicatesAllowed > 0) {
+				int nDupsFound = 0;
+				for(int i = insertPos; i > 0 && getKey.apply(values.get(i-1)).compareTo(key) == 0; i--)
+					nDupsFound++;
+				if(nDupsFound >= nDuplicatesAllowed)
+					return new InsertionInfo(totalWeight()); // return early
+			}
+			
+			//- insert new element
 			values.add(insertPos, value);
 			
+			//- check for split
 			InsertionInfo insertInfo = null;
 			if(overflow())
 				insertInfo = split();
 			else
 				insertInfo = new InsertionInfo(values.size());
 			
-			// update container contents of self
+			//- update container contents of self
 			container.update(thisCID, this);
 			container.unfix(thisCID);
 			
@@ -699,7 +701,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
 		 */
 		public InsertionInfo split() {
-			//- find good splitting position, this is more complicated as expected because of duplicates.
+			//- find good splitting position, this is more complicated because of duplicates.
 			int targetPos = values.size() / 2;
 			K separator = getKey.apply(values.get(targetPos));
 			
@@ -726,7 +728,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			//- put new node into Container
 			P newodeCID = container.insert(newode);
 			
-			return new InsertionInfo(newodeCID, separator, remLeft, remRight);
+			return new InsertionInfo(newodeCID, usedSeparator, remLeft, remRight);
 		}
 		
 		/**
@@ -1234,10 +1236,12 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			protected boolean hasNextObject() {
 				while(precomputed.isEmpty()) {
 					if(samplers.isEmpty()) return false;
-					precomputed.addAll(tryToSample(batchSize));
-				}			
+					List<V> nextBatch = tryToSample(batchSize); // permutation needed 
+					precomputed.addAll(Arrays.asList(Sample.permute(nextBatch, rng)));
+				}
 				return true;
 			}
+
 	
 			@Override
 			protected V nextObject() {
@@ -1551,7 +1555,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			
 		}
 
-	public int weight() {
+	public int totalWeight() {
 		if(rootCID == null)
 			return 0;
 		else				

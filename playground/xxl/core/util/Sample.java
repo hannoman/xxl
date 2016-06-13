@@ -96,11 +96,6 @@ public class Sample {
 		return new ArrayList<Integer>(set); // cast to ArrayList
 	}
 	
-//	public List<Integer> drawWithDecreasingWeights(List<Integer> weights, int k) {
-//		List<Integer> partIdxs = new LinkedList<Integer>();
-//		
-//		
-//	}
 	
 	public static <E> E[] permute(List<E> ls, Random rng) {
 		E[] values = ls.toArray((E[]) new Object[ls.size()]);

@@ -273,9 +273,9 @@ public class HilbertRTree extends BPlusTree {
 			Function createORSeparator, Function createKeyRange) {
 		super.initialize(rootEntry, rootDescriptor, getKey, container,
 				keyConverter, dataConverter, createORSeparator, createKeyRange,
-				new Constant(minMaxFactor), new Constant(
-						((1.0 - minMaxFactor) <= minMaxFactor) ? minMaxFactor
-								: 1.0 - minMaxFactor));
+				new Constant(minMaxFactor), 
+				new Constant( ((1.0 - minMaxFactor) <= minMaxFactor) ? minMaxFactor : 1.0 - minMaxFactor)
+				);
 		return initialize(computeSFCurveValue, getMBR);
 
 	}

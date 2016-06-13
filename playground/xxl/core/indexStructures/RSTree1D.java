@@ -10,7 +10,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -92,7 +92,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	public Interval<K> universe;
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
-	int nDuplicatesAllowed = 1;
+	final int nDuplicatesAllowed;
 	
 	/** --- Constructors & Initialisation ---
 	- All mandatory arguments are put into the constructor.
@@ -100,7 +100,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
 	public RSTree1D(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, 
-			int samplesPerNodeHi, Interval<K> universe, Function<V, K> getKey) {
+			int samplesPerNodeHi, Interval<K> universe, Function<V, K> getKey, int nDuplicatesAllowed) {
 		this.universe = universe;
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -109,6 +109,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		this.leafLo = leafLo;
 		this.leafHi = leafHi;
 		this.getKey = getKey;
+		this.nDuplicatesAllowed = nDuplicatesAllowed;
 		
 		// defaults
 		this.samplesPerNodeReplenishTarget = this.samplesPerNodeHi;
@@ -154,9 +155,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		int branchingHi = metaData.readInt();
 		int leafLo = metaData.readInt();
 		int leafHi = metaData.readInt();
+		int nDuplicatesAllowed = metaData.readInt();
 		
 		//-- construct and initialize the tree
-		RSTree1D<K, V, P> instance = new RSTree1D<K, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey);
+		RSTree1D<K, V, P> instance = new RSTree1D<K, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
 		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
 		
 		//- read state parameters
@@ -216,6 +218,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		metaData.writeInt(branchingHi);
 		metaData.writeInt(leafLo);
 		metaData.writeInt(leafHi);
+		metaData.writeInt(nDuplicatesAllowed);
 		
 		//-- write state parameters
 		container.objectIdConverter().write(metaData, rootCID);
@@ -634,7 +637,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 				samples.addAll(fetchedFromChild);
 			}
 			
-			//-- permute the newly built sample buffer
+			//-- permute the newly built sample buffer (= O(#samples))
 			Sample.permute(samples, rng);
 		}
 		
@@ -1237,7 +1240,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		protected boolean hasNextObject() {
 			while(precomputed.isEmpty()) {
 				if(samplers.isEmpty()) return false;
-				precomputed.addAll(tryToSample(batchSize));
+				List<V> nextBatch = tryToSample(batchSize); // permutation needed 
+				precomputed.addAll(Arrays.asList(Sample.permute(nextBatch, rng)));
 			}			
 			return true;
 		}
@@ -1321,9 +1325,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 					List<V> samplesObtained = new LinkedList<V>();
 					return new SamplingResult(samplesObtained);
 				} else {
-					if(realSampler == null) {						
+					if(realSampler == null)						
 						realSampler = createRealSampler(nodeCID, level, range);
-					}
 					return realSampler.tryToSample(n);
 				}
 			}
@@ -1490,9 +1493,8 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 				int i = 0;
 				for(; i < n && sampleIter.hasNext(); i++) {
 					V sample = sampleIter.next();
-					if(query.contains(getKey.apply(sample))) {
+					if(query.contains(getKey.apply(sample)))
 						samplesObtained.add(sample);
-					}
 				}
 				
 				if(i < n) { // we didn't find enough samples in the sample buffer

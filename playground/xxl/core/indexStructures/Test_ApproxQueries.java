@@ -44,7 +44,7 @@ import xxl.core.util.Triple;
 public class Test_ApproxQueries {
 
 	public static final int BLOCK_SIZE = 2048;
-	public static final int NUMBER_OF_ELEMENTS = 100000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 	// Wir wollen unser Aggregat nur so weit berechnen, dass es sein Wert +/-1% zu 95% Wahrscheinlichkeit im Intervall liegt.
 	// D.h. solange samplen bis das epsilon unseres Konfidenzintervalls < 1% des Aggregatwerts ist.
 	public static final double INCONFIDENCE = 0.10;
@@ -62,24 +62,12 @@ public class Test_ApproxQueries {
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static CopyableRandom random = new CopyableRandom(42);	
 		
-	/** Performs 100 comparisons between exact and approximate average queries. */
-//	public static void s_pruning(RSTree1D<Integer, Pair<Integer, Double>, Long> tree) {
-//		random = new CopyableRandom(55);
-//		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-//		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
-//		approxExactComparisons(tree, PRECISION_BOUND, 100);
-//	}
+	private static void outputln(int minVerbosity, String s) { output(minVerbosity, s +"\n"); }
 
-	/** Temporary test for <tt>fill(tree)</tt> to check whether the tree gets generated correctly. */ 
-//	public static void s_generation(TestableMap<K, V> tree) {
-//		random = new CopyableRandom(55);
-//		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-//		Map<Integer, Pair<Integer, Double>> compMap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, (t -> t.getElement1()));
-//		for(Integer key : compMap.keySet()) {
-//			outputln(1, key +": "+ compMap.get(key));
-//		}
-//	}
-	
+	private static void output(int minVerbosity, String s) {
+		if(verbosity >= minVerbosity) System.out.print(s);
+	}
+
 	/** Computes the average of a range query once exactly and once approximately with large sample confidence < PRECISION_BOUND,
 	 * then compares the amount of tuples needed. 
 	 * Note that it might be possible that the SamplingCursor actually needs more tuples, as a high precision might dictate for
@@ -249,6 +237,7 @@ public class Test_ApproxQueries {
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
+	// TODO
 	public static BTree createBTree(String container_prefix, int blockSize, xxl.core.functions.Function getDescriptor) {
 		BTree tree = new BTree();
 		Container blockContainer = new BlockFileContainer(container_prefix, blockSize);
@@ -264,6 +253,7 @@ public class Test_ApproxQueries {
 		return tree;
 	}
 	
+	// TODO
 	public static void bTreeTest() {
 				
 		Function<Pair<Integer, Double>, Interval1D> getDescriptorNew = (t -> new Interval1D(t.getElement1()));
@@ -281,6 +271,7 @@ public class Test_ApproxQueries {
 //		((Container) tree.getContainer.invoke(tree.rootEntry)).close();
 	}
 	
+	// TODO
 	public static Map<Integer, Pair<Integer,Double>> fillXXLTree(
 			Tree tree, 
 			int AMOUNT, 
@@ -306,12 +297,6 @@ public class Test_ApproxQueries {
 		outputln(1, "Resulting tree height: " + tree.height());
 	
 		return compmap;
-	}
-	
-	private static void outputln(int minVerbosity, String s) { output(minVerbosity, s +"\n"); }
-	
-	private static void output(int minVerbosity, String s) {
-		if(verbosity >= minVerbosity) System.out.print(s);
 	}
 	
 	public static void main(String[] args) throws Exception {
@@ -355,17 +340,22 @@ public class Test_ApproxQueries {
 //		//+ test suite
 //		// approxExactComparisons(tree, PRECISION_BOUND, 20);
 		
-		long seed = new Random().nextLong();
-		random = new CopyableRandom(seed);
+		//--- run the actual tests
+//		long seed = new Random().nextLong();
+		long seed = 8183272422593055663L;
+		System.out.println("seed: "+ seed);
 		
 		Cursor<Pair<Integer, Double>> dataCursor = null; 
 		
+		int nDuplicatesAllowed = 20;
 		outputln(1, "-- filling RSTree..");
+		
 		RSTree1D<Integer, Pair<Integer, Double>, Long> rsTree = 
-				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 47, new CopyableRandom(seed));
-//		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		TreeCreation.fillTestableMap(rsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
+				TreeCreation.createRSTree(TestUtils.resolveFilename("rsTree_approxProf2"), BLOCK_SIZE, 4, 47, new CopyableRandom(seed), nDuplicatesAllowed);
+		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(seed), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+//		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		TreeCreation.fillTestableMap(rsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed);
+		
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = rsTree;
 //---------------------------------------------------------		
 //		block size: 	2048
@@ -375,10 +365,10 @@ public class Test_ApproxQueries {
 		
 		outputln(1, "-- filling WRSTree..");
 		WRSTree1D<Integer, Pair<Integer, Double>, Long> wrsTree = 
-				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(seed));
+				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_approxProf2"), BLOCK_SIZE, 12, null, new CopyableRandom(seed), nDuplicatesAllowed);
 //		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		TreeCreation.fillTestableMap(wrsTree, 10000, dataCursor, ((Pair<Integer, Double> t) -> t.getElement1()) );
+		TreeCreation.fillTestableMap(wrsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed );
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 // ---------------------------------------------------------
 //		block size: 	2048

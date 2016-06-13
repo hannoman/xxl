@@ -170,14 +170,12 @@ public class SimpleHilbertRTreeTest {
 			if(arguments.size() !=3 ) throw new IllegalArgumentException();
 			Long min = (Long)arguments.get(0);
 			Long max = (Long)arguments.get(1);
-			DoublePointRectangle entryMBR =  (DoublePointRectangle)arguments.get(2);
+			DoublePointRectangle entryMBR = (DoublePointRectangle)arguments.get(2);
 			return new LongRange(min, max, entryMBR);	
 		}
 	};
 	/**
 	 * This class represents the ORSeparator of the HilbertRTree
-	 * 
-	 *
 	 */
 	public static class DoublePointRectangleSep extends HilbertRTree.ORSeparator{	
 		public DoublePointRectangleSep(Long separatorValue, DoublePointRectangle entryMBR) {

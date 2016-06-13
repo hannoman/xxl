@@ -516,12 +516,8 @@ public class DoublePointRectangle implements Rectangle {
 		DoublePointRectangle uni = (DoublePointRectangle)universe;
 		double[] deltas = uni.deltas();
 		for (int i = 0; i < leftCorner.length; i++) {
-			leftCorner[i] =
-				(leftCorner[i] - uni.leftCorner[i])
-					/ deltas[i];
-			rightCorner[i] =
-				(rightCorner[i] - uni.leftCorner[i])
-					/ deltas[i];
+			leftCorner[i] = (leftCorner[i] - uni.leftCorner[i]) / deltas[i];
+			rightCorner[i] = (rightCorner[i] - uni.leftCorner[i]) / deltas[i];
 
 			leftCorner[i] = Math.min(Math.max(0, leftCorner[i]), 0.9999999999999999);
 			//ensure that value is in [0;1)
