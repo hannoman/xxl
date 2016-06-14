@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.OptionalInt;
 import java.util.RandomAccess;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class HUtil {
@@ -15,6 +16,21 @@ public class HUtil {
 	public static int intPow(int a, int b) {
 		return (int)Math.pow(a, b);		
 	}
+	
+	
+	/** Partitions a number into n approximately equal parts. */
+	public static List<Integer> partitionInNParts(int amount, int n) {
+		int remaining = amount;
+		List<Integer> parts = new ArrayList<Integer>(n);
+		for(int i = n; i >= 1; i--) {
+			int curPart = remaining / i;
+			parts.add(curPart);
+			remaining -= curPart;
+		}
+		assert parts.stream().reduce(0, (x,y) -> x+y) == amount; 
+		return parts;
+	}
+	
 	
 	/** Splits off the right part of a list and appends it to another given list.
 	 * 
@@ -187,6 +203,12 @@ public class HUtil {
 		}
 	}
 	
-
+	
+	/** Quick tests. */
+	public static void main(String[] args) {
+		System.out.println(partitionInNParts(10, 3));
+		System.out.println(partitionInNParts(20, 5));
+		System.out.println(partitionInNParts(100, 18));
+	}
 	
 }

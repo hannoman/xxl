@@ -15,6 +15,7 @@ public class Interval<K extends Comparable<K>> {
 	public boolean loIn, hiIn;
 //	private boolean unknownEmptyInterval;
 	
+	/** Creates a new interval whose borders are included as specified. */
 	public Interval(K min, boolean includesMin, K max, boolean includesMax) {
 		super();
 		this.lo = min;
@@ -23,10 +24,12 @@ public class Interval<K extends Comparable<K>> {
 		this.hiIn = includesMax;
 	}
 
+	/** Creates a new interval with both endpoints included. [a,b] */
 	public Interval(K min, K max) {
 		this(min, true, max, true);
 	}
 	
+	/** Creates a new interval consisting of only one point. [a,a] = {a} */
 	public Interval(K key) {
 		this(key, key);
 	}
