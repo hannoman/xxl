@@ -30,10 +30,12 @@ import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursors;
+import xxl.core.cursors.mappers.Mapper;
 import xxl.core.cursors.sources.Enumerator;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
+import xxl.core.io.converters.IntegerConverter;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
@@ -342,11 +344,37 @@ public class HilbertRTreeSA<V, P>
 	 * is needed to maintain aggregate meta-information. 
 	 */
 	class InsertionInfo {
-		
-		boolean insertionSuccessful;
-		boolean isSplit;
-		
-		Interval<Integer> nodesChangedIdxs;
+		boolean insertionSuccessful = false;
+		Interval<Integer> idxsChanged = null;
+		Node newnode = null;
+	}
+
+	//-- Factories for the different cases of insertion results
+	InsertionInfo NO_INSERTION() {
+		InsertionInfo insertInfo = new InsertionInfo();
+		return insertInfo;
+	}
+	
+	InsertionInfo SINGLE_UPDATE(int myParentIdx) {
+		InsertionInfo insertInfo = new InsertionInfo();
+		insertInfo.insertionSuccessful = true;
+		insertInfo.idxsChanged = new Interval<Integer>(myParentIdx);
+		return insertInfo;
+	}
+	
+	InsertionInfo SHARING(Interval<Integer> coopSiblingIdxs) {
+		InsertionInfo insertInfo = new InsertionInfo();
+		insertInfo.insertionSuccessful = true;
+		insertInfo.idxsChanged = coopSiblingIdxs;
+		return insertInfo;
+	}
+	
+	InsertionInfo SPLIT(Interval<Integer> coopSiblingIdxs, Node newnode) {
+		InsertionInfo insertInfo = new InsertionInfo();
+		insertInfo.insertionSuccessful = true;
+		insertInfo.idxsChanged = coopSiblingIdxs;
+		insertInfo.newnode = newnode;
+		return insertInfo;
 	}
 
 	public Node getNode(InnerNode parent, int idxInParent) {
@@ -394,7 +422,7 @@ public class HilbertRTreeSA<V, P>
 		public abstract boolean isLeaf();
 		public boolean isInner() { return !isLeaf(); }
 		
-		public abstract InsertionInfo insert(Long hvKey, V value, P thisCID, int level);
+		public abstract InsertionInfo insert(Long hvKey, V value);
 
 		protected abstract List<V> drainSamples(int amount);
 
@@ -410,6 +438,14 @@ public class HilbertRTreeSA<V, P>
 			else {
 				parent.getCooperatingSiblingsFor(idxInParent);
 			}
+		}
+		public FixedPointRectangle getBoundingBox() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+		public long getLHV() {
+			// TODO Auto-generated method stub
+			return 0;
 		}
 	}
 	
@@ -481,43 +517,53 @@ public class HilbertRTreeSA<V, P>
 			return null;
 		}
 		
-		public InsertionInfo insert(Long hvKey, V value, P thisCID, int levelUnused) {
-			FixedPointRectangle areaKey = getBoundingBox.apply(value);
-			
+		public InsertionInfo insert(Long hvKey, V value) {
 			//- insert in sublevel
 			int pos = findInsertionPos(hvKey);
-			// P nextCID = pagePointers.get(pos);
 			Node nextNode = getNode(this, pos);
-			int oldWeight = totalWeight(); 
 					
-			InsertionInfo childInsertInfo = nextNode.insert(hvKey, value, nextCID, levelUnused-1); //== RECURSION ==
+			InsertionInfo childInsertInfo = nextNode.insert(hvKey, value); //== RECURSION ==
 			
-			if(childInsertInfo.isSplit) { // a split occured in child and we need to update the directory
-				// calculate the new ranges
-				// FIXME
-				Interval<FixedPointRectangle> oldRange = lhvRanges.get(pos);
-				Interval<FixedPointRectangle> rangeLeft = new Interval<FixedPointRectangle>(oldRange.lo, oldRange.loIn, childInsertInfo.separator, true); // CHECK
-				Interval<FixedPointRectangle> rangeRight = new Interval<FixedPointRectangle>(childInsertInfo.separator, false, oldRange.hi, oldRange.hiIn);
-				lhvRanges.set(pos, rangeLeft);
-				lhvRanges.add(pos+1, rangeRight);
+			if(!childInsertInfo.insertionSuccessful) {
+				return NO_INSERTION();
+			} else {
 				
-				// adjust the rest
-				pagePointers.add(pos+1, childInsertInfo.newnodeCID);
-				childWeights.set(pos  , childInsertInfo.weightLeft);
-				childWeights.add(pos+1, childInsertInfo.weightRight);
-			} else { // update weight of child
-				// .. this can only be done after insertion on leaf level, as only then it's clear how the weight was affected.
-				childWeights.set(pos, childInsertInfo.weightNew);
-			}
-			
-			//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
-			int curWeight = totalWeight();
-			boolean insertionTookPlace = curWeight - oldWeight > 0;
-			if(insertionTookPlace) {
+				//- update meta information for the modified nodes
+				long lastLHV = lhvRanges.get(childInsertInfo.idxsChanged.lo).lo;
+				for(int modIdx = childInsertInfo.idxsChanged.lo; modIdx <= childInsertInfo.idxsChanged.hi; modIdx++) {
+					Node node = getNode(this, modIdx);
+					
+					//-- pagePointers stay the same
+					long lhv = node.getLHV();
+					lhvRanges.set(modIdx, new Interval<Long>(lastLHV, false, lhv, true));
+					lastLHV = lhv;
+					
+					areaRanges.set(modIdx, node.getBoundingBox());
+					childWeights.set(modIdx, node.totalWeight());
+				}
+				
+				//- a split occured in child. put a new entry in the directory.
+				if(childInsertInfo.newnode != null) { 
+					Node node = childInsertInfo.newnode;
+					node.pagePointer = container.insert(node); // save node in container
+					
+					int insertPos = childInsertInfo.idxsChanged.hi + 1;
+					pagePointers.add(insertPos, node.pagePointer);
+					lhvRanges.add(insertPos, new Interval<Long>(lastLHV, false, node.getLHV(), true));
+					areaRanges.add(insertPos, node.getBoundingBox());
+					childWeights.add(insertPos, node.totalWeight());
+					
+					if(insertPos + 1 < pagePointers.size()) {
+						assert lhvRanges.get(insertPos + 1).lo == node.getLHV() 
+								&& !lhvRanges.get(insertPos + 1).loIn; 
+					}
+				}
+				
+				//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
 				if(hasSampleBuffer()) {  
 					/* Replace every item currently present in the sample buffer with probability 1 / curWeight 
 					 * with the newly inserted item. */
-					double p = 1.0 / (double)curWeight;
+					double p = 1.0 / (double)totalWeight();
 					for(ListIterator<V> sampleIter = samples.listIterator(); sampleIter.hasNext(); ) {
 						sampleIter.next();
 						if(rng.nextDouble() < p)
@@ -527,52 +573,53 @@ public class HilbertRTreeSA<V, P>
 					samples = new LinkedList<V>();
 					repairSampleBuffer();
 				}
+
+			
+				//- check for split here
+				InsertionInfo insertionInfo = null;
+				if(overflow())
+					insertionInfo = split();
+				else
+					insertionInfo = SINGLE_UPDATE(idxInParent);
+				
+				container.update(pagePointer, this);
+				
+				return insertionInfo;
 			}
-			
-			//- check for split here
-			InsertionInfo insertionInfo = null;
-			if(overflow())
-				insertionInfo = split();
-			else
-				insertionInfo = new InsertionInfo(totalWeight());
-			
-			container.update(thisCID, this);
-			
-			return insertionInfo;
 		}
 
 		
-		public void split() {
-			List<InnerNode> cooperatingSiblings = getCooperatingSiblings();
+		public InsertionInfo split() {
+			Interval<Integer> coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
 			
-			//- check whether we can avoid a split / creation of a new node
-			int summedSizes = cooperatingSiblings.stream().map((InnerNode x) -> x.pagePointers.size()).reduce(0, (x,y) -> x+y);
-			int summedCapacity = branchingHi * cooperatingSiblings.size();
+			List<InnerNode> coopSiblings = new ArrayList<InnerNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
+			for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
+				coopSiblings.add((InnerNode) getNode(parent, idx));
 			
-			InsertionInfo insertionInfo = new InsertionInfo();
-
-			// TODO
-//			List<P> newNodeCIDs;
-//			List<Integer> newWeights;
-//			List<Interval<Long>> newLHVs;
-//			List<FixedPointRectangle> newAreas;
-
+			//- check whether we can avoid a split through sharing			
+			int summedSizes = coopSiblings.stream().map((InnerNode x) -> x.pagePointers.size()).reduce(0, (x,y) -> x+y);
+			int summedCapacity = branchingHi * coopSiblings.size();
 			
+			//- construct the InsertionInfo object
+			InsertionInfo insertionInfo;
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
-				cooperatingSiblings.add(new InnerNode()); // update all references last
-				insertionInfo.isSplit = true;
+				InnerNode newnode = new InnerNode();
+				coopSiblings.add(newnode); // update all references last
+				insertionInfo = SPLIT(coopSiblingIdxs, newnode);
+			} else {
+				insertionInfo = SHARING(coopSiblingIdxs);
 			}
 			
 			//- Collect all relevant values
-			List<Interval<Long>> all_lhvRanges;
-			List<FixedPointRectangle> all_areaRanges;
-			List<P> all_pagePointers;
-			List<Integer> all_childWeights;
+			List<Interval<Long>> all_lhvRanges = new LinkedList<Interval<Long>>();
+			List<FixedPointRectangle> all_areaRanges = new LinkedList<FixedPointRectangle>();
+			List<P> all_pagePointers = new LinkedList<P>();
+			List<Integer> all_childWeights = new LinkedList<Integer>();
 			
-			LinkedList<V> all_samples; // need to be redistributed afterwards
+			LinkedList<V> all_samples = new LinkedList<V>(); // need to be redistributed afterwards
 			
-			for(InnerNode sibling : cooperatingSiblings) {
+			for(InnerNode sibling : coopSiblings) {
 				all_lhvRanges.addAll(sibling.lhvRanges);
 				all_areaRanges.addAll(sibling.areaRanges);
 				all_pagePointers.addAll(sibling.pagePointers);
@@ -582,9 +629,9 @@ public class HilbertRTreeSA<V, P>
 			}
 
 			//- Redistribute them again
-			List<Integer> sizes = HUtil.partitionInNParts(summedSizes, cooperatingSiblings.size());
+			List<Integer> sizes = HUtil.partitionInNParts(summedSizes, coopSiblings.size());
 			int i = 0;
-			for(InnerNode sibling : cooperatingSiblings) {
+			for(InnerNode sibling : coopSiblings) {
 				int curSize = sizes.get(i);
 				sibling.areaRanges = HUtil.splitOffLeft(all_areaRanges, curSize, new ArrayList<>(branchingHi));
 				sibling.lhvRanges = HUtil.splitOffLeft(all_lhvRanges, curSize, new ArrayList<>(branchingHi));
@@ -593,14 +640,12 @@ public class HilbertRTreeSA<V, P>
 				i++;
 			}
 			
-			//- record changes for parent
-			//		-> nope, let this recompute in the insertion function where the modification is detected
-			for(InnerNode sibling : cooperatingSiblings) {
-				
-			}
+			//-- handle samples
+			// FIXME
+			// TODO
 			
-			List<P> newNodeCIDs;
-			
+			//- return
+			return insertionInfo;
 		}
 		
 //		public InsertionInfo split() {			
@@ -815,6 +860,10 @@ public class HilbertRTreeSA<V, P>
 
 	public class LeafNode extends Node {
 		public List<V> values;
+		
+		public LeafNode() {
+			values = new ArrayList<V>(leafHi);
+		}
 
 		public boolean isLeaf() { return true; }
 		
@@ -835,17 +884,18 @@ public class HilbertRTreeSA<V, P>
 			return results;
 		}
 
-		public InsertionInfo insert(Long V value, P thisCID, int levelUnused) {
+		public InsertionInfo insert(Long lhKey, V value) {
 			//- find insertion position
-			FixedPointRectangle lhKey = getKey.apply(value);
-			int insertPos = HUtil.binFindES(new MappedList<V,FixedPointRectangle>(values, FunJ8.toOld(getKey)), key);
-			//- check for duplicates
+			int insertPos = HUtil.binFindES(
+					new MappedList<V,Long>(values, FunJ8.toOld(v -> getSFCKey.apply(getBoundingBox.apply(v)))), 
+					lhKey);
+			//- check for duplicates (but this time it's not the actual key, but the hilbert value)
 			if(nDuplicatesAllowed > 0) {
 				int nDupsFound = 0;
-				for(int i = insertPos; i > 0 && getKey.apply(values.get(i-1)).compareTo(key) == 0; i--)
+				for(int i = insertPos; i > 0 && getSFCKey.apply(getBoundingBox.apply(values.get(i-1))).compareTo(lhKey) == 0; i--)
 					nDupsFound++;
 				if(nDupsFound >= nDuplicatesAllowed)
-					return new InsertionInfo(totalWeight()); // return early
+					return NO_INSERTION(); // return early
 			}
 			
 			//- insert new element
@@ -856,49 +906,90 @@ public class HilbertRTreeSA<V, P>
 			if(overflow())
 				insertInfo = split();
 			else
-				insertInfo = new InsertionInfo(values.size());
+				insertInfo = SINGLE_UPDATE(idxInParent);
 			
 			//- update container contents of self
-			container.update(thisCID, this);
-			container.unfix(thisCID);
+			container.update(pagePointer, this);
+//			container.unfix(pagePointer); // CHECK: what is this for? is this in other implementations, too?
 			
 			return insertInfo;
 		}
 
-		/**
-		 * Splits the leaf in the middle.
-		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
-		 */
 		public InsertionInfo split() {
-			//- find good splitting position, this is more complicated because of duplicates.
-			int targetPos = values.size() / 2;
-			FixedPointRectangle separator = getSFCKey.apply(values.get(targetPos));
+			Interval<Integer> coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
 			
-			int sepLeftPos = targetPos;
-			while(sepLeftPos > 1 && separator.compareTo(getSFCKey.apply(values.get(sepLeftPos-1))) == 0)
-				sepLeftPos--;			
-			int sepRightPos = targetPos;
-			while(sepRightPos < values.size() && separator.compareTo(getSFCKey.apply(values.get(sepRightPos))) == 0)
-				sepRightPos++;
+			List<LeafNode> coopSiblings = new ArrayList<LeafNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
+			for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
+				coopSiblings.add((LeafNode) getNode(parent, idx));
 			
-			int separatorPos;
-			if(targetPos - sepLeftPos <= sepRightPos - targetPos)
-				separatorPos = sepLeftPos;
-			else
-				separatorPos = sepRightPos;
+			//- check whether we can avoid a split through sharing			
+			int summedSizes = coopSiblings.stream().map((LeafNode x) -> x.values.size()).reduce(0, (x,y) -> x+y);
+			int summedCapacity = leafHi * coopSiblings.size();
 			
-			//- build new node
-			LeafNode newode = new LeafNode();
+			//- construct the InsertionInfo object
+			InsertionInfo insertionInfo;
+			if(summedSizes > summedCapacity) { // split can't be avoided
+				// create new node
+				LeafNode newnode = new LeafNode();
+				coopSiblings.add(newnode); // update all references last
+				insertionInfo = SPLIT(coopSiblingIdxs, newnode);
+			} else {
+				insertionInfo = SHARING(coopSiblingIdxs);
+			}
 			
-			int remLeft = separatorPos, remRight = values.size() - remLeft;
-			newode.values = HUtil.splitOffRight(values, remLeft, new ArrayList<V>());
-			FixedPointRectangle usedSeparator = getSFCKey.apply(values.get(values.size()-1));
+			//- Collect all relevant values			
+			List<V> all_values = new LinkedList<V>();
+			for(LeafNode sibling : coopSiblings)
+				all_values.addAll(sibling.values);
+
+			//- Redistribute them again
+			List<Integer> sizes = HUtil.partitionInNParts(summedSizes, coopSiblings.size());
+			int i = 0;
+			for(LeafNode sibling : coopSiblings) {
+				int curSize = sizes.get(i);
+				sibling.values = HUtil.splitOffLeft(all_values, curSize, new ArrayList<V>(leafHi));
+				i++;
+			}
 			
-			//- put new node into Container
-			P newodeCID = container.insert(newode);
-			
-			return new InsertionInfo(newodeCID, usedSeparator, remLeft, remRight);
+			return insertionInfo;
 		}
+		
+		
+		
+//		/**
+//		 * Splits the leaf in the middle.
+//		 * Or at least tries to do a split as close to the middle as possible, cause duplicate keys might get in the way. 
+//		 */
+//		public InsertionInfo split() {
+//			//- find good splitting position, this is more complicated because of duplicates.
+//			int targetPos = values.size() / 2;
+//			FixedPointRectangle separator = getSFCKey.apply(values.get(targetPos));
+//			
+//			int sepLeftPos = targetPos;
+//			while(sepLeftPos > 1 && separator.compareTo(getSFCKey.apply(values.get(sepLeftPos-1))) == 0)
+//				sepLeftPos--;			
+//			int sepRightPos = targetPos;
+//			while(sepRightPos < values.size() && separator.compareTo(getSFCKey.apply(values.get(sepRightPos))) == 0)
+//				sepRightPos++;
+//			
+//			int separatorPos;
+//			if(targetPos - sepLeftPos <= sepRightPos - targetPos)
+//				separatorPos = sepLeftPos;
+//			else
+//				separatorPos = sepRightPos;
+//			
+//			//- build new node
+//			LeafNode newode = new LeafNode();
+//			
+//			int remLeft = separatorPos, remRight = values.size() - remLeft;
+//			newode.values = HUtil.splitOffRight(values, remLeft, new ArrayList<V>());
+//			FixedPointRectangle usedSeparator = getSFCKey.apply(values.get(values.size()-1));
+//			
+//			//- put new node into Container
+//			P newodeCID = container.insert(newode);
+//			
+//			return new InsertionInfo(newodeCID, usedSeparator, remLeft, remRight);
+//		}
 		
 //		/**
 //		 * Splits the leaf in the middle.
@@ -920,6 +1011,21 @@ public class HilbertRTreeSA<V, P>
 //			
 //			return new InsertionInfo(newodeCID, separator, remLeft, remRight);
 //		}
+		
+		public FixedPointRectangle getBoundingBox() {
+			//= foldr union $ map getBoundingBox values
+			Iterator<FixedPointRectangle> areaRangesIter = 
+					new Mapper<V, FixedPointRectangle>(FunJ8.toOld(getBoundingBox), values.iterator());
+			FixedPointRectangle bbox = (FixedPointRectangle) areaRangesIter.next().clone();
+			while(areaRangesIter.hasNext())
+				bbox.union(areaRangesIter.next());
+			return bbox;
+		}
+
+		public long getLHV() {
+			//= getSFCKey $ getBoundingBox $ last values
+			return getSFCKey.apply(getBoundingBox.apply(values.get(values.size() - 1)));
+		}
 		
 		/**
 		 * Returns the indices of the found values. 
