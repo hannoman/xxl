@@ -605,7 +605,7 @@ public class Test_TestableMap {
 		//---------- Hilbert tree test
 		
 		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
-				TreeCreation.createHilbertRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 20, 
+				TreeCreation.createHilbertRSTree(TestUtils.resolveFilename("HilbertTree_first_test"), BLOCK_SIZE, 4, 20, 
 						new CopyableRandom(random), nDuplicatesAllowed);
 		
 		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
