@@ -1,26 +1,28 @@
 package xxl.core.profiling;
 
-import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableMap;
-import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.cursors.Cursor;
-import xxl.core.cursors.Cursors;
+import xxl.core.indexStructures.HilbertRTreeSA;
 import xxl.core.indexStructures.RSTree1D;
 import xxl.core.indexStructures.TestableMap;
 import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.io.converters.BooleanConverter;
-import xxl.core.io.converters.Converter;
+import xxl.core.io.converters.ConvertableConverter;
+import xxl.core.io.converters.Converters;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
 import xxl.core.io.converters.IntegerConverter;
+import xxl.core.io.converters.LongConverter;
+import xxl.core.io.converters.MeasuredConverter;
+import xxl.core.io.converters.MeasuredFixedSizeConverter;
+import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
@@ -304,6 +306,81 @@ public class TreeCreation {
 		System.out.println("Initialization of the tree finished.");
 		return tree;
 	}
+
+
+	public static HilbertRTreeSA<FixedPointRectangle, Long> createHilbertRSTree(
+			String testFile, int BLOCK_SIZE, int branchingLoWish, int branchingHiWish, CopyableRandom rng, int nDuplicatesAllowed) {
+		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
+		
+		int dimension = 3;
+		
+		MeasuredConverter<Interval<Long>> hvRangeConverter = 
+				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
+		MeasuredConverter<FixedPointRectangle> areaConverter = 
+				Converters.createMeasuredConverter(dimension * 2 * LongConverter.SIZE, new ConvertableConverter<FixedPointRectangle>()); // TODO: how to make it fixed size?
+		MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter;
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getMaxObjectSize();
+		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
+		
+		//- set branching param fixed
+		int branchingHi = branchingHiWish;
+		int branchingLo = branchingLoWish;
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= hvRangeConverter.getMaxObjectSize() * branchingHi; 	// hilbert value ranges of children
+		innerSpaceLeft -= areaConverter.getMaxObjectSize() * branchingHi; 		// area ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getMaxObjectSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+		
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+
+		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
+				new HilbertRTreeSA<FixedPointRectangle, Long>(
+						branchingLo, branchingHi, 
+						leafLo, leafHi, 
+						samplesPerNodeLo, samplesPerNodeHi, 
+						universe, 
+						getSFCKey, 
+						nDuplicatesAllowed
+						);
+		
+		
+		
+//		(
+//						branchingParamLo, // universe
+//						branchingParamHi, 
+//						leafLo, 
+//						leafHi, 
+//						samplesPerNodeLo, 
+//						samplesPerNodeHi, 
+//						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
+//						((Pair<Integer, Double> x) -> x.getFirst()),
+//						nDuplicatesAllowed
+//					);
+		//-- set the PRNG state
+		tree.setRNG(rng);
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		
+		System.out.println("Initialization of the tree finished.");
+		return tree;
+	}
+
 	
 //	public static void createAndSave_RSTree_pairsIntDouble(
 //			String metaDataFilename, String containerPrefix, int nTuples, CopyableRandom random,

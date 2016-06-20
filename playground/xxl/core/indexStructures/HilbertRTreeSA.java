@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 import xxl.core.collections.MappedList;
@@ -36,6 +37,7 @@ import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
+import xxl.core.io.converters.LongConverter;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
@@ -47,9 +49,9 @@ import xxl.core.util.Sample;
 import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.spatial.rectangles.FixedPointRectangle;
 
-public class HilbertRTreeSA<V, P> 
+public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	// FixedPointRectangle (respectively any hypercubes) are not comparable naturally, so we can't support Comparable
-	/* implements SamplableMap<xxl.core.spatial.rectangles.FixedPointRectangle, V> */ 
+	/* implements SamplableMap<FixedPointRectangle, V> */ 
 {
 
     /** The data dimension. */
@@ -103,8 +105,9 @@ public class HilbertRTreeSA<V, P>
 	/** Remember how high the tree is... */
 	int rootHeight;
 
-	/** Domain of the keys. */
+	/** Domain of the value-keys. */
 	public FixedPointRectangle universe;
+	public Interval<Long> hvUniverse; // TODO: initialise hvUniverse
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
 	final int nDuplicatesAllowed;
@@ -117,6 +120,7 @@ public class HilbertRTreeSA<V, P>
 	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, 
 			int samplesPerNodeHi, FixedPointRectangle universe, Function<FixedPointRectangle, Long> getSFCKey, int nDuplicatesAllowed) {
 		this.universe = universe;
+		// TODO: calculate hvUniverse from universe
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
 		this.branchingLo = branchingLo;
@@ -125,6 +129,9 @@ public class HilbertRTreeSA<V, P>
 		this.leafHi = leafHi;
 		this.getSFCKey = getSFCKey;
 		this.nDuplicatesAllowed = nDuplicatesAllowed;
+		
+		// set the hilbert value universe to the most general case
+		this.hvUniverse = new Interval<Long>(Long.MIN_VALUE, true, Long.MAX_VALUE, true);
 		
 		// defaults
 		this.samplesPerNodeReplenishTarget = this.samplesPerNodeHi;
@@ -143,7 +150,7 @@ public class HilbertRTreeSA<V, P>
 //	public static <FixedPointRectangle extends Comparable<FixedPointRectangle>, V, P> TestableMap<FixedPointRectangle, V> loadFromMetaData(
 //			String metaDataFilename, 
 //			Function<String, Container> containerFactory,  
-//			Converter<FixedPointRectangle> keyConverter, 
+//			Converter<FixedPointRectangle> hvRangeConverter, 
 //			Converter<V> valueConverter,
 //			Function<V,FixedPointRectangle> getKey) throws IOException {
 //		//-- open the metaData-file
@@ -163,7 +170,7 @@ public class HilbertRTreeSA<V, P>
 //		Container rawContainer = containerFactory.apply(dataFileName);
 //				
 //		//-- read the constructor/topological parameters
-//		Interval<FixedPointRectangle> universe = Interval.getConverter(keyConverter).read(metaData);
+//		Interval<FixedPointRectangle> universe = Interval.getConverter(hvRangeConverter).read(metaData);
 //		int samplesPerNodeLo = metaData.readInt();
 //		int samplesPerNodeHi = metaData.readInt();
 //		int branchingLo = metaData.readInt();
@@ -174,7 +181,7 @@ public class HilbertRTreeSA<V, P>
 //		
 //		//-- construct and initialize the tree
 //		HilbertRTreeSA<FixedPointRectangle, V, P> instance = new HilbertRTreeSA<FixedPointRectangle, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
-//		instance.initialize_buildContainer(rawContainer, keyConverter, valueConverter);
+//		instance.initialize_buildContainer(rawContainer, hvRangeConverter, valueConverter);
 //		
 //		//- read state parameters
 //		P rootCID = (P) rawContainer.objectIdConverter().read(metaData);
@@ -202,7 +209,7 @@ public class HilbertRTreeSA<V, P>
 //	public void writeToMetaData(
 //			String metaDataFilename, 
 //			String dataFileName,
-//			Converter<FixedPointRectangle> keyConverter, 
+//			Converter<FixedPointRectangle> hvRangeConverter, 
 //			Converter<V> valueConverter
 //			) throws IOException {
 //		//-- open the metaData file
@@ -226,7 +233,7 @@ public class HilbertRTreeSA<V, P>
 //		metaData.writeUTF(dataFileName);
 //
 //		//-- write the constructor/topological parameters
-//		Interval.getConverter(keyConverter).write(metaData, universe);
+//		Interval.getConverter(hvRangeConverter).write(metaData, universe);
 //		metaData.writeInt(samplesPerNodeLo);
 //		metaData.writeInt(samplesPerNodeHi);
 //		metaData.writeInt(branchingLo);
@@ -248,12 +255,12 @@ public class HilbertRTreeSA<V, P>
 	 * We construct the usable node container from them ourselfes.
 	 * 
 	 * @param rawContainer container to store the data in
-	 * @param keyConverter converter for the key-type FixedPointRectangle 
+	 * @param hvRangeConverter converter for the key-type FixedPointRectangle 
 	 * @param valueConverter converter for the value type V
 	 */
-	public void initialize_buildContainer(Container rawContainer, Converter<FixedPointRectangle> keyConverter, Converter<V> valueConverter) {
+	public void initialize_buildContainer(Container rawContainer, Converter<V> valueConverter) {
 		NodeConverter nodeConverter = 
-				new NodeConverter(keyConverter, valueConverter, rawContainer.objectIdConverter());
+				new NodeConverter(valueConverter);
 		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
 
@@ -272,33 +279,34 @@ public class HilbertRTreeSA<V, P>
 	public boolean insert(V value) {
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
-			root.values = new ArrayList<V>(leafHi);
 			root.values.add(value);
 			rootHeight = 0;
 			rootCID = container.insert(root);
 			return true;
-		} else {
+		} else { // tree not empty
 			Node root = container.get(rootCID);
-			int oldWeight = root.totalWeight();
-			InsertionInfo insertionInfo = root.insert(value, rootCID, rootHeight);		
-						
-			if(insertionInfo.isSplit) { // new root - actually create a new root "manually"
+			long lhKey = getSFCKey.apply(getBoundingBox.apply(value));
+			InsertionInfo insertionInfo = root.insert(lhKey, value);
+
+			if(!insertionInfo.insertionSuccessful) {
+				return false;
+			} else if(insertionInfo.newnode == null) { // normal insertion
+				return true;
+			} else { // insertion resulting in new root
 				InnerNode newroot = new InnerNode();
 				
-				// FIXME
-//				newroot.ranges = new ArrayList<Interval<FixedPointRectangle>>(branchingHi);
-//				//- calculate new ranges
-//				Pair<Interval<FixedPointRectangle>, Interval<FixedPointRectangle>> newRanges = universe.split(insertionInfo.separator, true);				
-//				newroot.ranges.add(newRanges.getElement1());
-//				newroot.ranges.add(newRanges.getElement2());
-				//- adjust the rest
-				newroot.pagePointers = new ArrayList<P>(branchingHi);
+				insertionInfo.newnode.pagePointer = container.insert(insertionInfo.newnode);
 				newroot.pagePointers.add(rootCID);
-				newroot.pagePointers.add(insertionInfo.newnodeCID);
+				newroot.pagePointers.add(insertionInfo.newnode.pagePointer);
 				
-				newroot.childWeights = new ArrayList<Integer>(branchingHi);
-				newroot.childWeights.add(insertionInfo.weightLeft);
-				newroot.childWeights.add(insertionInfo.weightRight);
+				newroot.childWeights.add(root.totalWeight());
+				newroot.childWeights.add(insertionInfo.newnode.totalWeight());
+				
+				newroot.areaRanges.add(root.getBoundingBox());
+				newroot.areaRanges.add(insertionInfo.newnode.getBoundingBox());
+				
+				newroot.lhvRanges.add(new Interval<Long>(hvUniverse.lo, true, root.getLHV(), true));
+				newroot.lhvRanges.add(new Interval<Long>(root.getLHV(), false, hvUniverse.hi, true));
 				
 				// fill the root node with samples again
 				if(newroot.shouldHaveSampleBuffer()) {
@@ -308,32 +316,19 @@ public class HilbertRTreeSA<V, P>
 				
 				rootCID = container.insert(newroot);
 				rootHeight++;
-				return true; // if the root got split we automatically know that the insertion was successful
-			} else { //.. otherwise we have to check explicitly 
-				int curWeight = root.totalWeight();
-				boolean insertionSuccessful = curWeight > oldWeight;
-				return insertionSuccessful;
+				return true;
 			}
-			
-		}		
+		}
 	}
 
 	/** Lookup. */
-	public List<V> get(FixedPointRectangle key) {
-		if(rootCID == null) return new LinkedList<V>(); // tree empty
-		
-		int level = rootHeight;
-		P nodeCID = rootCID;
-		
-		while(level > 0) {
-			// nodeCID = ((InnerNode) container.get(nodeCID)).chooseSubtrees(key);
-			// restrict us to one path for now
-			nodeCID = ((InnerNode) container.get(nodeCID)).chooseFirstSubtreeCID(key);
-			level--;
-		}		
-		LeafNode lnode = (LeafNode) container.get(nodeCID);
-		
-		return HUtil.getAll(lnode.lookupIdxs(key), lnode.values);
+	public List<V> get(FixedPointRectangle query) {
+		if(rootCID == null)  // tree empty
+			return new LinkedList<V>();
+		else {
+			Node root = container.get(rootCID);
+			return root.get(query);
+		}
 	} 
 		
 	
@@ -430,23 +425,18 @@ public class HilbertRTreeSA<V, P>
 
 		public abstract List<V> allValues();
 
-		public abstract Collection<? extends V> get(FixedPointRectangle query);
+		public abstract List<V> get(FixedPointRectangle query);
 			
-		public <N extends Node> List<N> getCooperatingSiblings() {
+		public List<Node> getCooperatingSiblings() {
 			if(parent == null)
 				return null;
 			else {
-				parent.getCooperatingSiblingsFor(idxInParent);
+				return parent.getCooperatingSiblingsFor(idxInParent);
 			}
 		}
-		public FixedPointRectangle getBoundingBox() {
-			// TODO Auto-generated method stub
-			return null;
-		}
-		public long getLHV() {
-			// TODO Auto-generated method stub
-			return 0;
-		}
+		
+		public abstract FixedPointRectangle getBoundingBox();
+		public abstract long getLHV();
 	}
 	
 	public class InnerNode extends Node {		
@@ -498,8 +488,8 @@ public class HilbertRTreeSA<V, P>
 			return idxs;
 		}
 		
-		public List<P> chooseSubtreeCIDs(FixedPointRectangle key) {
-			return HUtil.getAll(chooseSubtreeIdxs(key), pagePointers);
+		public List<P> chooseSubtreeCIDs(FixedPointRectangle query) {
+			return HUtil.getAll(chooseSubtreeIdxs(query), pagePointers);
 		}
 
 		@Override
@@ -529,18 +519,7 @@ public class HilbertRTreeSA<V, P>
 			} else {
 				
 				//- update meta information for the modified nodes
-				long lastLHV = lhvRanges.get(childInsertInfo.idxsChanged.lo).lo;
-				for(int modIdx = childInsertInfo.idxsChanged.lo; modIdx <= childInsertInfo.idxsChanged.hi; modIdx++) {
-					Node node = getNode(this, modIdx);
-					
-					//-- pagePointers stay the same
-					long lhv = node.getLHV();
-					lhvRanges.set(modIdx, new Interval<Long>(lastLHV, false, lhv, true));
-					lastLHV = lhv;
-					
-					areaRanges.set(modIdx, node.getBoundingBox());
-					childWeights.set(modIdx, node.totalWeight());
-				}
+				long lastLHV = updateChildrenInfo(childInsertInfo.idxsChanged);
 				
 				//- a split occured in child. put a new entry in the directory.
 				if(childInsertInfo.newnode != null) { 
@@ -596,11 +575,11 @@ public class HilbertRTreeSA<V, P>
 			for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
 				coopSiblings.add((InnerNode) getNode(parent, idx));
 			
-			//- check whether we can avoid a split through sharing			
+			//- Check whether we can avoid a split through sharing			
 			int summedSizes = coopSiblings.stream().map((InnerNode x) -> x.pagePointers.size()).reduce(0, (x,y) -> x+y);
 			int summedCapacity = branchingHi * coopSiblings.size();
 			
-			//- construct the InsertionInfo object
+			//- Construct the InsertionInfo object
 			InsertionInfo insertionInfo;
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
@@ -611,7 +590,7 @@ public class HilbertRTreeSA<V, P>
 				insertionInfo = SHARING(coopSiblingIdxs);
 			}
 			
-			//- Collect all relevant values
+			//- Collect all child entries (with meta information) and samples
 			List<Interval<Long>> all_lhvRanges = new LinkedList<Interval<Long>>();
 			List<FixedPointRectangle> all_areaRanges = new LinkedList<FixedPointRectangle>();
 			List<P> all_pagePointers = new LinkedList<P>();
@@ -628,7 +607,7 @@ public class HilbertRTreeSA<V, P>
 				all_samples.addAll(sibling.samples);
 			}
 
-			//- Redistribute them again
+			//- Redistribute child entries again
 			List<Integer> sizes = HUtil.partitionInNParts(summedSizes, coopSiblings.size());
 			int i = 0;
 			for(InnerNode sibling : coopSiblings) {
@@ -640,12 +619,64 @@ public class HilbertRTreeSA<V, P>
 				i++;
 			}
 			
-			//-- handle samples
-			// FIXME
-			// TODO
+			//-- Redistribute samples (slow and kind of hacky (OPT))
+			for(V sample : all_samples) {
+				for(InnerNode sibling : coopSiblings) {
+					if(getSFCKey.apply(getBoundingBox.apply(sample)) <= sibling.getLHV()) { // we can add it here
+						if(sibling.shouldHaveSampleBuffer()) {
+							if(sibling.hasSampleBuffer() == false)
+								sibling.samples = new LinkedList<V>();
+							sibling.samples.add(sample);
+						}
+					}
+				}
+			}
+			
+			
+			// this doesn't work as the samples aren't sorted in the sample buffers
+//			int curIdx = 0;
+//			boolean f_nodesExhausted = false;
+//			for(V sample : all_samples) {
+//				while(getSFCKey.apply(getBoundingBox.apply(sample)) > coopSiblings.get(curIdx).getLHV()) {
+//					curIdx++;
+//					if(curIdx == coopSiblings.size()) {
+//						f_nodesExhausted = true;
+//						break;
+//					}
+//				}
+//				if(f_nodesExhausted) break; // discard remaining samples
+//				
+//				InnerNode node = coopSiblings.get(curIdx);
+//				// put sample in node if it should have samples
+//				if(node.shouldHaveSampleBuffer()) {
+//					if(node.hasSampleBuffer() == false)
+//						node.samples = new LinkedList<V>();
+//					node.samples.add(sample); // only the partitioning gets shifted the order keeps the same, is this a problem w.r.t. independence?
+//				} else {
+//					// just forget the sample
+//				}
+//			}
 			
 			//- return
 			return insertionInfo;
+		}
+		
+		protected long updateChildrenInfo(Interval<Integer> modIdxs) {
+			//- update meta information for the modified nodes
+			long lastLHV = lhvRanges.get(modIdxs.lo).lo;
+			for(int modIdx = modIdxs.lo; modIdx <= modIdxs.hi; modIdx++) {
+				Node node = getNode(this, modIdx);
+				
+				//-- pagePointers stay the same
+				long lhv = node.getLHV();
+				lhvRanges.set(modIdx, new Interval<Long>(lastLHV, false, lhv, true));
+				lastLHV = lhv;
+				
+				areaRanges.set(modIdx, node.getBoundingBox());
+				childWeights.set(modIdx, node.totalWeight());
+			}
+			
+			return lastLHV;
 		}
 		
 //		public InsertionInfo split() {			
@@ -1027,23 +1058,23 @@ public class HilbertRTreeSA<V, P>
 			return getSFCKey.apply(getBoundingBox.apply(values.get(values.size() - 1)));
 		}
 		
-		/**
-		 * Returns the indices of the found values. 
-		 * @param key key to look for
-		 * @return list of indices i with "getKey(values[i]) == key" 
-		 */
-		public List<Integer> lookupIdxs(FixedPointRectangle key) {
-			List<Integer> idx = new LinkedList<Integer>();
-
-			List<FixedPointRectangle> mappedList = new MappedList<V,FixedPointRectangle>(values, FunJ8.toOld(getSFCKey));
-			int pos = HUtil.binFindSE(mappedList, key); // get starting position by binary search
-			while(pos < values.size() && key.compareTo(getSFCKey.apply(values.get(pos))) == 0) {
-				idx.add(pos);
-				pos++;
-			}				
-			
-			return idx;
-		}
+//		/**
+//		 * Returns the indices of the found values. 
+//		 * @param key key to look for
+//		 * @return list of indices i with "getKey(values[i]) == key" 
+//		 */
+//		public List<Integer> lookupIdxs(FixedPointRectangle key) {
+//			List<Integer> idx = new LinkedList<Integer>();
+//
+//			List<FixedPointRectangle> mappedList = new MappedList<V,FixedPointRectangle>(values, FunJ8.toOld(getSFCKey));
+//			int pos = HUtil.binFindSE(mappedList, key); // get starting position by binary search
+//			while(pos < values.size() && key.compareTo(getSFCKey.apply(values.get(pos))) == 0) {
+//				idx.add(pos);
+//				pos++;
+//			}				
+//			
+//			return idx;
+//		}
 
 		/** Draws a WR-sample (with replacement (!)) from the underlying values. */
 		protected List<V> drainSamples(int amount) {
@@ -1075,17 +1106,14 @@ public class HilbertRTreeSA<V, P>
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
 
-		Converter<FixedPointRectangle> keyConverter;
-		Converter<V> valueConverter;
-		Converter<P> cidConverter;
-		Converter<Interval<FixedPointRectangle>> rangeConverter;
+		Converter<Interval<Long>> hvRangeConverter = Interval.getConverter(LongConverter.DEFAULT_INSTANCE);
+		Converter<FixedPointRectangle> areaConverter = new ConvertableConverter<FixedPointRectangle>();
 		
-		public NodeConverter(Converter<FixedPointRectangle> keyConverter, Converter<V> valueConverter, Converter<P> cidConverter) {
+		Converter<V> valueConverter;
+		
+		public NodeConverter(Converter<V> valueConverter) {
 			super();
-			this.keyConverter = keyConverter;
 			this.valueConverter = valueConverter;
-			this.cidConverter = cidConverter;
-			this.rangeConverter = Interval.getConverter(keyConverter);
 		}
 
 		@Override
@@ -1117,10 +1145,14 @@ public class HilbertRTreeSA<V, P>
 			// - read number of childs
 			int nChildren = dataInput.readInt();
 
-			// -- read separators
-			node.lhvRanges = new LinkedList<Interval<FixedPointRectangle>>();
-			for(int i=0; i < nChildren; i++) { // only #childs-1 separators!
-				node.lhvRanges.add(rangeConverter.read(dataInput));
+			// -- read hilbert-value ranges
+			for(int i=0; i < nChildren; i++) {
+				node.lhvRanges.add(hvRangeConverter.read(dataInput));
+			}
+			
+			// -- read area ranges
+			for(int i=0; i < nChildren; i++) {
+				node.areaRanges.add(areaConverter.read(dataInput));
 			}
 			
 			// -- read the ContainerIDs of the IndexEntries
@@ -1171,9 +1203,14 @@ public class HilbertRTreeSA<V, P>
 			// - write number of children
 			dataOutput.writeInt(node.pagePointers.size());
 
-			// -- write separators
-			for (Interval<FixedPointRectangle> range : node.lhvRanges) {
-				rangeConverter.write(dataOutput, range);
+			// -- write hilbert value ranges 
+			for (Interval<Long> hvRange : node.lhvRanges) {
+				hvRangeConverter.write(dataOutput, hvRange);				
+			}
+			
+			// -- write area ranges
+			for (FixedPointRectangle areaRange : node.areaRanges) {
+				areaConverter.write(dataOutput, areaRange);				
 			}
 
 			// -- write ContainerIDs
@@ -1202,31 +1239,90 @@ public class HilbertRTreeSA<V, P>
 //	/** Executes a range query of the interval [lo (inclusive), hi (exclusive)[ */
 //	@Override
 //	public ProfilingCursor<V> rangeQuery(FixedPointRectangle lo, FixedPointRectangle hi){
-//		return new QueryCursor(new Interval<FixedPointRectangle>(lo, true, hi, false));
+//		return new HVQueryCursor(new Interval<FixedPointRectangle>(lo, true, hi, false));
 //	}
 	
 	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
-	@Override
-	public ProfilingCursor<V> rangeQuery(Interval<FixedPointRectangle> query){
-		return new QueryCursor(query);
+	public ProfilingCursor<V> areaRangeQuery(FixedPointRectangle query){
+		return new AreaQueryCursor(query);
 	}
 	
-	/* TODO: we need different range queries for R-trees:
-	 * 		- Q intersects R
-	 * 		- Q contains R
-	 * 		- Q is contained in R
-	 */
+	public class AreaQueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
+		FixedPointRectangle query;
+		LinkedList<Pair<Integer, P>> candidateNodes = new LinkedList<Pair<Integer, P>>();
+		/** Profiling information: nodes touched. */
+		Set<Pair<Integer, P>> p_nodesTouched = new TreeSet<Pair<Integer,P>>();
+		LinkedList<V> precomputed = new LinkedList<V>();
+		
+		public AreaQueryCursor(FixedPointRectangle query) {
+			super();
+			this.query = query;
+			this.candidateNodes.add(new Pair<Integer, P>(rootHeight, rootCID));
+		}
+
+		@Override
+		protected boolean hasNextObject() {
+			if(!precomputed.isEmpty())
+				return true;
+			else if(candidateNodes.isEmpty())
+				return false;
+			else {
+				Pair<Integer, P> cand = candidateNodes.pop();
+				int level = cand.getElement1(); P nodeCID = cand.getElement2();
+				Node node = container.get(nodeCID);
+				p_nodesTouched.add(cand);
+
+				// expand one step
+				if(node.isLeaf()) {
+					precomputed.addAll(((LeafNode) node).get(query));
+				} else {
+					List<P> nextCIDs = ((InnerNode) node).chooseSubtreeCIDs(query);
+					ListIterator<P> nextCIDiter = nextCIDs.listIterator(nextCIDs.size());
+					while(nextCIDiter.hasPrevious())
+						candidateNodes.addFirst(new Pair<>(level-1, nextCIDiter.previous()));
+				}
+				return hasNextObject();
+			}
+		}
+		
+		@Override
+		protected V nextObject() {
+			return precomputed.pop();
+		}
+
+		@Override
+		public Pair<Map<Integer,Integer>, Map<Integer, Integer>> getProfilingInformation() {
+			// process the profiling information
+			Map<Integer, Integer> touchedByLevel = new TreeMap<Integer, Integer>();
+			for(Pair<Integer, P> nodeId : p_nodesTouched) {
+				int l = nodeId.getElement1();
+				touchedByLevel.putIfAbsent(l, 0);
+				touchedByLevel.put(l, touchedByLevel.get(l)+1);
+			}
+			
+			Map<Integer, Integer> prunedByLevel = new TreeMap<Integer, Integer>();			
+			
+			return new Pair<Map<Integer, Integer>, Map<Integer, Integer>>(touchedByLevel, prunedByLevel);
+		}
+
+	}
 	
-
-
+	
+	/** Executes a range query of the given query interval, whose exact parameters can be specified. */
+	public ProfilingCursor<V> hvRangeQuery(Interval<Long> query){
+		return new HVQueryCursor(query);
+	}
+	
+	
+	
 	/** A query cursor for simple range queries.
 	 * 
 	 * We won't subclass xxl.core.indexStructures.QueryCursor here as it is 
 	 * designed for queries over trees which inherit from xxl.core.indexStructures.Tree.
 	 */
-	public class QueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
+	public class HVQueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
 		/** Query interval. */
-		final Interval<FixedPointRectangle> query;
+		final Interval<Long> query;
 		
 		/** Profiling information: nodes touched. */
 		Set<Pair<Integer, P>> p_nodesTouched;		
@@ -1242,7 +1338,7 @@ public class HilbertRTreeSA<V, P>
 		/** Single precomputed value. */
 		V precomputed;
 		
-		private QueryCursor(Interval<FixedPointRectangle> query, P startNode, int startlevel) {
+		private HVQueryCursor(Interval<Long> query, P startNode, int startlevel) {
 			super();
 			//- query
 			this.query = query;
@@ -1256,7 +1352,7 @@ public class HilbertRTreeSA<V, P>
 			precomputed = null; // the next value to spit out
 		}
 		
-		public QueryCursor(Interval<FixedPointRectangle> query) {
+		public HVQueryCursor(Interval<Long> query) {
 			this(query, rootCID, rootHeight);
 		}
 		
@@ -1292,7 +1388,15 @@ public class HilbertRTreeSA<V, P>
 				InnerNode curINode = (InnerNode) curNode;  
 				
 				// find the index of the next childnode
-				int nextPos = curINode.chooseFirstSubtreeIdx_Interval(query);
+				// Integer InnerNode.chooseFirstSubtreeIdx_Interval(query); functionality
+				Integer nextPos = null;
+				for(int i=0; i < curINode.pagePointers.size(); i++)
+					if(curINode.lhvRanges.get(i).intersects(query)) {
+						nextPos = i;
+						break;
+					}
+				
+				assert nextPos != null;
 				sIdx.push(nextPos);
 				
 				// descend to next node
@@ -1306,8 +1410,9 @@ public class HilbertRTreeSA<V, P>
 			LeafNode curLNode = (LeafNode) curNode;
 			
 			// find starting position
-			List<FixedPointRectangle> mappedList = new MappedList<V,FixedPointRectangle>(curLNode.values, FunJ8.toOld(getSFCKey));			
-			int pos = HUtil.binFindSE(mappedList, query.lo); // CHECK!!
+			List<Long> mappedList = 
+					new MappedList<V,Long>(curLNode.values, FunJ8.toOld(getSFCKey.compose(getBoundingBox)));			
+			int pos = HUtil.binFindSE(mappedList, query.lo);
 			sIdx.push(pos);
 			
 			// regarding first computation of hasNext:
@@ -1383,8 +1488,8 @@ public class HilbertRTreeSA<V, P>
 			}
 			
 			precomputed = curLNode.values.get(sIdx.peek());
-			if(!query.contains(getSFCKey.apply(precomputed))) {
-				assert query.locate(getSFCKey.apply(precomputed)) > 0;
+			if(!query.contains(getSFCKey.compose(getBoundingBox).apply(precomputed))) {
+				assert query.locate(getSFCKey.compose(getBoundingBox).apply(precomputed)) > 0;
 				return false; // hit the high border
 			}
 			
@@ -1398,24 +1503,18 @@ public class HilbertRTreeSA<V, P>
 	
 	}
 	
-	/** Executes a sampling range query of the interval [lo (inclusive), hi (inclusive)] */
-	public ProfilingCursor<V> samplingRangeQuery(FixedPointRectangle lo, FixedPointRectangle hi, int samplingBatchSize){
-		Interval<FixedPointRectangle> query = new Interval<FixedPointRectangle>(lo, hi);
+	/** Executes a sampling range query on the area <tt>query</tt> */
+	public ProfilingCursor<V> samplingRangeQuery(FixedPointRectangle query, int samplingBatchSize){
 		return new ReallyLazySamplingCursor(query, samplingBatchSize, rootCID, rootHeight, universe, container.get(rootCID).totalWeight());
 	}
 
 	/** The really lazy (and a bit desoriented) sampling cursor from the paper.
 	 * It now allows to batch sampling tries. * 
 	 */
-	// TODO: load all nodes which will be pruned from disk. This needs to be optimized!
-	/*		-> Workaround: InnerSamplers now only load their associated node on demand (when they actually
-	 * 				get sampled) and not on construction time like before. */ 
 	// TODO: counts of inspected nodes are not quite right.
-	// TODO: UnbufferedSamplers only get counted as 1 node, although a whole subtree 
-	//		might need to get loaded for their initialisation.
 	public class ReallyLazySamplingCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
 		/** the query */
-		Interval<FixedPointRectangle> query;
+		FixedPointRectangle query;
 		/** batch size */
 		int batchSize;
 		/** Precomputed values for the cursor. */
@@ -1432,8 +1531,8 @@ public class HilbertRTreeSA<V, P>
 		List<Sampler> samplers;
 		
 		
-		/** Constructor for child cursors. (called from InnerSampler.tryToSample() */
-		public ReallyLazySamplingCursor(Interval<FixedPointRectangle> query, int batchSize, 
+		/** Constructor for child cursors. (called from InnerSampler.tryToSample()) */
+		public ReallyLazySamplingCursor(FixedPointRectangle query, int batchSize, 
 				List<Sampler> samplers, Set<Pair<Integer, P>> p_nodesTouched, Set<Pair<Integer, P>> p_nodesPruned) {
 			super();
 			this.query = query;
@@ -1444,7 +1543,7 @@ public class HilbertRTreeSA<V, P>
 		}
 		
 		/** Constructor for root sampler. Called from RSTree.samplingRangeQuery() */ 
-		public ReallyLazySamplingCursor(Interval<FixedPointRectangle> query, int batchSize, P initialCID, int initialLevel, Interval<FixedPointRectangle> range, int initialWeight) {
+		public ReallyLazySamplingCursor(FixedPointRectangle query, int batchSize, P initialCID, int initialLevel, FixedPointRectangle range, int initialWeight) {
 			this(query, batchSize, 
 					new LinkedList<Sampler>(), 			// samplers
 					new HashSet<Pair<Integer,P>>(),		// p_nodesPruned
@@ -1495,7 +1594,7 @@ public class HilbertRTreeSA<V, P>
 				// this late checking enables us to adhere to the paper.
 				SamplingResult res = null;
 				Sampler sampler = samplers.get(i);
-				if(toDraw.get(i) > 0 && !query.intersects(sampler.getRange()) ) {
+				if(toDraw.get(i) > 0 && !query.overlaps(sampler.getRange()) ) {
 					p_nodesPruned.add(samplers.get(i).getNodeIdentifier());
 					res = new SamplingResult();
 				} else {					
@@ -1541,7 +1640,7 @@ public class HilbertRTreeSA<V, P>
 
 		/** Factory for Samplers - respectively different initialisation of
 		 * subclasses depending on the node contents. */
-		public Sampler createRealSampler(P nodeCID, int level, Interval<FixedPointRectangle> range) {
+		public Sampler createRealSampler(P nodeCID, int level, FixedPointRectangle range) {
 			Node node = container.get(nodeCID);
 			if (node.isInner()) {
 				InnerNode inode = (InnerNode) node;
@@ -1566,9 +1665,9 @@ public class HilbertRTreeSA<V, P>
 		public abstract class Sampler {
 			P nodeCID;
 			int level;
-			Interval<FixedPointRectangle> range;
+			FixedPointRectangle range;
 						
-			public Sampler(P nodeCID, int level, Interval<FixedPointRectangle> range) {
+			public Sampler(P nodeCID, int level, FixedPointRectangle range) {
 				super();
 				this.nodeCID = nodeCID;
 				this.level = level;
@@ -1583,7 +1682,7 @@ public class HilbertRTreeSA<V, P>
 				return new Pair<Integer, P>(level, nodeCID);
 			}
 
-			public Interval<FixedPointRectangle> getRange() {
+			public FixedPointRectangle getRange() {
 				return range;
 			}
 		}
@@ -1591,9 +1690,8 @@ public class HilbertRTreeSA<V, P>
 		public class ProtoSampler extends Sampler /* implements Decorator<Sampler> */ {
 			Sampler realSampler = null;
 			int savedWeight;
-			public ProtoSampler(P nodeCID, int level, Interval<FixedPointRectangle> range, int savedWeight) {
+			public ProtoSampler(P nodeCID, int level, FixedPointRectangle range, int savedWeight) {
 				super(nodeCID, level, range);
-				this.range = range;
 				
 				this.savedWeight = savedWeight;
 			}			
@@ -1607,7 +1705,7 @@ public class HilbertRTreeSA<V, P>
 			}
 			
 			@Override
-			public ReallyLazySamplingCursor.SamplingResult tryToSample(int n) {
+			public SamplingResult tryToSample(int n) {
 				if(n == 0) {
 					List<V> samplesObtained = new LinkedList<V>();
 					return new SamplingResult(samplesObtained);
@@ -1646,12 +1744,12 @@ public class HilbertRTreeSA<V, P>
 			 * on the first attempt to sample from an UnbufferedSampler.
 			 * But this should usually not matter much (hopefully).
 			 */
-			public UnbufferedSampler(P nodeCID, int level, Interval<FixedPointRectangle> range) {
+			public UnbufferedSampler(P nodeCID, int level, FixedPointRectangle range) {
 				super(nodeCID, level, range);
-				this.range = range;
 				
 				this.uncategorized = new LinkedList<V>();
 				//- fetch the values yourself - replacement for allValues (this is a right-to-left DFS traversal of the subtree)
+				//		-> this way we can keep track of the count of nodes loaded.
 				LinkedList<Pair<Integer, P>> dfsQueue = new LinkedList<Pair<Integer, P>>();
 				dfsQueue.add(new Pair<Integer, P>(level, nodeCID));
 				
@@ -1690,7 +1788,7 @@ public class HilbertRTreeSA<V, P>
 			protected V trySample1(int x) {		
 				if(x < uncategorized.size()) { // categorize new one
 					V sample = uncategorized.remove(x);
-					if(query.contains(getSFCKey.apply(sample))) {
+					if(query.overlaps(getBoundingBox.apply(sample))) {
 						keepers.add(sample);
 						return sample;
 					} else
@@ -1724,8 +1822,7 @@ public class HilbertRTreeSA<V, P>
 			}
 			
 			/** "Iterative" sampling which adjusts the effective weight after each draw.
-			 * This does updates after each draw, which is not what we want in a batched draw. 
-			 * 		-> QUE: chance for optimisation? */ 
+			 * This does updates after each draw, which is not what we want in a batched draw. */ 
 			/*private SamplingResult tryToSample_iterative(int n) {
 				LinkedList<V> samplesObtained = new LinkedList<V>();
 							
@@ -1760,7 +1857,7 @@ public class HilbertRTreeSA<V, P>
 			Iterator<V> sampleIter;
 			int savedWeight;
 			
-			public InnerSampler(P nodeCID, int level, Interval<FixedPointRectangle> range) {
+			public InnerSampler(P nodeCID, int level, FixedPointRectangle range) {
 				super(nodeCID, level, range);
 				
 				// do eager initialization here, as we now have ProtoSamplers
@@ -1780,7 +1877,7 @@ public class HilbertRTreeSA<V, P>
 				int i = 0;
 				for(; i < n && sampleIter.hasNext(); i++) {
 					V sample = sampleIter.next();
-					if(query.contains(getSFCKey.apply(sample)))
+					if(query.overlaps(getBoundingBox.apply(sample)))
 						samplesObtained.add(sample);
 				}
 				
@@ -1792,7 +1889,7 @@ public class HilbertRTreeSA<V, P>
 					List<Sampler> protoSamplers = new LinkedList<Sampler>();
 					for(int j=0; j < inode.pagePointers.size(); j++) {
 						protoSamplers.add(
-								new ProtoSampler(inode.pagePointers.get(j), level-1, inode.lhvRanges.get(j), inode.childWeights.get(j)));
+								new ProtoSampler(inode.pagePointers.get(j), level-1, inode.areaRanges.get(j), inode.childWeights.get(j)));
 					}
 					
 					ReallyLazySamplingCursor subCursor = new ReallyLazySamplingCursor(query, batchSize, protoSamplers, p_nodesTouched, p_nodesPruned);
@@ -1853,14 +1950,24 @@ public class HilbertRTreeSA<V, P>
 	
 
 	//-------------------------------------------------------------------------------
-	//--- stupid stuff for interfaces
+	//--- TestableMap<Long, V> interface 
 	//-------------------------------------------------------------------------------
 	@Override
 	public int height() { return rootHeight; }
 
 	@Override
-	public Function<V, FixedPointRectangle> getGetKey() {
-		return getSFCKey;
+	public Function<V, Long> getGetKey() {
+		return getSFCKey.compose(getBoundingBox);
+	}
+	
+	@Override
+	public List<V> get(Long key) {
+		return Cursors.toList(hvRangeQuery(new Interval<Long>(key)));
+	}
+	
+	@Override
+	public ProfilingCursor<V> rangeQuery(Interval<Long> query) {
+		return hvRangeQuery(query);
 	}
 
 

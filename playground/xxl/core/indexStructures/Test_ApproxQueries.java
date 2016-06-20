@@ -283,7 +283,7 @@ public class Test_ApproxQueries {
 		//-- Insertion - generate test data		
 		outputln(1, "-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
-		Cursor<Pair<Integer, Double>> dataCur = DataDistributions.data_squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Cursor<Pair<Integer, Double>> dataCur = DataDistributions.squarePairs(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		for (int i = 1; i <= AMOUNT; i++) {						
 			Pair<Integer,Double> entry = dataCur.next();
 			tree.insert(entry);
@@ -352,7 +352,7 @@ public class Test_ApproxQueries {
 		
 		RSTree1D<Integer, Pair<Integer, Double>, Long> rsTree = 
 				TreeCreation.createRSTree(TestUtils.resolveFilename("rsTree_approxProf2"), BLOCK_SIZE, 4, 47, new CopyableRandom(seed), nDuplicatesAllowed);
-		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(seed), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		dataCursor = DataDistributions.iidUniformPairsIntDouble(new CopyableRandom(seed), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 //		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(rsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed);
 		
@@ -367,7 +367,7 @@ public class Test_ApproxQueries {
 		WRSTree1D<Integer, Pair<Integer, Double>, Long> wrsTree = 
 				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_approxProf2"), BLOCK_SIZE, 12, null, new CopyableRandom(seed), nDuplicatesAllowed);
 //		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		dataCursor = DataDistributions.squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(wrsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed );
 //		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 // ---------------------------------------------------------

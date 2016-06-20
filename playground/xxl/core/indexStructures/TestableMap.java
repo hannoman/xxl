@@ -15,20 +15,15 @@ import xxl.core.util.Interval;
 /** Interface for doing sanity checks on self implemented maps (= trees). */
 public interface TestableMap<K extends Comparable<K>, V> {
 
-	/**
-	 * Insertion. 
-	 * @return 
-	 */
+	Function<V, K> getGetKey();
+	
+	/** Insertion. */
 	public boolean insert(V value);
-
-	/**
-	 * Lookup.
-	 */
-	public List<V> get(K key);
 
 	int height();
 
-	Function<V, K> getGetKey();
+	/** Lookup. */
+	public List<V> get(K key);
 
 	ProfilingCursor<V> rangeQuery(Interval<K> query); 
 	

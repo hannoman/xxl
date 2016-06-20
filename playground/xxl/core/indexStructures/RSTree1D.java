@@ -238,7 +238,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	 */
 	public void initialize_buildContainer(Container rawContainer, Converter<K> keyConverter, Converter<V> valueConverter) {
 		NodeConverter nodeConverter = 
-				new NodeConverter(keyConverter, valueConverter, rawContainer.objectIdConverter());
+				new NodeConverter(keyConverter, valueConverter);
 		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
 
@@ -792,14 +792,12 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 
 		Converter<K> keyConverter;
 		Converter<V> valueConverter;
-		Converter<P> cidConverter;
 		Converter<Interval<K>> rangeConverter;
 		
-		public NodeConverter(Converter<K> keyConverter, Converter<V> valueConverter, Converter<P> cidConverter) {
+		public NodeConverter(Converter<K> keyConverter, Converter<V> valueConverter) {
 			super();
 			this.keyConverter = keyConverter;
 			this.valueConverter = valueConverter;
-			this.cidConverter = cidConverter;
 			this.rangeConverter = Interval.getConverter(keyConverter);
 		}
 

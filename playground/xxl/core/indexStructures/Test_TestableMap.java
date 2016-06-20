@@ -22,6 +22,7 @@ import xxl.core.io.converters.IntegerConverter;
 import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
+import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
@@ -581,7 +582,7 @@ public class Test_TestableMap {
 				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 20, 
 						new CopyableRandom(random), nDuplicatesAllowed);
 		
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		
 		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
 				tree.getGetKey(), nDuplicatesAllowed);
@@ -600,6 +601,21 @@ public class Test_TestableMap {
 //				testKeysCursor,																  					// test data
 //				nDuplicatesAllowed
 //				);
+		
+		//---------- Hilbert tree test
+		
+		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
+				TreeCreation.createHilbertRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 20, 
+						new CopyableRandom(random), nDuplicatesAllowed);
+		
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		
+		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
+				tree.getGetKey(), nDuplicatesAllowed);
+		
+		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
+		
+		rangeQueries(tree, compmap, tree.totalWeight() / 50, testKeysCursor);
 	}
 	
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(
@@ -615,7 +631,7 @@ public class Test_TestableMap {
 		random = new CopyableRandom(); // 119066442596134L
 		System.out.println("seed: "+ random.getSeed());
 		
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
 		int nDuplicatesAllowed = 5;
 		

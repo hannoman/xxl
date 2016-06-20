@@ -23,9 +23,10 @@
  *   Mini-Milestone: Generalize Query-Types
  *   Mini-Milestone: Support removals
 
+- cidConverter in NodeConverter is never used. (adjust in other trees)
 ========== Important Bugfixes ==========
 
-* ReallyLazySamplingCursor doesn't permute results enough
+* ReallyLazySamplingCursor doesn't permute results enough (DONE)
 * OPT: The drawings perhaps permute too much 
 
 ========== Futures ==========
