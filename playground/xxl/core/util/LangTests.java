@@ -13,7 +13,57 @@ public class LangTests {
 
 	public static void main(String[] args) {
 //		main2();
-		hvToCoords();
+//		hvToCoords();
+		bitManipulation();
+//		randBits();
+	}
+	
+	public static void randBits() {
+		CopyableRandom rng = new CopyableRandom();
+		for(int i=0; i < 1000; i++) {
+			int x = rng.next(32);
+			System.out.println(x);
+		}
+	}
+	
+	public static void bitManipulation() {
+		int x = 1 << 31;
+		int y = (1 << 32) - 1;
+		int allOneI = (int) ((1L << 32) - 1);
+		
+		System.out.println("allOneI: "+ allOneI + " / \t"+ Integer.toBinaryString(allOneI));
+		long allOneC = (long) allOneI;
+		System.out.println("allOneC: "+ allOneC + " / \t"+ Long.toBinaryString(allOneC));
+		long one32L = (1L << 32) - 1; 
+		System.out.println("one32L: "+ one32L + " / \t"+ Long.toBinaryString(one32L));
+		long allOneD = Integer.toUnsignedLong(allOneI);
+		System.out.println("allOneD: "+ allOneD + " / \t"+ Long.toBinaryString(allOneD));
+		
+		System.out.println(x);
+		System.out.println(y);
+//		System.out.println( ((int)(17 << 30)) );
+//		System.out.println( ((int)((1 << 30) + ((1 << 3) << 30))) );
+//		System.out.println( ((int)((1 << 30) + (1 << 33))) );
+//		System.out.println( ((int)((16 << 30))) );
+//		System.out.println( ((int)(((1 << 3) << 30))) );
+//		System.out.println( ((int)(((1 << 1) << 32))) );
+//		System.out.println( ((int)((1 << 33))) );
+//		System.out.println( ((int)((1L << 33))) );
+		
+		int hi = 17;
+		long comp1 = ((long)hi << 32) + allOneI;
+		long comp2pre = (((long)hi) << 32);
+		long comp2 = (((long)hi) << 32) | ((long) allOneI);
+		
+		System.out.println("allOne: "+ allOneI + " / \t"+ Integer.toBinaryString(allOneI));
+		System.out.println("comp1: "+ comp1 +" / \t"+ Long.toBinaryString(comp1));
+		System.out.println("comp2p: "+ comp2pre +" / \t"+ Long.toBinaryString(comp2pre));
+		System.out.println("comp2: "+ comp2 +" / \t"+ Long.toBinaryString(comp2));
+		
+		CopyableRandom rng = new CopyableRandom();
+		long v = Integer.toUnsignedLong(rng.next(5));
+		System.out.println(v);
+		System.out.println(Long.toBinaryString(v));
 	}
 	
 	public static void coordsToHVs()

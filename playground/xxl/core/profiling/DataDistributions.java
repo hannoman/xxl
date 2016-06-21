@@ -75,19 +75,27 @@ public class DataDistributions {
 	 * 		 dimension = 3; bitsPerDimension = 10 --> hilbert value <= 2**60
 	 */
 	public static Cursor<FixedPointRectangle> rectanglesRandom(Random rng, int dimension, int bitsPerDimension) {
-		
+		int[] bitsPerDimensions = new int[dimension];
+		for(int i=0; i < dimension; i++)
+			bitsPerDimensions[i] = bitsPerDimension;
+		return rectanglesRandom(rng, bitsPerDimensions);
+	}
+	
+	/** Constructs random rectangles with bitsPerDimensions[i] bits in dimension i. 
+	 * (Can be different between dimensions.) */
+	public static Cursor<FixedPointRectangle> rectanglesRandom(Random rng, int[] bitsPerDimensions) {
 		return new AbstractCursor<FixedPointRectangle>() {
 			@Override
 			protected boolean hasNextObject() { return true; }
 			
 			@Override
 			protected FixedPointRectangle nextObject() {
-				long[] leftCorner = new long[dimension], rightCorner = new long[dimension];
+				long[] leftCorner = new long[bitsPerDimensions.length], rightCorner = new long[bitsPerDimensions.length];
 				long tmp;
-				for(int i=0; i < dimension; i++) {
+				for(int i=0; i < bitsPerDimensions.length; i++) {
 					// TODO: replace with "nextLong(bound)" nextInt is not sufficient
-					leftCorner[i] = rng.nextInt(1 << bitsPerDimension); 
-					rightCorner[i] = rng.nextInt(1 << bitsPerDimension);
+					leftCorner[i] = rng.nextInt(1 << bitsPerDimensions[i]); 
+					rightCorner[i] = rng.nextInt(1 << bitsPerDimensions[i]);
 					if(leftCorner[i] > rightCorner[i]) {
 						tmp = rightCorner[i]; rightCorner[i] = leftCorner[i]; leftCorner[i] = tmp;
 					}
@@ -96,11 +104,20 @@ public class DataDistributions {
 				return rect;
 			}
 		};
+	}
+	
+	/** Describes the domain of generated rectangles for rectanglesRandom(...) as FixedPointRectangle. */
+	public static FixedPointRectangle universeForBitsPerDimensions(int[] bitsPerDimensions) {
+		long[] left = new long[bitsPerDimensions.length];
+		for (int i = 0; i < left.length; i++) {
+			left[i] = 0;
+		}
 		
+		long[] right = new long[bitsPerDimensions.length];
+		for (int i = 0; i < right.length; i++) {
+			right[i] = 1 << bitsPerDimensions[i];
+		}
 		
-		
-		
-		
-		
+		return new FixedPointRectangle(left, right);
 	}
 }

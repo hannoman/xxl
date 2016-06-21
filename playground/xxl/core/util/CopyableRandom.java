@@ -3,8 +3,12 @@ package xxl.core.util;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.commons.math3.fraction.BigFraction;
 
 import xxl.core.io.Convertable;
 
@@ -45,7 +49,7 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 
 	/* copy of superclasses code, as you can seed the seed changes */
 	@Override
-	protected int next(int bits) {
+	public int next(int bits) {
 		long oldseed, nextseed;
 		AtomicLong seed_ = this.seed;
 		do {
@@ -54,6 +58,24 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 		} while (!seed_.compareAndSet(oldseed, nextseed));
 		return (int) (nextseed >>> (48 - bits));
 	}
+	
+	/** Self written methods that returns a long in the range [0, bound[ */
+	public long nextLong(long bound) {
+		assert bound > 0;
+		
+		int bitsNeeded = 64 - Long.numberOfLeadingZeros(bound - 1);
+		long lo, hi; /* lo and hi half of the long */
+		int loBitsNeeded = Math.min(bitsNeeded, 32);
+		int hiBitsNeeded = Math.max(bitsNeeded - 32, 0);
+		long v;
+		do {
+			lo = Integer.toUnsignedLong(next(loBitsNeeded));
+			hi = Integer.toUnsignedLong(next(hiBitsNeeded));
+			v = hi << 32 | lo;
+		} while(v >= bound);
+		return v;	
+	}
+	
 
 	/* necessary to prevent changes to seed that are made in constructor */
 	@Override
@@ -110,13 +132,13 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 	
 	
 	
-	
-	
-	
-	
+	public static void main(String[] args) {
+//		tests_messy();
+		test_longBoundedGenerator();
+	}
 	
 	/** Messy tests. */
-	public static void main(String[] args) {
+	public static void tests_messy() {
 	    CopyableRandom cr = new CopyableRandom(22);
 	    Random rng = new Random(22);
 	    
@@ -146,4 +168,32 @@ public class CopyableRandom extends Random implements Copyable<CopyableRandom>, 
 	    System.out.println("involutive: "+ s1 +", "+ s2 +", "+ (s1==s2));
 	    
 	}
+	
+	// CHECK: hmm, is this really correct? Results seem kinda fishy.
+	public static void test_longBoundedGenerator() {		
+		CopyableRandom crng = new CopyableRandom();
+		int reps = 10000;
+		long bound = Long.MAX_VALUE;
+		long max = Long.MIN_VALUE, min = Long.MAX_VALUE;
+		for (int i = 0; i < reps; i++) {
+			long v = crng.nextLong(bound);
+			System.out.println(v);
+			if(v > max)
+				max = v;
+			if(v < min)
+				min = v;
+		}
+		System.out.println();
+		System.out.println("bound: \t"+ bound);
+		System.out.println("max: \t"+ max);
+		System.out.println("min: \t"+ min);
+		BigInteger domainSize = BigInteger.valueOf(max - min + 1);
+		BigInteger totalDomainSize = BigInteger.valueOf(bound);
+		BigFraction pSingle = new BigFraction(domainSize, totalDomainSize);
+		BigFraction pTotal = pSingle.pow(reps);
+		System.out.println("probability to get this effective domain size or a smaller one: "+ pTotal.percentageValue() +"%");
+//		7160696852034835611
+//		9223372036854775807 
+	}
+	
 }

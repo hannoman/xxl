@@ -38,7 +38,7 @@ public class TreeCreation {
 			int AMOUNT, 
 			Cursor<V> dataCursor,
 			Function<V, K> getKey,
-			int nDuplicatesAllowed // to be coherent with the tre implementation
+			int nDuplicatesAllowed // to be coherent with the tree implementation
 			) {
 		//-- comparison structure
 		TreeMap<K, List<V>> compmap = new TreeMap<K, List<V>>();
@@ -46,7 +46,8 @@ public class TreeCreation {
 		//-- Insertion - generate test data		
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
-		for (int i = 1; i <= AMOUNT; i++) {					
+		for (int i = 1; i <= AMOUNT; i++) {
+			System.out.println("Insertion \t"+ i +"\t ..."); // debug
 			V value = dataCursor.next();
 			K key = getKey.apply(value);
 			tree.insert(value);
@@ -310,6 +311,7 @@ public class TreeCreation {
 
 	public static HilbertRTreeSA<FixedPointRectangle, Long> createHilbertRSTree(
 			String testFile, int BLOCK_SIZE, int branchingLoWish, int branchingHiWish, CopyableRandom rng, int nDuplicatesAllowed) {
+		
 		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);
 		
 		int dimension = 3;
@@ -343,6 +345,11 @@ public class TreeCreation {
 		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getMaxObjectSize();
 		int samplesPerNodeLo = samplesPerNodeHi / 4;		
 		
+//		//-- compute optimal parameters
+//		leafHi, samplesHi = inferTreeParameters(BLOCK_SIZE, branchingLoWish, branchingHiWish, 
+//				leafOverhead, bytesPerValue, innerOverhead, bytesPerMeta, bytesPerCID)
+		
+		//-- tree construction
 		System.out.println("Initializing tree with parameters: ");
 		System.out.println("\t block size: \t"+ BLOCK_SIZE);
 		System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
@@ -359,29 +366,24 @@ public class TreeCreation {
 						nDuplicatesAllowed
 						);
 		
-		
-		
-//		(
-//						branchingParamLo, // universe
-//						branchingParamHi, 
-//						leafLo, 
-//						leafHi, 
-//						samplesPerNodeLo, 
-//						samplesPerNodeHi, 
-//						new Interval<Integer>(Integer.MIN_VALUE, Integer.MAX_VALUE), 
-//						((Pair<Integer, Double> x) -> x.getFirst()),
-//						nDuplicatesAllowed
-//					);
 		//-- set the PRNG state
 		tree.setRNG(rng);
 		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		tree.initialize_buildContainer(treeRawContainer, valueConverter);		
 		
 		System.out.println("Initialization of the tree finished.");
 		return tree;
 	}
 
-	
+	public static Object inferTreeParameters(int blockSize, int branchingLoWish, int branchingHiWish, 
+			int leafOverhead, int bytesPerValue, int innerOverhead, int bytesPerMeta, int bytesPerCID) {
+		// TODO
+		return null;
+		
+		
+		
+		
+	}
 //	public static void createAndSave_RSTree_pairsIntDouble(
 //			String metaDataFilename, String containerPrefix, int nTuples, CopyableRandom random,
 //			int KEY_LO, int KEY_HI, double VAL_LO, double VAL_HI) throws IOException {

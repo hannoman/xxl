@@ -9,16 +9,30 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import com.google.uzaygezen.core.BitVector;
+import com.google.uzaygezen.core.BitVectorFactories;
+import com.google.uzaygezen.core.CompactHilbertCurve;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
+import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
+import xxl.core.functions.FunJ8;
+import xxl.core.io.converters.BooleanConverter;
+import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
+import xxl.core.io.converters.Converters;
 import xxl.core.io.converters.IntegerConverter;
+import xxl.core.io.converters.LongConverter;
+import xxl.core.io.converters.MeasuredConverter;
+import xxl.core.io.converters.MeasuredFixedSizeConverter;
 import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
@@ -29,6 +43,7 @@ import xxl.core.util.Interval;
 import xxl.core.util.ListJoinOuter3way;
 import xxl.core.util.ListJoinOuter3way.JoinResult;
 import xxl.core.util.Pair;
+import xxl.core.util.SpatialHelpers;
 import xxl.core.util.Triple;
 import xxl.core.util.random.JavaDiscreteRandomWrapper;
 
@@ -41,7 +56,7 @@ import xxl.core.util.random.JavaDiscreteRandomWrapper;
  */
 public class Test_TestableMap {
 
-	public static final int BLOCK_SIZE = 1024;
+	public static final int BLOCK_SIZE = 2048;
 //	public static final float MIN_RATIO = 0.5f;
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
@@ -53,7 +68,7 @@ public class Test_TestableMap {
 	public static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
-	public static CopyableRandom random = new CopyableRandom(42);	
+	public static CopyableRandom random;	
 	
 	private static WBTree<Integer, Integer, Long> createWBTree(String testFile) {
 		
@@ -567,6 +582,8 @@ public class Test_TestableMap {
 		random = new CopyableRandom(); // 119066442596134L
 		System.out.println("seed: "+ random.getSeed());
 		
+		test_hilbertTree_fromAtoZ();
+		/*
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
 		int nDuplicatesAllowed = 40;
 		
@@ -601,16 +618,120 @@ public class Test_TestableMap {
 //				testKeysCursor,																  					// test data
 //				nDuplicatesAllowed
 //				);
+		  
+		 */
 		
-		//---------- Hilbert tree test
+	}
+	
+	public static void test_hilbertTree_fromAtoZ() {
+		int dimension = 3;
+		//======= INITIALISATION
+		Container treeRawContainer = new BlockFileContainer("HilbertTest_first", BLOCK_SIZE);
 		
+		MeasuredConverter<Interval<Long>> hvRangeConverter = 
+				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
+		
+		Supplier<FixedPointRectangle> fixedPointRectangleFactory = () -> new FixedPointRectangle(dimension);
+		MeasuredConverter<FixedPointRectangle> areaConverter = 
+				Converters.createMeasuredConverter(dimension * 2 * LongConverter.SIZE, 
+						new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld(fixedPointRectangleFactory))); // TODO: how to make it fixed size?
+		MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter; // we save the areas as data points
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getMaxObjectSize();
+		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
+		
+		//- allow just as many duplicates as fit in a leaf
+		int nDuplicatesAllowed = leafHi;
+		
+		//- set branching param fixed
+		int branchingHi = 20;
+		int branchingLo = 5;
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= hvRangeConverter.getMaxObjectSize() * branchingHi; 	// hilbert value ranges of children
+		innerSpaceLeft -= areaConverter.getMaxObjectSize() * branchingHi; 		// area ranges of children
+		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getMaxObjectSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+
+		//== bounding box computer // OPT: make general
+		Function<FixedPointRectangle, FixedPointRectangle> getBoundingBox = (x -> x);
+		
+		//== space filling curve
+		int[] bitsPerDimensions = {6,6,6};
+		FixedPointRectangle universe = DataDistributions.universeForBitsPerDimensions(bitsPerDimensions);
+		CompactHilbertCurve hilbertCurve = new CompactHilbertCurve(bitsPerDimensions);
+		
+		Function<FixedPointRectangle, Long> getSFCKey = new Function<FixedPointRectangle, Long>() {
+			// OPT: don't repeat input-/output-var allocation
+			@Override
+			public Long apply(FixedPointRectangle t) {
+				long[] center = SpatialHelpers.centralPoint(t);
+				
+				//- initialise input variables 
+				BitVector[] p = new BitVector[bitsPerDimensions.length];
+				for(int i = 0; i < bitsPerDimensions.length; i++) {
+		        	p[i] = BitVectorFactories.OPTIMAL.apply(bitsPerDimensions[i]);
+		        	p[i].copyFrom(center[i]);
+				}
+				
+				//- initialise output variables
+				BitVector chi = BitVectorFactories.OPTIMAL.apply(hilbertCurve.getSpec().sumBitsPerDimension());
+				
+				hilbertCurve.index(p, 0, chi);
+				return chi.toExactLong();
+			}
+		};
+		
+		//-- tree construction
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+
 		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
-				TreeCreation.createHilbertRSTree(TestUtils.resolveFilename("HilbertTree_first_test"), BLOCK_SIZE, 4, 20, 
-						new CopyableRandom(random), nDuplicatesAllowed);
+				new HilbertRTreeSA<FixedPointRectangle, Long>(
+						branchingLo, branchingHi, 
+						leafLo, leafHi, 
+						samplesPerNodeLo, samplesPerNodeHi, 
+						universe,
+						getBoundingBox,
+						getSFCKey, 
+						nDuplicatesAllowed
+						);
 		
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+		//-- set the PRNG state
+		tree.setRNG(new CopyableRandom(random));
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, valueConverter);		
 		
-		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
+		System.out.println("Initialization of the tree finished.");
+
+		//=== FILLING
+		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+		Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
+			protected boolean hasNextObject() {
+				return true;
+			}
+			
+			@Override
+			protected Long nextObject() {
+				return random.nextLong(Long.MAX_VALUE);
+			}
+			
+		};
+		
+		NavigableMap<Long, List<FixedPointRectangle>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
 				tree.getGetKey(), nDuplicatesAllowed);
 		
 		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);

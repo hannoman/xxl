@@ -1,17 +1,10 @@
 package xxl.core.indexStructures;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -32,22 +25,18 @@ import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.mappers.Mapper;
-import xxl.core.cursors.sources.Enumerator;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
-import xxl.core.io.converters.IntegerConverter;
 import xxl.core.io.converters.LongConverter;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
-
-import xxl.core.spatial.rectangles.FixedPointRectangle;
-import xxl.core.spatial.rectangles.FixedPointRectangle;
 
 public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	// FixedPointRectangle (respectively any hypercubes) are not comparable naturally, so we can't support Comparable
@@ -107,7 +96,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 
 	/** Domain of the value-keys. */
 	public FixedPointRectangle universe;
-	public Interval<Long> hvUniverse; // TODO: initialise hvUniverse
+	public Interval<Long> hvUniverse; // OPT: initialise hvUniverse smaller
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
 	final int nDuplicatesAllowed;
@@ -117,16 +106,17 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, 
-			int samplesPerNodeHi, FixedPointRectangle universe, Function<FixedPointRectangle, Long> getSFCKey, int nDuplicatesAllowed) {
+	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, int samplesPerNodeHi, 
+			FixedPointRectangle universe, Function<V, FixedPointRectangle> getBoundingBox, Function<FixedPointRectangle, Long> getSFCKey, 
+			int nDuplicatesAllowed) {
 		this.universe = universe;
-		// TODO: calculate hvUniverse from universe
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
 		this.branchingLo = branchingLo;
 		this.branchingHi = branchingHi;
 		this.leafLo = leafLo;
 		this.leafHi = leafHi;
+		this.getBoundingBox = getBoundingBox;
 		this.getSFCKey = getSFCKey;
 		this.nDuplicatesAllowed = nDuplicatesAllowed;
 		
@@ -284,7 +274,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			rootCID = container.insert(root);
 			return true;
 		} else { // tree not empty
-			Node root = container.get(rootCID);
+			Node root = getRoot();
 			long lhKey = getSFCKey.apply(getBoundingBox.apply(value));
 			InsertionInfo insertionInfo = root.insert(lhKey, value);
 
@@ -350,10 +340,11 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		return insertInfo;
 	}
 	
-	InsertionInfo SINGLE_UPDATE(int myParentIdx) {
+	InsertionInfo SINGLE_UPDATE(Integer myParentIdx) {
 		InsertionInfo insertInfo = new InsertionInfo();
 		insertInfo.insertionSuccessful = true;
-		insertInfo.idxsChanged = new Interval<Integer>(myParentIdx);
+		if(myParentIdx != null) // in case of root, we don't have or need the parentIdx
+			insertInfo.idxsChanged = new Interval<Integer>(myParentIdx);
 		return insertInfo;
 	}
 	
@@ -380,6 +371,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		node.level = parent.level - 1;
 		node.pagePointer = nodeCID;
 		return node;
+	}
+	
+	public Node getRoot() {
+		Node root = container.get(rootCID);
+		root.level = rootHeight;
+		root.pagePointer = rootCID;
+//		root.parent = null;
+//		root.idxInParent = null;
+		return root;
 	}
 	
 	//-- Node class
@@ -947,11 +947,20 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		}
 
 		public InsertionInfo split() {
-			Interval<Integer> coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
+			Interval<Integer> coopSiblingIdxs; 
+			List<LeafNode> coopSiblings; 
+
+			if(parent != null) {
+				coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
 			
-			List<LeafNode> coopSiblings = new ArrayList<LeafNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
-			for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
-				coopSiblings.add((LeafNode) getNode(parent, idx));
+				coopSiblings = new ArrayList<LeafNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
+				for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
+					coopSiblings.add((LeafNode) getNode(parent, idx));
+			} else { // for root
+				coopSiblingIdxs = new Interval<Integer>(0);
+				coopSiblings = new ArrayList<LeafNode>(2);
+				coopSiblings.add(this);
+			}
 			
 			//- check whether we can avoid a split through sharing			
 			int summedSizes = coopSiblings.stream().map((LeafNode x) -> x.values.size()).reduce(0, (x,y) -> x+y);
@@ -1543,7 +1552,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		}
 		
 		/** Constructor for root sampler. Called from RSTree.samplingRangeQuery() */ 
-		public ReallyLazySamplingCursor(FixedPointRectangle query, int batchSize, P initialCID, int initialLevel, FixedPointRectangle range, int initialWeight) {
+		public ReallyLazySamplingCursor(FixedPointRectangle query, int batchSize, P initialCID, int initialLevel, 
+				FixedPointRectangle range, int initialWeight) {
 			this(query, batchSize, 
 					new LinkedList<Sampler>(), 			// samplers
 					new HashSet<Pair<Integer,P>>(),		// p_nodesPruned
