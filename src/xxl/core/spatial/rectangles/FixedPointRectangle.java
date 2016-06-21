@@ -435,22 +435,40 @@ public class FixedPointRectangle implements Rectangle {
 
 
 
-	/** Returns a string representation of this rectangle.
+//	/** Returns a string representation of this rectangle.
+//	 * 
+//	 * @return returns the string representation of this rectangle
+//	*/
+//	public String toString() {
+//		StringBuffer sb = new StringBuffer("\nRectangle\n");
+//		sb.append("\tleftCorner\n");
+//		for (int d = 0; d < leftCorner.length; d++) {
+//			sb.append("\t\t" + d + ":\t" + leftCorner[d] + "\n");
+//		}
+//		sb.append("\trightCorner\n");
+//		for (int d = 0; d < rightCorner.length; d++) {
+//			sb.append("\t\t" + d + ":\t" + rightCorner[d] + "\n");
+//		}
+//		return new String(sb);
+//	}
+	
+	/** Returns a more concise string representation of this rectangle.
 	 * 
 	 * @return returns the string representation of this rectangle
 	*/
 	public String toString() {
-		StringBuffer sb = new StringBuffer("\nRectangle\n");
-		sb.append("\tleftCorner\n");
-		for (int d = 0;
-			d < leftCorner.length;
-			d++) {
-			sb.append("\t\t" + d + ":\t" + leftCorner[d] + "\n");
+		StringBuffer sb = new StringBuffer("R[");
+		sb.append("(");
+		for (int d = 0; d < leftCorner.length-1; d++) {
+			sb.append(leftCorner[d] +",");
 		}
-		sb.append("\trightCorner\n");
-		for (int d = 0; d < rightCorner.length; d++) {
-			sb.append("\t\t" + d + ":\t" + rightCorner[d] + "\n");
+		sb.append(leftCorner[leftCorner.length-1] +")");
+		sb.append("-(");
+		for (int d = 0; d < rightCorner.length-1; d++) {
+			sb.append(rightCorner[d] +",");
 		}
+		sb.append(rightCorner[rightCorner.length-1] +")");
+		sb.append("]");
 		return new String(sb);
 	}
 

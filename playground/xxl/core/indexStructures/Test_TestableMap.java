@@ -579,7 +579,7 @@ public class Test_TestableMap {
 //		test_duplicateHandling(); return;
 		
 		//--- run the actual tests
-		random = new CopyableRandom(); // 119066442596134L
+		random = new CopyableRandom(116205785540781L); // 119066442596134L
 		System.out.println("seed: "+ random.getSeed());
 		
 		test_hilbertTree_fromAtoZ();
@@ -703,7 +703,8 @@ public class Test_TestableMap {
 				new HilbertRTreeSA<FixedPointRectangle, Long>(
 						branchingLo, branchingHi, 
 						leafLo, leafHi, 
-						samplesPerNodeLo, samplesPerNodeHi, 
+						samplesPerNodeLo, samplesPerNodeHi,
+						dimension,
 						universe,
 						getBoundingBox,
 						getSFCKey, 

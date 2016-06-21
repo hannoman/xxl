@@ -213,9 +213,9 @@ public class Interval<K extends Comparable<K>> {
 				if(object == null)
 					object = new Interval<T>();
 				
-				kConv.read(dataInput, object.lo);
+				object.lo = kConv.read(dataInput, object.lo);
 				object.loIn = dataInput.readBoolean();
-				kConv.read(dataInput, object.hi);
+				object.hi = kConv.read(dataInput, object.hi);
 				object.hiIn = dataInput.readBoolean();
 				return object;
 			}

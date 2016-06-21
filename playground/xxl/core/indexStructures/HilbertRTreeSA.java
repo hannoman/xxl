@@ -107,15 +107,17 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
 	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, int samplesPerNodeHi, 
-			FixedPointRectangle universe, Function<V, FixedPointRectangle> getBoundingBox, Function<FixedPointRectangle, Long> getSFCKey, 
+			int dimension, FixedPointRectangle universe, Function<V, FixedPointRectangle> getBoundingBox, Function<FixedPointRectangle, Long> getSFCKey, 
 			int nDuplicatesAllowed) {
-		this.universe = universe;
+		
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
 		this.branchingLo = branchingLo;
 		this.branchingHi = branchingHi;
 		this.leafLo = leafLo;
 		this.leafHi = leafHi;
+		this.dimension = dimension;
+		this.universe = universe;
 		this.getBoundingBox = getBoundingBox;
 		this.getSFCKey = getSFCKey;
 		this.nDuplicatesAllowed = nDuplicatesAllowed;
@@ -632,30 +634,14 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				}
 			}
 			
-			
-			// this doesn't work as the samples aren't sorted in the sample buffers
-//			int curIdx = 0;
-//			boolean f_nodesExhausted = false;
-//			for(V sample : all_samples) {
-//				while(getSFCKey.apply(getBoundingBox.apply(sample)) > coopSiblings.get(curIdx).getLHV()) {
-//					curIdx++;
-//					if(curIdx == coopSiblings.size()) {
-//						f_nodesExhausted = true;
-//						break;
-//					}
-//				}
-//				if(f_nodesExhausted) break; // discard remaining samples
-//				
-//				InnerNode node = coopSiblings.get(curIdx);
-//				// put sample in node if it should have samples
-//				if(node.shouldHaveSampleBuffer()) {
-//					if(node.hasSampleBuffer() == false)
-//						node.samples = new LinkedList<V>();
-//					node.samples.add(sample); // only the partitioning gets shifted the order keeps the same, is this a problem w.r.t. independence?
-//				} else {
-//					// just forget the sample
-//				}
-//			}
+			//- update container
+			for(i=0; i < coopSiblings.size(); i++) {
+				if(coopSiblings.get(i).pagePointer != null)
+					container.update(coopSiblings.get(i).pagePointer, coopSiblings.get(i));
+				else {
+					assert i == coopSiblings.size() - 1;
+				}
+			}
 			
 			//- return
 			return insertionInfo;
@@ -1115,14 +1101,16 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
 
-		Converter<Interval<Long>> hvRangeConverter = Interval.getConverter(LongConverter.DEFAULT_INSTANCE);
-		Converter<FixedPointRectangle> areaConverter = new ConvertableConverter<FixedPointRectangle>();
+		Converter<Interval<Long>> hvRangeConverter;
+		Converter<FixedPointRectangle> areaConverter;
 		
 		Converter<V> valueConverter;
 		
 		public NodeConverter(Converter<V> valueConverter) {
 			super();
 			this.valueConverter = valueConverter;
+			this.hvRangeConverter = Interval.getConverter(LongConverter.DEFAULT_INSTANCE);
+			this.areaConverter = new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld( () -> new FixedPointRectangle(dimension) ));
 		}
 
 		@Override
