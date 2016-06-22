@@ -96,7 +96,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 
 	/** Domain of the value-keys. */
 	public FixedPointRectangle universe;
-	public Interval<Long> hvUniverse; // OPT: initialise hvUniverse smaller
+	public Interval<Long> hvUniverse;
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
 	final int nDuplicatesAllowed;
@@ -122,7 +122,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		this.getSFCKey = getSFCKey;
 		this.nDuplicatesAllowed = nDuplicatesAllowed;
 		
-		// set the hilbert value universe to the most general case
+		// set the hilbert value universe to the most general case (OPT: initialise hvUniverse smaller)
 		this.hvUniverse = new Interval<Long>(Long.MIN_VALUE, true, Long.MAX_VALUE, true);
 		
 		// defaults
@@ -247,7 +247,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	 * We construct the usable node container from them ourselfes.
 	 * 
 	 * @param rawContainer container to store the data in
-	 * @param hvRangeConverter converter for the key-type FixedPointRectangle 
+	 * @param hvConverter converter for the key-type FixedPointRectangle 
 	 * @param valueConverter converter for the value type V
 	 */
 	public void initialize_buildContainer(Container rawContainer, Converter<V> valueConverter) {
@@ -297,8 +297,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				newroot.areaRanges.add(root.getBoundingBox());
 				newroot.areaRanges.add(insertionInfo.newnode.getBoundingBox());
 				
-				newroot.lhvRanges.add(new Interval<Long>(hvUniverse.lo, true, root.getLHV(), true));
-				newroot.lhvRanges.add(new Interval<Long>(root.getLHV(), false, hvUniverse.hi, true));
+				newroot.lhvSeparators.add(root.getLHV());
 				
 				// fill the root node with samples again
 				if(newroot.shouldHaveSampleBuffer()) {
@@ -442,7 +441,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	}
 	
 	public class InnerNode extends Node {		
-		public List<Interval<Long>> lhvRanges;
+		public List<Long> lhvSeparators;
 		public List<FixedPointRectangle> areaRanges;
 		public List<P> pagePointers;
 		public List<Integer> childWeights;
@@ -452,7 +451,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		
 		/** Constructor for an empty node, which doesn't have any entries. */
 		public InnerNode() {
-			this.lhvRanges = new ArrayList<Interval<Long>>(branchingHi);
+			this.lhvSeparators = new ArrayList<Long>(branchingHi-1);
 			this.areaRanges = new ArrayList<FixedPointRectangle>(branchingHi);
 			this.pagePointers = new ArrayList<P>(branchingHi);
 			this.childWeights = new ArrayList<Integer>(branchingHi);
@@ -502,11 +501,12 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 
 		/** Abstract the determination of choosing which child node to insert a record into. */
 		protected Integer findInsertionPos(Long hv) {
-			// return the index of the first range which could contain the key 
-			for(int i=0; i < lhvRanges.size(); i++)
-				if(lhvRanges.get(i).contains(hv))
+			// return the index of the first range which could contain the key
+			int i;
+			for(i=0; i < lhvSeparators.size(); i++)
+				if(hv <= lhvSeparators.get(i))
 					return i;
-			return null;
+			return i;
 		}
 		
 		public InsertionInfo insert(Long hvKey, V value) {
@@ -520,9 +520,6 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				return NO_INSERTION();
 			} else {
 				
-				//- update meta information for the modified nodes
-				long lastLHV = updateChildrenInfo(childInsertInfo.idxsChanged);
-				
 				//- a split occured in child. put a new entry in the directory.
 				if(childInsertInfo.newnode != null) { 
 					Node node = childInsertInfo.newnode;
@@ -530,15 +527,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 					
 					int insertPos = childInsertInfo.idxsChanged.hi + 1;
 					pagePointers.add(insertPos, node.pagePointer);
-					lhvRanges.add(insertPos, new Interval<Long>(lastLHV, false, node.getLHV(), true));
-					areaRanges.add(insertPos, node.getBoundingBox());
-					childWeights.add(insertPos, node.totalWeight());
-					
-					if(insertPos + 1 < pagePointers.size()) {
-						assert lhvRanges.get(insertPos + 1).lo == node.getLHV() 
-								&& !lhvRanges.get(insertPos + 1).loIn; 
-					}
+					// update the rest when the metainfo of the other childs is updated too, for now just fill with dummy values
+					areaRanges.add(insertPos, null);
+					childWeights.add(insertPos, null);
+					lhvSeparators.add(insertPos, null);
+					childInsertInfo.idxsChanged.hi += 1;
 				}
+				
+				//- update meta information for the modified nodes
+				updateChildrenInfo(childInsertInfo.idxsChanged);
 				
 				//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
 				if(hasSampleBuffer()) {  
@@ -555,15 +552,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 					repairSampleBuffer();
 				}
 
-			
 				//- check for split here
 				InsertionInfo insertionInfo = null;
-				if(overflow())
+				if(overflow()) {
 					insertionInfo = split();
-				else
+					// container contents are updated inside split
+				} else {
 					insertionInfo = SINGLE_UPDATE(idxInParent);
-				
-				container.update(pagePointer, this);
+					container.update(pagePointer, this); // update container contents of self
+				}
 				
 				return insertionInfo;
 			}
@@ -586,6 +583,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
 				InnerNode newnode = new InnerNode();
+				newnode.pagePointer = container.reserve(null); // assign a CID to the newly created node
 				coopSiblings.add(newnode); // update all references last
 				insertionInfo = SPLIT(coopSiblingIdxs, newnode);
 			} else {
@@ -593,7 +591,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			}
 			
 			//- Collect all child entries (with meta information) and samples
-			List<Interval<Long>> all_lhvRanges = new LinkedList<Interval<Long>>();
+			List<Long> all_lhvRanges = new LinkedList<Long>();
 			List<FixedPointRectangle> all_areaRanges = new LinkedList<FixedPointRectangle>();
 			List<P> all_pagePointers = new LinkedList<P>();
 			List<Integer> all_childWeights = new LinkedList<Integer>();
@@ -601,7 +599,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			LinkedList<V> all_samples = new LinkedList<V>(); // need to be redistributed afterwards
 			
 			for(InnerNode sibling : coopSiblings) {
-				all_lhvRanges.addAll(sibling.lhvRanges);
+				all_lhvRanges.addAll(sibling.lhvSeparators);
 				all_areaRanges.addAll(sibling.areaRanges);
 				all_pagePointers.addAll(sibling.pagePointers);
 				all_childWeights.addAll(sibling.childWeights);
@@ -614,8 +612,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			int i = 0;
 			for(InnerNode sibling : coopSiblings) {
 				int curSize = sizes.get(i);
+				sibling.lhvSeparators = HUtil.splitOffLeft(all_lhvRanges, curSize-1, new ArrayList<>(branchingHi-1));
 				sibling.areaRanges = HUtil.splitOffLeft(all_areaRanges, curSize, new ArrayList<>(branchingHi));
-				sibling.lhvRanges = HUtil.splitOffLeft(all_lhvRanges, curSize, new ArrayList<>(branchingHi));
 				sibling.pagePointers = HUtil.splitOffLeft(all_pagePointers, curSize, new ArrayList<>(branchingHi));
 				sibling.childWeights = HUtil.splitOffLeft(all_childWeights, curSize, new ArrayList<>(branchingHi));
 				i++;
@@ -634,98 +632,26 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				}
 			}
 			
-			//- update container
-			for(i=0; i < coopSiblings.size(); i++) {
-				if(coopSiblings.get(i).pagePointer != null)
-					container.update(coopSiblings.get(i).pagePointer, coopSiblings.get(i));
-				else {
-					assert i == coopSiblings.size() - 1;
-				}
-			}
+			//- update container contents of all cooperating siblings
+			for(InnerNode sibling : coopSiblings)
+				container.update(sibling.pagePointer, sibling);
 			
 			//- return
 			return insertionInfo;
 		}
 		
-		protected long updateChildrenInfo(Interval<Integer> modIdxs) {
+		protected void updateChildrenInfo(Interval<Integer> modIdxs) {
 			//- update meta information for the modified nodes
-			long lastLHV = lhvRanges.get(modIdxs.lo).lo;
 			for(int modIdx = modIdxs.lo; modIdx <= modIdxs.hi; modIdx++) {
 				Node node = getNode(this, modIdx);
 				
-				//-- pagePointers stay the same
-				long lhv = node.getLHV();
-				lhvRanges.set(modIdx, new Interval<Long>(lastLHV, false, lhv, true));
-				lastLHV = lhv;
-				
 				areaRanges.set(modIdx, node.getBoundingBox());
 				childWeights.set(modIdx, node.totalWeight());
+				if(modIdx < lhvSeparators.size())
+					lhvSeparators.set(modIdx, node.getLHV());
 			}
-			
-			return lastLHV;
 		}
 		
-//		public InsertionInfo split() {			
-//			int splitPos = pagePointers.size() / 2; // B-Tree splitting == just split in the middle.
-//			
-//			InnerNode newode = new InnerNode();
-//			
-//			//- split separators
-//			// separators[splitPos] becomes the separator between the offspring 
-//			newode.lhvRanges = HUtil.splitOffRight(lhvRanges, splitPos, new ArrayList<Interval<FixedPointRectangle>>()); // CHECK LinkedList seems to make more sense here
-//			Interval<FixedPointRectangle> rangeLeft = lhvRanges.stream().reduce(Interval<FixedPointRectangle>::union).get();
-//			Interval<FixedPointRectangle> rangeRight = newode.lhvRanges.stream().reduce(Interval<FixedPointRectangle>::union).get();
-//			
-//			//- split pointers and weights
-//			newode.pagePointers = HUtil.splitOffRight(pagePointers, splitPos, new ArrayList<P>());			
-//			newode.childWeights = HUtil.splitOffRight(childWeights, splitPos, new ArrayList<Integer>());
-//			
-//			//-- recalculate resulting weights again
-//			int weightLeft = this.childWeights.stream().reduce(0, (x,y) -> x+y);
-//			int weightRight = newode.childWeights.stream().reduce(0, (x,y) -> x+y);
-//			
-//			//-- distribute samples among the resulting nodes
-//			// we have to distinguish whether the resulting nodes still have buffers attached
-//			if(this.samples != null) {
-//				LinkedList<V> samplesLeft = new LinkedList<V>();
-//				LinkedList<V> samplesRight = new LinkedList<V>();
-//				
-//				for(V sample : samples) {
-//					FixedPointRectangle key = getSFCKey.apply(sample);
-//					assert !(rangeLeft.contains(key) && rangeRight.contains(key)) : "Unexpected inclusion of sample in both parts of a split.";
-//					assert rangeLeft.contains(key) || rangeRight.contains(key) : "Sample can't be fitted into childs of split anymore.";
-//					if(rangeLeft.contains(key))
-//						samplesLeft.add(sample);
-//					else
-//						samplesRight.add(sample);
-//				}
-//				
-//				//- attach filtered samples to new nodes if they should have an attached sample buffer
-//				// OPT: could we do something instead of trashing the samples when they aren't needed?
-//				if(weightLeft > samplesPerNodeHi) {
-//					this.samples = samplesLeft;
-//					this.repairSampleBuffer();
-//				} else
-//					this.samples = null;
-//				
-//				if(weightRight > samplesPerNodeHi) {
-//					newode.samples = samplesRight;
-//					newode.repairSampleBuffer();
-//				} else
-//					newode.samples = null;
-//			}
-//			
-//			//- put new node into Container
-//			P newodeCID = container.insert(newode);
-//			
-//			
-//			
-//			
-//			// for now still return only the separator to be compliant with LeafNodes which can't determine their own boundaries.
-////			return new InsertionInfo(newodeCID, rangeLeft, rangeRight, weightLeft, weightRight);
-//			assert rangeLeft.hiIn;
-//			return new InsertionInfo(newodeCID, rangeLeft.hi, weightLeft, weightRight);
-//		}
 		
 		/** Returns all values in the subtree originating from this node. */
 		public List<V> allValues() {
@@ -840,11 +766,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		}
 		
 		public long getLHV() {
-			Interval<Long> lastRange = lhvRanges.get(lhvRanges.size()-1);
-			long lhv = lastRange.hi;
-			if(!lastRange.hiIn) // TODO: seems really hacky...
-				lhv--;
-			return lhv;
+			return lhvSeparators.get(lhvSeparators.size() - 1);
 		}
 
 		public Interval<Integer> getCooperatingSiblingsIdxsFor(int idx) {
@@ -920,14 +842,14 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			
 			//- check for split
 			InsertionInfo insertInfo = null;
-			if(overflow())
+			if(overflow()) {
 				insertInfo = split();
-			else
+				// container contents are updated inside split
+			} else {
 				insertInfo = SINGLE_UPDATE(idxInParent);
-			
-			//- update container contents of self
-			container.update(pagePointer, this);
-//			container.unfix(pagePointer); // CHECK: what is this for? is this in other implementations, too?
+				// update container contents of self
+				container.update(pagePointer, this);
+			}
 			
 			return insertInfo;
 		}
@@ -957,6 +879,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
 				LeafNode newnode = new LeafNode();
+				newnode.pagePointer = container.reserve(null); // assign a CID to the newly created node
 				coopSiblings.add(newnode); // update all references last
 				insertionInfo = SPLIT(coopSiblingIdxs, newnode);
 			} else {
@@ -976,6 +899,10 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				sibling.values = HUtil.splitOffLeft(all_values, curSize, new ArrayList<V>(leafHi));
 				i++;
 			}
+			
+			//- update container contents of all cooperating siblings
+			for(LeafNode sibling : coopSiblings)
+				container.update(sibling.pagePointer, sibling);
 			
 			return insertionInfo;
 		}
@@ -1101,7 +1028,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
 
-		Converter<Interval<Long>> hvRangeConverter;
+		Converter<Long> hvConverter;
 		Converter<FixedPointRectangle> areaConverter;
 		
 		Converter<V> valueConverter;
@@ -1109,7 +1036,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		public NodeConverter(Converter<V> valueConverter) {
 			super();
 			this.valueConverter = valueConverter;
-			this.hvRangeConverter = Interval.getConverter(LongConverter.DEFAULT_INSTANCE);
+			this.hvConverter = LongConverter.DEFAULT_INSTANCE;
 			this.areaConverter = new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld( () -> new FixedPointRectangle(dimension) ));
 		}
 
@@ -1143,8 +1070,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			int nChildren = dataInput.readInt();
 
 			// -- read hilbert-value ranges
-			for(int i=0; i < nChildren; i++) {
-				node.lhvRanges.add(hvRangeConverter.read(dataInput));
+			for(int i=0; i < nChildren-1; i++) {
+				node.lhvSeparators.add(hvConverter.read(dataInput));
 			}
 			
 			// -- read area ranges
@@ -1201,8 +1128,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			dataOutput.writeInt(node.pagePointers.size());
 
 			// -- write hilbert value ranges 
-			for (Interval<Long> hvRange : node.lhvRanges) {
-				hvRangeConverter.write(dataOutput, hvRange);				
+			for (Long hvSep : node.lhvSeparators) {
+				hvConverter.write(dataOutput, hvSep);				
 			}
 			
 			// -- write area ranges
@@ -1386,14 +1313,13 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				
 				// find the index of the next childnode
 				// Integer InnerNode.chooseFirstSubtreeIdx_Interval(query); functionality
-				Integer nextPos = null;
-				for(int i=0; i < curINode.pagePointers.size(); i++)
-					if(curINode.lhvRanges.get(i).intersects(query)) {
-						nextPos = i;
+				int nextPos = 0;
+				for(; nextPos < curINode.lhvSeparators.size(); nextPos++) {
+					long lhv = curINode.lhvSeparators.get(nextPos);
+					if(query.lo < lhv || (query.lo == lhv && query.loIn))
 						break;
-					}
+				}
 				
-				assert nextPos != null;
 				sIdx.push(nextPos);
 				
 				// descend to next node
