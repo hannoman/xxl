@@ -116,8 +116,8 @@ public class Test_TestableMap {
 				System.out.print("#"+ i +":\t ");
 				System.out.println("FAILED.");				
 				System.out.println("-- query: \n\t"+ key);
-				System.out.println("-- tree result (# = "+ treeAnswers.size() +"):: \n\t"+ treeAnswers);
-				System.out.println("-- comp result (# = "+ mapAnswers.size() +"):: \n\t"+ mapAnswers);
+				System.out.println("-- tree result (# = "+ treeAnswers.size() +"): \n\t"+ treeAnswers);
+				System.out.println("-- comp result (# = "+ mapAnswers.size() +"): \n\t"+ mapAnswers);
 				System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
 				
 				errors_positiveLookup++;
@@ -579,7 +579,8 @@ public class Test_TestableMap {
 //		test_duplicateHandling(); return;
 		
 		//--- run the actual tests
-		random = new CopyableRandom(116205785540781L); // 119066442596134L
+		random = new CopyableRandom(122928473621795L); // 119066442596134L
+//		random = new CopyableRandom(); 
 		System.out.println("seed: "+ random.getSeed());
 		
 		test_hilbertTree_fromAtoZ();
@@ -734,7 +735,7 @@ public class Test_TestableMap {
 		//==== TESTING
 		positiveLookups(tree, compmap, tree.totalWeight() / 20);
 		randomKeyLookups(tree, compmap, tree.totalWeight() / 20, testKeysCursor);
-		rangeQueries(tree, compmap, tree.totalWeight() / 50, testKeysCursor);
+		rangeQueries(tree, compmap, tree.totalWeight() / 20, testKeysCursor);
 		
 	}
 	

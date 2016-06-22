@@ -48,10 +48,6 @@ public class TreeCreation {
 	
 		for (int i = 1; i <= AMOUNT; i++) {
 //			System.out.println("Insertion \t"+ i +"\t ..."); // debug
-			if(i >= 41) {
-				assert true;
-				System.out.print("");
-			}
 			V value = dataCursor.next();
 			K key = getKey.apply(value);
 			tree.insert(value);
@@ -63,7 +59,6 @@ public class TreeCreation {
 			if (i % (AMOUNT / 10) == 0) {
 				System.out.print((i / (AMOUNT / 100)) + "%, ");
 				System.out.println("inserted: "+ value);
-				
 			}
 		}
 		
