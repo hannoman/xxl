@@ -61,7 +61,7 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 100000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	
 	public static final int KEY_LO = 0, KEY_HI = 100000;
@@ -698,6 +698,7 @@ public class Test_TestableMap {
 		System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
 		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
 		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+		System.out.println("\t number of duplicates allowed: \t"+ nDuplicatesAllowed);
 
 		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
 				new HilbertRTreeSA<FixedPointRectangle, Long>(
@@ -721,15 +722,8 @@ public class Test_TestableMap {
 		//=== FILLING
 		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
 		Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
-			protected boolean hasNextObject() {
-				return true;
-			}
-			
-			@Override
-			protected Long nextObject() {
-				return random.nextLong(Long.MAX_VALUE);
-			}
-			
+			protected boolean hasNextObject() { return true; }
+			protected Long nextObject() { return random.nextLong(Long.MAX_VALUE); }
 		};
 		
 		NavigableMap<Long, List<FixedPointRectangle>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
@@ -737,7 +731,11 @@ public class Test_TestableMap {
 		
 		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
 		
+		//==== TESTING
+		positiveLookups(tree, compmap, tree.totalWeight() / 20);
+		randomKeyLookups(tree, compmap, tree.totalWeight() / 20, testKeysCursor);
 		rangeQueries(tree, compmap, tree.totalWeight() / 50, testKeysCursor);
+		
 	}
 	
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(

@@ -47,7 +47,7 @@ public class TreeCreation {
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
 		for (int i = 1; i <= AMOUNT; i++) {
-			System.out.println("Insertion \t"+ i +"\t ..."); // debug
+//			System.out.println("Insertion \t"+ i +"\t ..."); // debug
 			if(i >= 41) {
 				assert true;
 				System.out.print("");

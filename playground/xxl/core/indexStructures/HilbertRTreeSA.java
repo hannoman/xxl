@@ -47,7 +47,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
     int dimension;	
     
     /** The splitting policy: "s-to-(s+1)" */
-    int splitPolicy;
+    int splitPolicy = 1;
     
     /** Computes the bounding boxes of the elements. */
     Function<V, FixedPointRectangle> getBoundingBox;
@@ -285,27 +285,26 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			} else if(insertionInfo.newnode == null) { // normal insertion
 				return true;
 			} else { // insertion resulting in new root
-				InnerNode newroot = new InnerNode();
+				InnerNode rootNew = new InnerNode();
 				
-				insertionInfo.newnode.pagePointer = container.insert(insertionInfo.newnode);
-				newroot.pagePointers.add(rootCID);
-				newroot.pagePointers.add(insertionInfo.newnode.pagePointer);
+				rootNew.pagePointers.add(rootCID);
+				rootNew.pagePointers.add(insertionInfo.newnode.pagePointer);
 				
-				newroot.childWeights.add(root.totalWeight());
-				newroot.childWeights.add(insertionInfo.newnode.totalWeight());
+				rootNew.childWeights.add(root.totalWeight());
+				rootNew.childWeights.add(insertionInfo.newnode.totalWeight());
 				
-				newroot.areaRanges.add(root.getBoundingBox());
-				newroot.areaRanges.add(insertionInfo.newnode.getBoundingBox());
+				rootNew.areaRanges.add(root.getBoundingBox());
+				rootNew.areaRanges.add(insertionInfo.newnode.getBoundingBox());
 				
-				newroot.lhvSeparators.add(root.getLHV());
+				rootNew.lhvSeparators.add(root.getLHV());
 				
 				// fill the root node with samples again
-				if(newroot.shouldHaveSampleBuffer()) {
-					newroot.samples = new LinkedList<V>();
-					newroot.repairSampleBuffer();				
+				if(rootNew.shouldHaveSampleBuffer()) {
+					rootNew.samples = new LinkedList<V>();
+					rootNew.repairSampleBuffer();				
 				}
 				
-				rootCID = container.insert(newroot);
+				rootCID = container.insert(rootNew);
 				rootHeight++;
 				return true;
 			}
@@ -428,13 +427,33 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 
 		public abstract List<V> get(FixedPointRectangle query);
 			
-		public List<Node> getCooperatingSiblings() {
-			if(parent == null)
-				return null;
-			else {
-				return parent.getCooperatingSiblingsFor(idxInParent);
+		public <N extends Node> Pair<Interval<Integer>, List<N>> getCooperatingSiblingsAndIdxs() {
+			if(parent == null) { // root
+				Interval<Integer> idxs = new Interval<Integer>(null);
+				List<N> siblings = new LinkedList<>();
+				siblings.add((N) this);
+				return new Pair<Interval<Integer>, List<N>>(idxs, siblings);
+			} else {
+				Interval<Integer> idxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
+				List<N> siblings = new LinkedList<>();
+				for(int i=idxs.lo; i <= idxs.hi; i++)
+					if(i == idxInParent)
+						siblings.add((N) this);
+					else
+						siblings.add((N) getNode(parent, i));
+				assert (idxs.hi - idxs.lo + 1 <= splitPolicy) && siblings.size() <= splitPolicy;
+				return new Pair<Interval<Integer>, List<N>>(idxs, siblings);
 			}
 		}
+		
+//		public Interval<Integer> getCooperatingSiblingIdxs() {
+//			if(parent == null) { // root
+//				return new Interval<Integer>(null);
+//			} else {
+//				Interval<Integer> idxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
+//				return idxs;
+//			}
+//		}
 		
 		public abstract FixedPointRectangle getBoundingBox();
 		public abstract long getLHV();
@@ -513,7 +532,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			//- insert in sublevel
 			int pos = findInsertionPos(hvKey);
 			Node nextNode = getNode(this, pos);
-					
+			
 			InsertionInfo childInsertInfo = nextNode.insert(hvKey, value); //== RECURSION ==
 			
 			if(!childInsertInfo.insertionSuccessful) {
@@ -530,7 +549,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 					// update the rest when the metainfo of the other childs is updated too, for now just fill with dummy values
 					areaRanges.add(insertPos, null);
 					childWeights.add(insertPos, null);
-					lhvSeparators.add(insertPos, null);
+					lhvSeparators.add(insertPos-1, null);
 					childInsertInfo.idxsChanged.hi += 1;
 				}
 				
@@ -568,17 +587,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 
 		
 		public InsertionInfo split() {
-			Interval<Integer> coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
+			//- fetch cooperating siblings
+			Pair<Interval<Integer>, List<InnerNode>> siblingInfo = getCooperatingSiblingsAndIdxs();
+			Interval<Integer> coopSiblingIdxs = siblingInfo.getElement1();
+			List<InnerNode> coopSiblings = siblingInfo.getElement2();
 			
-			List<InnerNode> coopSiblings = new ArrayList<InnerNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
-			for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
-				coopSiblings.add((InnerNode) getNode(parent, idx));
-			
-			//- Check whether we can avoid a split through sharing			
+			//- check whether we can avoid a split through sharing and construct the approbiate InsertionInfo object			
 			int summedSizes = coopSiblings.stream().map((InnerNode x) -> x.pagePointers.size()).reduce(0, (x,y) -> x+y);
 			int summedCapacity = branchingHi * coopSiblings.size();
 			
-			//- Construct the InsertionInfo object
 			InsertionInfo insertionInfo;
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
@@ -616,6 +633,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				sibling.areaRanges = HUtil.splitOffLeft(all_areaRanges, curSize, new ArrayList<>(branchingHi));
 				sibling.pagePointers = HUtil.splitOffLeft(all_pagePointers, curSize, new ArrayList<>(branchingHi));
 				sibling.childWeights = HUtil.splitOffLeft(all_childWeights, curSize, new ArrayList<>(branchingHi));
+				sibling.samples = sibling.shouldHaveSampleBuffer() ? new LinkedList<V>() : null;
 				i++;
 			}
 			
@@ -626,11 +644,17 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 						if(sibling.shouldHaveSampleBuffer()) {
 							if(sibling.hasSampleBuffer() == false)
 								sibling.samples = new LinkedList<V>();
-							sibling.samples.add(sample);
+							sibling.samples.add(sample);							
 						}
+						break;
 					}
 				}
 			}
+			
+			//- check whether distribution stays ok
+			for(InnerNode sibling : coopSiblings)
+				assert sibling.samples == null || sibling.samples.size() <= samplesPerNodeHi;
+			
 			
 			//- update container contents of all cooperating siblings
 			for(InnerNode sibling : coopSiblings)
@@ -785,16 +809,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			return new Interval<Integer>(lBound, rBound);
 		}
 		
-		public List<Node> getCooperatingSiblingsFor(int idx) {
-			Interval<Integer> idxs = getCooperatingSiblingsIdxsFor(idx);
-			
-			List<Node> siblings = new ArrayList<Node>(idxs.hi - idxs.lo + 1);
-			for(int i = idxs.lo; i <= idxs.hi; i++) {
-				Node sibling = getNode(this, i);
-				siblings.add(sibling);
-			}
-			return siblings;
-		}
+		
 	}
 
 	public class LeafNode extends Node {
@@ -833,8 +848,12 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				int nDupsFound = 0;
 				for(int i = insertPos; i > 0 && getSFCKey.apply(getBoundingBox.apply(values.get(i-1))).compareTo(lhKey) == 0; i--)
 					nDupsFound++;
-				if(nDupsFound >= nDuplicatesAllowed)
+				if(nDupsFound >= nDuplicatesAllowed) {
+					System.out.println("duplicate rejected ("+ nDupsFound +" present of: "+ lhKey +" / "+ value); // debug out
 					return NO_INSERTION(); // return early
+					
+				}
+					
 			}
 			
 			//- insert new element
@@ -855,26 +874,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		}
 
 		public InsertionInfo split() {
-			Interval<Integer> coopSiblingIdxs; 
-			List<LeafNode> coopSiblings; 
-
-			if(parent != null) {
-				coopSiblingIdxs = parent.getCooperatingSiblingsIdxsFor(idxInParent);
+			//- fetch cooperating siblings
+			Pair<Interval<Integer>, List<LeafNode>> siblingInfo = getCooperatingSiblingsAndIdxs();
+			Interval<Integer> coopSiblingIdxs = siblingInfo.getElement1();
+			List<LeafNode> coopSiblings = siblingInfo.getElement2();
 			
-				coopSiblings = new ArrayList<LeafNode>(coopSiblingIdxs.hi - coopSiblingIdxs.lo + 1);
-				for(int idx = coopSiblingIdxs.lo; idx <= coopSiblingIdxs.hi; idx++)
-					coopSiblings.add((LeafNode) getNode(parent, idx));
-			} else { // for root
-				coopSiblingIdxs = new Interval<Integer>(0);
-				coopSiblings = new ArrayList<LeafNode>(2);
-				coopSiblings.add(this);
-			}
-			
-			//- check whether we can avoid a split through sharing			
+			//- check whether we can avoid a split through sharing and construct the approbiate InsertionInfo object
 			int summedSizes = coopSiblings.stream().map((LeafNode x) -> x.values.size()).reduce(0, (x,y) -> x+y);
 			int summedCapacity = leafHi * coopSiblings.size();
 			
-			//- construct the InsertionInfo object
 			InsertionInfo insertionInfo;
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
