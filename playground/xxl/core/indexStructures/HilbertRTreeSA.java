@@ -17,6 +17,8 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
 
+import com.google.common.collect.Ordering;
+
 import xxl.core.collections.MappedList;
 import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
@@ -297,6 +299,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				rootNew.areaRanges.add(insertionInfo.newnode.getBoundingBox());
 				
 				rootNew.lhvSeparators.add(root.getLHV());
+				rootNew.lhvSeparators.add(Long.MAX_VALUE);
 				
 				// fill the root node with samples again
 				if(rootNew.shouldHaveSampleBuffer()) {
@@ -470,7 +473,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		
 		/** Constructor for an empty node, which doesn't have any entries. */
 		public InnerNode() {
-			this.lhvSeparators = new ArrayList<Long>(branchingHi-1);
+			this.lhvSeparators = new ArrayList<Long>(branchingHi);
 			this.areaRanges = new ArrayList<FixedPointRectangle>(branchingHi);
 			this.pagePointers = new ArrayList<P>(branchingHi);
 			this.childWeights = new ArrayList<Integer>(branchingHi);
@@ -525,7 +528,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			for(i=0; i < lhvSeparators.size(); i++)
 				if(hv <= lhvSeparators.get(i))
 					return i;
-			return i;
+			return null;
 		}
 		
 		public InsertionInfo insert(Long hvKey, V value) {
@@ -549,12 +552,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 					// update the rest when the metainfo of the other childs is updated too, for now just fill with dummy values
 					areaRanges.add(insertPos, null);
 					childWeights.add(insertPos, null);
-					lhvSeparators.add(insertPos-1, null);
+					lhvSeparators.add(insertPos-1, null); // don't modify the last lhv value
 					childInsertInfo.idxsChanged.hi += 1;
 				}
 				
 				//- update meta information for the modified nodes
 				updateChildrenInfo(childInsertInfo.idxsChanged);
+				
+				assert Ordering.natural().isOrdered(lhvSeparators); // DEBUG
+				
 				
 				//- maintain sample buffer (which acts similiar to a reservoir sample on the passing values)
 				if(hasSampleBuffer()) {  
@@ -629,7 +635,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			int i = 0;
 			for(InnerNode sibling : coopSiblings) {
 				int curSize = sizes.get(i);
-				sibling.lhvSeparators = HUtil.splitOffLeft(all_lhvRanges, curSize-1, new ArrayList<>(branchingHi-1));
+				sibling.lhvSeparators = HUtil.splitOffLeft(all_lhvRanges, curSize, new ArrayList<>(branchingHi));
 				sibling.areaRanges = HUtil.splitOffLeft(all_areaRanges, curSize, new ArrayList<>(branchingHi));
 				sibling.pagePointers = HUtil.splitOffLeft(all_pagePointers, curSize, new ArrayList<>(branchingHi));
 				sibling.childWeights = HUtil.splitOffLeft(all_childWeights, curSize, new ArrayList<>(branchingHi));
@@ -655,7 +661,6 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			for(InnerNode sibling : coopSiblings)
 				assert sibling.samples == null || sibling.samples.size() <= samplesPerNodeHi;
 			
-			
 			//- update container contents of all cooperating siblings
 			for(InnerNode sibling : coopSiblings)
 				container.update(sibling.pagePointer, sibling);
@@ -671,8 +676,10 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				
 				areaRanges.set(modIdx, node.getBoundingBox());
 				childWeights.set(modIdx, node.totalWeight());
-				if(modIdx < lhvSeparators.size())
+				// last lhv entry never gets updated as it saves the value in for the partition in the parent node
+				if(modIdx < lhvSeparators.size() - 1) {  
 					lhvSeparators.set(modIdx, node.getLHV());
+				}
 			}
 		}
 		
@@ -899,6 +906,9 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			for(LeafNode sibling : coopSiblings)
 				all_values.addAll(sibling.values);
 
+			// assert that the collected values are ordered
+			assert Ordering.natural().isOrdered( new MappedList<V, Long>(all_values, FunJ8.toOld(getSFCKey.compose(getBoundingBox)))); // DEBUG
+			
 			//- Redistribute them again
 			List<Integer> sizes = HUtil.partitionInNParts(summedSizes, coopSiblings.size());
 			int i = 0;
@@ -1078,7 +1088,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			int nChildren = dataInput.readInt();
 
 			// -- read hilbert-value ranges
-			for(int i=0; i < nChildren-1; i++) {
+			for(int i=0; i < nChildren; i++) {
 				node.lhvSeparators.add(hvConverter.read(dataInput));
 			}
 			
@@ -1263,12 +1273,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		int startlevel;
 		
 		/** Path of expanded nodeCIDs */
-		Stack<P> sNodes; // container.get(sNodes.peek()) =: current node
+		Stack<P> sNodeCIDs; // container.get(sNodes.peek()) =: current node
 		/** Path of chosen index in corresponding node in sNodes. */
 		Stack<Integer> sIdx; // sIdx.peek() =: current index
 		
 		/** Single precomputed value. */
 		V precomputed;
+		
+		int valuesProduced = 0; // DEBUG
+		LinkedList<LeafNode> leafsExpanded = new LinkedList<>();
 		
 		private HVQueryCursor(Interval<Long> query, P startNode, int startlevel) {
 			super();
@@ -1278,8 +1291,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			p_nodesTouched = new HashSet<Pair<Integer,P>>();
 			this.startlevel = startlevel;
 			//- state
-			sNodes = new Stack<P>();
-			sNodes.push(startNode);
+			sNodeCIDs = new Stack<P>();
+			sNodeCIDs.push(startNode);
 			sIdx = new Stack<Integer>();
 			precomputed = null; // the next value to spit out
 		}
@@ -1305,15 +1318,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	
 		/** Marks the node currently on the head of the stack as touched for profiling. */
 		private void markTouched() {
-			p_nodesTouched.add(new Pair<Integer, P>(startlevel - sNodes.size() + 1, sNodes.peek()));
+			p_nodesTouched.add(new Pair<Integer, P>(startlevel - sNodeCIDs.size() + 1, sNodeCIDs.peek()));
 		}
 		
 		/** Finds the path to the first entry and locks its nodes in the buffer of the container. */
 		@Override
 		public void open() {
 			// get the current node and lock it in the buffer
-			if(sNodes.peek() == null) return; // happens when tree is empty
-			Node curNode = container.get(sNodes.peek(), false); // this should always be the root if we don't descend from a different node
+			if(sNodeCIDs.peek() == null) return; // happens when tree is empty
+			Node curNode = container.get(sNodeCIDs.peek(), false); // this should always be the root if we don't descend from a different node
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1332,13 +1345,14 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				
 				// descend to next node
 				P nextPID = curINode.pagePointers.get(nextPos);
-				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				sNodeCIDs.push(nextPID);
+				curNode = container.get(sNodeCIDs.peek(), false);
 				markTouched();
 			}
 			
 			// now our node is a leaf and we just need to find the starting position			
 			LeafNode curLNode = (LeafNode) curNode;
+			leafsExpanded.add(curLNode); // DEBUG
 			
 			// find starting position
 			List<Long> mappedList = 
@@ -1357,14 +1371,14 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		@Override
 		public void close() {			
 			// release locked path
-			while(!sNodes.empty())
-				container.unfix(sNodes.pop());
+			while(!sNodeCIDs.empty())
+				container.unfix(sNodeCIDs.pop());
 			super.close();
 		}
 		
 		private void descendToSmallest() {
 			// get the current node and fix it in the buffer
-			Node curNode = container.get(sNodes.peek(), false);			
+			Node curNode = container.get(sNodeCIDs.peek(), false);			
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1373,8 +1387,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				sIdx.push(0);
 				
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
-				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				sNodeCIDs.push(nextPID);
+				curNode = container.get(sNodeCIDs.peek(), false);
 				markTouched();
 			}
 			
@@ -1386,17 +1400,17 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 			// OPT: would perhaps be clearer if not recursive.
 			
 			// release the active node and index and unfix from the buffer 
-			container.unfix(sNodes.pop()); 
+			container.unfix(sNodeCIDs.pop()); 
 			sIdx.pop();
 			
-			if(sNodes.empty()) // recursion exit, no value-next node can be found
+			if(sNodeCIDs.empty()) // recursion exit, no value-next node can be found = right border of tree
 				return false;
 			
 			// get the right brother from the parent node if present..
-			InnerNode pNode = (InnerNode) container.get(sNodes.peek());
+			InnerNode pNode = (InnerNode) container.get(sNodeCIDs.peek());
 			sIdx.push(sIdx.pop() + 1); // increment counter		
 			if(sIdx.peek() < pNode.pagePointers.size()) { // switch over if we have a right brother
-				sNodes.push(pNode.pagePointers.get(sIdx.peek()));
+				sNodeCIDs.push(pNode.pagePointers.get(sIdx.peek()));
 				descendToSmallest();
 				return true;
 			} else { // ..if not call myself recursively, that means looking for a brother of the parent				
@@ -1406,24 +1420,29 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	
 		/* We just need to precompute the value here, all the other logic is handled by AbstractCursor. */ 
 		protected boolean hasNextObject() {		
-			if(sNodes.peek() == null) return false; // happens when tree is empty
-			LeafNode curLNode = (LeafNode) container.get(sNodes.peek());
+			if(sNodeCIDs.peek() == null) return false; // happens when tree is empty
+			LeafNode curLNode = (LeafNode) container.get(sNodeCIDs.peek());
 			sIdx.push(sIdx.pop() + 1); // = increment counter			
 	
 			if(sIdx.peek() >= curLNode.values.size()) { // we need to switch to the node which has the next values
 				if(switchToNextNode())
 					// fetch the updated leaf node again, that is the state change incured by switchToNextNode() 
-					curLNode = (LeafNode) container.get(sNodes.peek());
+					curLNode = (LeafNode) container.get(sNodeCIDs.peek());
 				else  
 					return false; // hit the right border of the index structure				
 			}
 			
+			leafsExpanded.add(curLNode); // DEBUG
+			
 			precomputed = curLNode.values.get(sIdx.peek());
 			if(!query.contains(getSFCKey.compose(getBoundingBox).apply(precomputed))) {
-				assert query.locate(getSFCKey.compose(getBoundingBox).apply(precomputed)) > 0;
+				if(! (query.locate(getSFCKey.compose(getBoundingBox).apply(precomputed)) > 0) ) {
+					List<Long> mappedList = new MappedList<V, Long>(curLNode.values, FunJ8.toOld(getSFCKey.compose(getBoundingBox)));
+					assert false;
+				};
 				return false; // hit the high border
 			}
-			
+			valuesProduced++;
 			return true;
 		}
 	

@@ -42,7 +42,7 @@ public class Sample {
 	
 	/**
 	 * Draws _amount_ values at random (with replacement) from the list given. Values stay in the list.
-	 * FIXME: This is incredibly overcomplicated. :( 
+	 * TODO: This is incredibly overcomplicated. :( 
 	 * (Perhaps could be useful if we don't have random access to the sampling universe.)
 	 * -> Also, correctness has still to be shown.
 	 */

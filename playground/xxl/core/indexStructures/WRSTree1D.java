@@ -554,7 +554,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 			int weightLeft = this.childWeights.stream().reduce(0, (x,y) -> x+y);
 			int weightRight = newode.childWeights.stream().reduce(0, (x,y) -> x+y);
 			
-			// .. and check again calculated weights
+			// .. and check against calculated weights
 			assert weightLeft == calcedWeightLeft;
 			assert weightRight == calcedWeightRight;
 			

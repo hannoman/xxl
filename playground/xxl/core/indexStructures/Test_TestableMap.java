@@ -749,7 +749,8 @@ public class Test_TestableMap {
 
 	public static void test_duplicateHandling() throws Exception {
 		//--- run the actual tests
-		random = new CopyableRandom(); // 119066442596134L
+//		random = new CopyableRandom();
+		random = new CopyableRandom(122928473621795L); // 119066442596134L
 		System.out.println("seed: "+ random.getSeed());
 		
 		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
