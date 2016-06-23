@@ -3,16 +3,19 @@ package xxl.core.indexStructures;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Random;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.TreeMultiset;
 import com.google.uzaygezen.core.BitVector;
 import com.google.uzaygezen.core.BitVectorFactories;
 import com.google.uzaygezen.core.CompactHilbertCurve;
@@ -154,6 +157,7 @@ public class Test_TestableMap {
 		
 		//-- (mostly) negative (= random) lookups		
 		int errors_randomLookup = 0;
+		int nonEmptyQueries = 0;
 		for(int i=1; i <= LOOKUP_TESTS_RANDOM; i++) {
 			K key = testKeysCursor.next();
 			
@@ -164,6 +168,7 @@ public class Test_TestableMap {
 			
 			long tsCompMapSingle = System.nanoTime();
 				List<V> mapAnswers = compmap.getOrDefault(key, new LinkedList<V>());
+				if(!mapAnswers.isEmpty()) nonEmptyQueries++;
 			ttCompMap += System.nanoTime() - tsCompMapSingle;
 			
 			//-- compute the difference between the resulsts
@@ -189,7 +194,8 @@ public class Test_TestableMap {
 			}
 			
 		}
-//		System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");		
+//		System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");
+		System.out.println("\tnon empty queries: "+ nonEmptyQueries);
 		System.out.println("\tfailed: "+ errors_randomLookup +"/"+ LOOKUP_TESTS_RANDOM);
 		
 		long ttFunc = System.nanoTime() - tsFunc;
@@ -203,6 +209,7 @@ public class Test_TestableMap {
 		return errors_randomLookup;
 	}
 	
+	
 	public static <K extends Comparable<K>, V> Triple<Integer, Integer, Integer> rangeQueries(
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
@@ -213,6 +220,7 @@ public class Test_TestableMap {
 		int error_false_positive = 0;
 		int error_false_negative = 0;
 		int error_both = 0;
+		int nonEmptyQueries = 0;
 		
 		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
 			//- determine query interval
@@ -220,7 +228,7 @@ public class Test_TestableMap {
 			K hi = testKeysCursor.next();
 			if(lo.compareTo(hi) > 0) { K tmp = lo; lo = hi; hi = tmp; }
 			
-//			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+			System.out.println("Range Query #"+ i +": \t\t"+ lo +" - \t"+ hi +""); // DEBUG
 	
 			//-- execute the query on the tree
 			Interval<K> query = new Interval<K>(lo, true, hi, false);
@@ -229,6 +237,7 @@ public class Test_TestableMap {
 			
 			//-- execute the query on the comparison map			
 			NavigableMap<K, List<V>> comparisonResultMap = compmap.subMap(lo, true, hi, false);
+			if(!comparisonResultMap.isEmpty()) nonEmptyQueries++;
 			//- flatten
 			List<V> mapAnswers = new LinkedList<V>();
 			for(Map.Entry<K, List<V>> entry : comparisonResultMap.entrySet()) {
@@ -272,12 +281,103 @@ public class Test_TestableMap {
 			}			
 		}	
 		
+		System.out.println("\tnon empty queries: "+ nonEmptyQueries);
 		System.out.println("\tToo big results:   "+ error_false_positive);
 		System.out.println("\tToo small results: "+ error_false_negative);
 		System.out.println("\tBoth sided errors: "+ error_both);
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
+	public static <K, V, P> Triple<Integer, Integer, Integer> spatialQueries(
+			HilbertRTreeSA<V, P> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<FixedPointRectangle> testKeysCursor,
+			Function<V, FixedPointRectangle> getBoundingBox) {
+		// final int RANGE_QUERY_TESTS = 1;
+		//-- rangeQuery tests
+		System.out.println("========================================================================");
+		System.out.println("================== RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
+		System.out.println("========================================================================");
+		int error_false_positive = 0;
+		int error_false_negative = 0;
+		int error_both = 0;
+		int nonEmptyQueries = 0;
+		
+		//-- as our original insertion keys bear no influence on the spatial query, transofrm our map into a list of values
+		HashMultiset<V> valueSet = HashMultiset.create();
+//		compmap.values().stream().map(valueSet::addAll);
+		for(List<V> valList : compmap.values()) valueSet.addAll(valList);
+		System.out.println("valueSet: "+ valueSet);
+		System.out.println("#size: "+ valueSet.size());
+		int maxCluster = valueSet.entrySet().stream().map((Multiset.Entry<V> x) -> x.getCount()).max(Comparator.naturalOrder()).get();
+		System.out.println("biggest cluster: "+ maxCluster);
+		System.out.println("#distinct elements: "+ valueSet.elementSet().size());
+		
+		
+		
+//		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
+//			//- determine query interval
+//			FixedPointRectangle queryArea = testKeysCursor.next();
+//			
+//			System.out.println("Range Query #"+ i +": \t\t"+ queryArea +" - \t"+ hi +""); // DEBUG
+//	
+//			//-- execute the query on the tree
+//			Cursor<V> treeResultCursor = tree.areaRangeQuery(queryArea);
+//			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
+//			
+//			
+//			if(!comparisonResultMap.isEmpty()) nonEmptyQueries++;
+//			//- flatten
+//			List<V> mapAnswers = new LinkedList<V>();
+//			for(Map.Entry<K, List<V>> entry : comparisonResultMap.entrySet()) {
+//				mapAnswers.addAll(entry.getValue());
+//			}
+//			
+//			//-- Test current query
+//			int e_negatives = 0;
+//			int e_positives = 0;
+//			
+//			//-- compute the difference between the resulsts
+//			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
+//			
+//			if(!difference.leftAnti.isEmpty() || !difference.rightAnti.isEmpty()) {
+//				System.out.print("#"+ i +":\t ");
+//				System.out.println("FAILED.");
+//				System.out.println("-- query: \n\t"+ query);
+//				System.out.println("-- tree result (# = "+ treeAnswers.size() +"): \n\t"+ treeAnswers);
+//				System.out.println("-- comp result (# = "+ mapAnswers.size() +"): \n\t"+ mapAnswers);
+//
+//				if(!difference.leftAnti.isEmpty()) {
+//					System.out.println("-- false positives (# = "+ difference.leftAnti.size() +"): \n\t"+ difference.leftAnti);
+//					e_positives += difference.leftAnti.size();
+//				}
+//				if(!difference.rightAnti.isEmpty()) {
+//					System.out.println("-- false negatives (# = "+ difference.rightAnti.size() +"): \n\t"+ difference.rightAnti);
+//					e_negatives += difference.rightAnti.size();
+//				}
+//			} else {
+////				System.out.print("#"+ i +":\t ");
+////				System.out.println("OK.");
+//			}
+//			
+//			//- classify error case
+//			if(e_negatives > 0 || e_positives > 0) {
+//				System.out.println("\tErronous: #rsize: "+ treeAnswers.size() +"; #compsize: "+ 
+//									mapAnswers.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+//				if(e_negatives > 0 && e_positives > 0) error_both++;
+//				else if(e_negatives > 0) error_false_negative++;
+//				else if(e_positives > 0) error_false_positive++;
+//			}			
+//		}	
+//		
+//		System.out.println("\tnon empty queries: "+ nonEmptyQueries);
+//		System.out.println("\tToo big results:   "+ error_false_positive);
+//		System.out.println("\tToo small results: "+ error_false_negative);
+//		System.out.println("\tBoth sided errors: "+ error_both);
+//		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+		
+		return null;
+	}
+
+	
 	public static Triple<Integer, Integer, Integer> samplingTest(RSTree1D<Integer, Integer, Long> tree,
 																Map<Integer,Integer> compmap, 
 																int SAMPLING_QUERY_TESTS) {
@@ -579,8 +679,8 @@ public class Test_TestableMap {
 //		test_duplicateHandling(); return;
 		
 		//--- run the actual tests
-		random = new CopyableRandom(122928473621795L); // 119066442596134L
-//		random = new CopyableRandom(); 
+//		random = new CopyableRandom(122928473621795L); // 119066442596134L
+		random = new CopyableRandom(); 
 		System.out.println("seed: "+ random.getSeed());
 		
 		test_hilbertTree_fromAtoZ();
@@ -644,7 +744,8 @@ public class Test_TestableMap {
 		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
 		
 		//- allow just as many duplicates as fit in a leaf
-		int nDuplicatesAllowed = leafHi;
+//		int nDuplicatesAllowed = leafHi;
+		int nDuplicatesAllowed = 5;
 		
 		//- set branching param fixed
 		int branchingHi = 20;
@@ -668,7 +769,7 @@ public class Test_TestableMap {
 		Function<FixedPointRectangle, FixedPointRectangle> getBoundingBox = (x -> x);
 		
 		//== space filling curve
-		int[] bitsPerDimensions = {6,6,6};
+		int[] bitsPerDimensions = {2,2,2};
 		FixedPointRectangle universe = DataDistributions.universeForBitsPerDimensions(bitsPerDimensions);
 		CompactHilbertCurve hilbertCurve = new CompactHilbertCurve(bitsPerDimensions);
 		
@@ -724,19 +825,23 @@ public class Test_TestableMap {
 		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
 		Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
 			protected boolean hasNextObject() { return true; }
-			protected Long nextObject() { return random.nextLong(Long.MAX_VALUE); }
+			protected Long nextObject() { return random.nextLong(1 << 20 /* Long.MAX_VALUE */); }
 		};
+//		System.out.println("testKeysCursor sample: "+ Cursors.toList(new Taker(testKeysCursor, 100))); // DEBUG
 		
 		NavigableMap<Long, List<FixedPointRectangle>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
 				tree.getGetKey(), nDuplicatesAllowed);
 		
 		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
 		
-		//==== TESTING
-		positiveLookups(tree, compmap, tree.totalWeight() / 20);
-		randomKeyLookups(tree, compmap, tree.totalWeight() / 20, testKeysCursor);
-		rangeQueries(tree, compmap, tree.totalWeight() / 20, testKeysCursor);
+		//==== 1-dimensional SANITY TESTS
+//		positiveLookups(tree, compmap, tree.totalWeight() / 30);
+//		randomKeyLookups(tree, compmap, tree.totalWeight() / 30, testKeysCursor);
+//		rangeQueries(tree, compmap, tree.totalWeight() / 500, testKeysCursor);
 		
+		//=== spatial lookups
+		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+		spatialQueries(tree, compmap, tree.totalWeight() / 300, testAreaCursor, (x -> x));
 	}
 	
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(

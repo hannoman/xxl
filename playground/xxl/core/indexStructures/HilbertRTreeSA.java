@@ -856,11 +856,9 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				for(int i = insertPos; i > 0 && getSFCKey.apply(getBoundingBox.apply(values.get(i-1))).compareTo(lhKey) == 0; i--)
 					nDupsFound++;
 				if(nDupsFound >= nDuplicatesAllowed) {
-					System.out.println("duplicate rejected ("+ nDupsFound +" present of: "+ lhKey +" / "+ value); // debug out
+					System.out.println("duplicate rejected ("+ nDupsFound +" present of: "+ lhKey +" / "+ value); // DEBUG
 					return NO_INSERTION(); // return early
-					
 				}
-					
 			}
 			
 			//- insert new element

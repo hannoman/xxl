@@ -46,11 +46,13 @@ public class TreeCreation {
 		//-- Insertion - generate test data		
 		System.out.println("-- Insertion test: Generating "+ AMOUNT +" random test data points");
 	
+		int successfulInsertions = 0;
 		for (int i = 1; i <= AMOUNT; i++) {
 //			System.out.println("Insertion \t"+ i +"\t ..."); // debug
 			V value = dataCursor.next();
 			K key = getKey.apply(value);
-			tree.insert(value);
+			boolean insertionSuccessful = tree.insert(value);
+			if(insertionSuccessful) successfulInsertions++;
 			compmap.putIfAbsent(key, new LinkedList<V>());
 			List<V> valueList = compmap.get(key);
 			if(nDuplicatesAllowed > 0 && valueList.size() < nDuplicatesAllowed)
@@ -62,6 +64,7 @@ public class TreeCreation {
 			}
 		}
 		
+		System.out.println("Successful insertions: "+ successfulInsertions);
 		System.out.println("Resulting tree height: " + tree.height());
 		return compmap;
 	}
