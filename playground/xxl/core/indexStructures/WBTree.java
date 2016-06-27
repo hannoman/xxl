@@ -144,8 +144,6 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 	 * - the ContainerID of the generated Node
 	 * - a key used for the separation of the nodes.
 	 * - the weights of the resulting left and right node
-	 * 
-	 * @author Dominik Krappel
 	 */
 	class SplitInfo {
 		P newnodeCID;
@@ -487,7 +485,7 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 //		}
 	}
 	
-	public void insert(V value) {
+	public boolean insert(V value) {
 		
 		if(rootCID == null) { // tree empty
 			LeafNode root = new LeafNode();
@@ -496,11 +494,10 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 			rootWeight = 1;
 			rootHeight = 0;
 			rootCID = container.insert(root);
-			return;
+			return true;
 		} else {
-			
+			int oldWeight = rootWeight;
 			SplitInfo splitInfo = container.get(rootCID).insert(value, rootCID, rootHeight);
-			rootWeight++;
 			
 			if(splitInfo != null) { // new root
 				InnerNode newroot = new InnerNode();

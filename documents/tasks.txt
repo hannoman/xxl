@@ -24,6 +24,7 @@
  *   Mini-Milestone: Support removals
 
 - cidConverter in NodeConverter is never used. (adjust in other trees)
+
 ========== Important Bugfixes ==========
 
 * ReallyLazySamplingCursor doesn't permute results enough (DONE)
@@ -44,6 +45,9 @@
 
 -- datasets:
 
+* use a BufferedContainer for faster operations on the tree. The profiling is done indepedently on a higher level, 
+	so this shouldn't be a problem. 
+
 * GEO is perhaps handleble with single insertions
 	but OSM is probably much too large..
 	 
@@ -54,6 +58,8 @@
 	-> Also duplicate handling of the trees should be specified better. (DONE)
 		-> check out SortMergeJoin and HashGrouper to implement the comparison, aand therefore SweepAreas.
 	
-* copy updated QueryCursor implementation from RSTree1D to WBTRee and WRSTree_copyImpl
+* copy updated QueryCursor implementation from RSTree1D to WBTree and WRSTree_copyImpl
+
+* update WBTree with better implementations from later trees
 
 * OPT LOW: simplify/unify TreeCreation.createRSTree_withInnerUnbufferedNodes and TreeCreation.createRSTree	   
