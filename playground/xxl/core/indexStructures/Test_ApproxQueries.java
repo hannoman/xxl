@@ -3,7 +3,6 @@ package xxl.core.indexStructures;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -253,23 +252,23 @@ public class Test_ApproxQueries {
 		return tree;
 	}
 	
-	// TODO
-	public static void bTreeTest() {
-				
-		Function<Pair<Integer, Double>, Interval1D> getDescriptorNew = (t -> new Interval1D(t.getElement1()));
-		xxl.core.functions.Function getDescriptor = FunJ8.toOld(getDescriptorNew);
-		
-		Function<Pair<Integer, Double>, Integer> getKey = (t -> t.getElement1());
-
-		//- create the tree
-		BTree tree = createBTree("bplus_init_test03", 1024, getDescriptor);
-		//- fill the tree
-		Map<Integer, Pair<Integer, Double>> compmap = fillXXLTree(tree, 100000, getKey, getDescriptor);
-		
-		//- close the container so that the metadata-file is written
-		// tree.container().close(); // only BPlusTree exposes this functionality
-//		((Container) tree.getContainer.invoke(tree.rootEntry)).close();
-	}
+//	// TODO
+//	public static void bTreeTest() {
+//				
+//		Function<Pair<Integer, Double>, Interval1D> getDescriptorNew = (t -> new Interval1D(t.getElement1()));
+//		xxl.core.functions.Function getDescriptor = FunJ8.toOld(getDescriptorNew);
+//		
+//		Function<Pair<Integer, Double>, Integer> getKey = (t -> t.getElement1());
+//
+//		//- create the tree
+//		BTree tree = createBTree("bplus_init_test03", 1024, getDescriptor);
+//		//- fill the tree
+//		Map<Integer, Pair<Integer, Double>> compmap = fillXXLTree(tree, 100000, getKey, getDescriptor);
+//		
+//		//- close the container so that the metadata-file is written
+//		// tree.container().close(); // only BPlusTree exposes this functionality
+////		((Container) tree.getContainer.invoke(tree.rootEntry)).close();
+//	}
 	
 	// TODO
 	public static Map<Integer, Pair<Integer,Double>> fillXXLTree(
