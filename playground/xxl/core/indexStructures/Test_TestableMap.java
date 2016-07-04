@@ -1,5 +1,6 @@
 package xxl.core.indexStructures;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -720,10 +721,10 @@ public class Test_TestableMap {
 		
 	}
 	
-	public static void test_hilbertTree_fromAtoZ() {
+	public static void test_hilbertTree_fromAtoZ() throws FileNotFoundException {
 		int dimension = 3;
 		//======= INITIALISATION
-		Container treeRawContainer = new BlockFileContainer("HilbertTest_first", BLOCK_SIZE);
+		Container treeRawContainer = new BlockFileContainer(TestUtils.resolveFilename("HilbertTest_first"), BLOCK_SIZE);
 		
 		MeasuredConverter<Interval<Long>> hvRangeConverter = 
 				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
