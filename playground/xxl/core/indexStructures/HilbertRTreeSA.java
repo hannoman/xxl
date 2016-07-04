@@ -1191,7 +1191,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		FixedPointRectangle query;
 		LinkedList<Pair<Integer, P>> candidateNodes = new LinkedList<Pair<Integer, P>>();
 		/** Profiling information: nodes touched. */
-		Set<Pair<Integer, P>> p_nodesTouched = new TreeSet<Pair<Integer,P>>();
+		Set<Pair<Integer, P>> p_nodesTouched = new HashSet<Pair<Integer,P>>();
 		LinkedList<V> precomputed = new LinkedList<V>();
 		
 		public AreaQueryCursor(FixedPointRectangle query) {
