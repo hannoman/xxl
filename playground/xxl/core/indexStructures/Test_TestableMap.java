@@ -23,12 +23,14 @@ import com.google.uzaygezen.core.CompactHilbertCurve;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
+import xxl.core.collections.containers.io.BufferedContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
 import xxl.core.functions.FunJ8;
+import xxl.core.io.LRUBuffer;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
@@ -67,30 +69,13 @@ public class Test_TestableMap {
 //	public static final int MAX_OBJECT_SIZE = 78;
 	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
+	public static final int SPEEDUP_BUFFER_SIZE = 10;
 	
 	public static final int KEY_LO = 0, KEY_HI = 100000;
 	public static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
 
 	/** Shared state of the RNG. Instanciated Once. */  
 	public static CopyableRandom random;	
-	
-	private static WBTree<Integer, Integer, Long> createWBTree(String testFile) {
-		
-		WBTree<Integer, Integer, Long> tree = new WBTree<Integer, Integer, Long>(
-				10, 										// leafParam
-				5, 											// branchingParam
-				(x -> x)); 									// getKey
-
-		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Converter<Integer> valueConverter = IntegerConverter.DEFAULT_INSTANCE;
-		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
-		
-		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
-		
-		System.out.println("Initialization of the tree finished.");
-		return tree;
-	}
 	
 	public static <K extends Comparable<K>, V> int positiveLookups(
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_POSITIVE) {
@@ -722,9 +707,12 @@ public class Test_TestableMap {
 	}
 	
 	public static void test_hilbertTree_fromAtoZ() throws FileNotFoundException {
+		long startTime = System.nanoTime();
 		int dimension = 3;
 		//======= INITIALISATION
 		Container treeRawContainer = new BlockFileContainer(TestUtils.resolveFilename("HilbertTest_first"), BLOCK_SIZE);
+//		Container treeContainer = treeRawContainer;
+		Container treeContainer = new BufferedContainer(treeRawContainer, new LRUBuffer(SPEEDUP_BUFFER_SIZE));
 		
 		MeasuredConverter<Interval<Long>> hvRangeConverter = 
 				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
@@ -733,7 +721,7 @@ public class Test_TestableMap {
 		MeasuredConverter<FixedPointRectangle> areaConverter = 
 				Converters.createMeasuredConverter(dimension * 2 * LongConverter.SIZE, 
 						new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld(fixedPointRectangleFactory))); // TODO: how to make it fixed size?
-		MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter; // we save the areas as data points
+		MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter; // our values are the areas
 		
 		//-- estimating parameters for the tree
 		//- fill leafes optimal
@@ -754,7 +742,7 @@ public class Test_TestableMap {
 		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
 		innerSpaceLeft -= hvRangeConverter.getMaxObjectSize() * branchingHi; 	// hilbert value ranges of children
 		innerSpaceLeft -= areaConverter.getMaxObjectSize() * branchingHi; 		// area ranges of children
-		innerSpaceLeft -= treeRawContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
+		innerSpaceLeft -= treeContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
 		innerSpaceLeft -= IntegerConverter.SIZE * branchingHi; // weights
 		
 		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
@@ -816,7 +804,7 @@ public class Test_TestableMap {
 		//-- set the PRNG state
 		tree.setRNG(new CopyableRandom(random));
 		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeRawContainer, valueConverter);		
+		tree.initialize_buildContainer(treeContainer, valueConverter);		
 		
 		System.out.println("Initialization of the tree finished.");
 
@@ -841,6 +829,9 @@ public class Test_TestableMap {
 		//=== spatial lookups
 		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
 		spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
+		
+		long timeElapsed = System.nanoTime() - startTime;
+		System.out.println("-- Total time elapsed: "+ (timeElapsed / 1000000) +"ms");
 	}
 	
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(

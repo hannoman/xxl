@@ -12,9 +12,11 @@ import xxl.core.cursors.Cursor;
 import xxl.core.indexStructures.HilbertRTreeSA;
 import xxl.core.indexStructures.RSTree1D;
 import xxl.core.indexStructures.TestableMap;
+import xxl.core.indexStructures.WBTree;
 import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.ConvertableConverter;
+import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.Converters;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.FixedSizeConverter;
@@ -112,6 +114,24 @@ public class TreeCreation {
 		System.out.println("Resulting tree weight (by weight): "+ tree.totalWeight());
 		System.out.println("Resulting tree height: " + tree.height());
 		return compmap;
+	}
+	
+	private static WBTree<Integer, Integer, Long> createWBTree(String testFile) {
+		
+		WBTree<Integer, Integer, Long> tree = new WBTree<Integer, Integer, Long>(
+				10, 										// leafParam
+				5, 											// branchingParam
+				(x -> x)); 									// getKey
+
+		Converter<Integer> keyConverter = IntegerConverter.DEFAULT_INSTANCE;
+		Converter<Integer> valueConverter = IntegerConverter.DEFAULT_INSTANCE;
+		Container treeRawContainer = new BlockFileContainer(testFile, BLOCK_SIZE);			
+		
+		//-- Initialization with container creation inside the tree
+		tree.initialize_buildContainer(treeRawContainer, keyConverter, valueConverter);		
+		
+		System.out.println("Initialization of the tree finished.");
+		return tree;
 	}
 	
 	/** Creates a RSTree with fixed branching parameters and block size. Leaf and sample parameters are set space-optimal

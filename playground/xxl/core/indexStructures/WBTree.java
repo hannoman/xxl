@@ -583,7 +583,7 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 		@Override
 		public void open() {
 			// get the current node and lock it in the buffer
-			Node curNode = container.get(sNodes.peek(), false);
+			Node curNode = container.get(sNodes.peek());
 			
 			while(curNode.isInner()) {
 				InnerNode curINode = (InnerNode) curNode;  
@@ -595,7 +595,7 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 				// descend to next node
 				P nextPID = curINode.pagePointers.get(nextPos);
 				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				curNode = container.get(sNodes.peek());
 			}
 			
 			// now our node is a leaf and we just need to find the starting position			
@@ -623,8 +623,8 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 		}
 		
 		private void descendToSmallest() {
-			// get the current node and fix it in the buffer
-			Node curNode = container.get(sNodes.peek(), false);			
+			// get the current node and _don't_ fix it in the buffer
+			Node curNode = container.get(sNodes.peek());			
 			
 			while(curNode.isInner()) {				
 				InnerNode curINode = (InnerNode) curNode;
@@ -633,7 +633,7 @@ public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> 
 				
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
 				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				curNode = container.get(sNodes.peek());
 			}
 			
 			// set the index in the leaf node too

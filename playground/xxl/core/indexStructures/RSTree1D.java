@@ -996,7 +996,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		public void open() {
 			// get the current node and lock it in the buffer
 			if(sNodes.peek() == null) return; // happens when tree is empty
-			Node curNode = container.get(sNodes.peek(), false); // this should always be the root if we don't descend from a different node
+			Node curNode = container.get(sNodes.peek()); // this should always be the root if we don't descend from a different node
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1009,7 +1009,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 				// descend to next node
 				P nextPID = curINode.pagePointers.get(nextPos);
 				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				curNode = container.get(sNodes.peek());
 				markTouched();
 			}
 			
@@ -1039,7 +1039,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 		
 		private void descendToSmallest() {
 			// get the current node and fix it in the buffer
-			Node curNode = container.get(sNodes.peek(), false);			
+			Node curNode = container.get(sNodes.peek());			
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1049,7 +1049,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 				
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
 				sNodes.push(nextPID);
-				curNode = container.get(sNodes.peek(), false);
+				curNode = container.get(sNodes.peek());
 				markTouched();
 			}
 			

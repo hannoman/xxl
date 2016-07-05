@@ -85,7 +85,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	/** Container of the tree (and everything). 
 	 * This is a ConvertableContainer which spits out nodes. */
 	public TypeSafeContainer<P, Node> container;
-
+	
 	/** The NodeConverter incorporated in the container.
 	 * Used for saving/loading of the tree. */
 	NodeConverter nodeConverter;
@@ -1324,7 +1324,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		public void open() {
 			// get the current node and lock it in the buffer
 			if(sNodeCIDs.peek() == null) return; // happens when tree is empty
-			Node curNode = container.get(sNodeCIDs.peek(), false); // this should always be the root if we don't descend from a different node
+			Node curNode = container.get(sNodeCIDs.peek()); // this should always be the root if we don't descend from a different node // don't fix nodes in the buffer
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1344,7 +1344,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				// descend to next node
 				P nextPID = curINode.pagePointers.get(nextPos);
 				sNodeCIDs.push(nextPID);
-				curNode = container.get(sNodeCIDs.peek(), false);
+				curNode = container.get(sNodeCIDs.peek()); // don't fix nodes in the buffer
 				markTouched();
 			}
 			
@@ -1375,8 +1375,8 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 		}
 		
 		private void descendToSmallest() {
-			// get the current node and fix it in the buffer
-			Node curNode = container.get(sNodeCIDs.peek(), false);			
+			// get the current node and don't fix it in the buffer
+			Node curNode = container.get(sNodeCIDs.peek());			
 			markTouched();
 			
 			while(curNode.isInner()) {
@@ -1386,7 +1386,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 				
 				P nextPID = curINode.pagePointers.get(sIdx.peek());
 				sNodeCIDs.push(nextPID);
-				curNode = container.get(sNodeCIDs.peek(), false);
+				curNode = container.get(sNodeCIDs.peek());
 				markTouched();
 			}
 			
