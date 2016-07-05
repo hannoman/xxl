@@ -3,6 +3,7 @@ package xxl.core.util;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 
 import com.google.uzaygezen.core.BitVector;
@@ -14,8 +15,18 @@ public class LangTests {
 	public static void main(String[] args) {
 //		main2();
 //		hvToCoords();
-		bitManipulation();
+//		bitManipulation();
 //		randBits();
+		
+		toStringTests();
+	}
+	
+	public static void toStringTests() {
+		LinkedList<Long> list = new LinkedList<Long>();
+		list.add(2L); list.add(17L); list.add(39L);
+		Pair<Integer, List<Long>> p = new Pair<>(1335, list);
+		System.out.println(p);
+		
 	}
 	
 	public static void randBits() {

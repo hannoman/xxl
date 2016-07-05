@@ -310,14 +310,16 @@ public class Test_TestableMap {
 
 	
 	/** Um die Regions-Anfragen auf dem Hilbert-R-Tree zu testen... */
-	public static <K, V, P> Triple<Integer, Integer, Integer> spatialQueries(
+//	public static <K, V, P> Triple<Integer, Integer, Integer> spatialQueries(
+	public static <K, V, P> Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> spatialQueries(
 			HilbertRTreeSA<V, P> tree, NavigableMap<K, List<V>> compmap, int SPATIAL_QUERY_TESTS, Cursor<FixedPointRectangle> testKeysCursor,
 			Function<V, FixedPointRectangle> getBoundingBox) {
 		long ttFullFunc = System.nanoTime();
 		long ttTree = 0;
 		long ttCompMap = 0;
-		// final int RANGE_QUERY_TESTS = 1;
-		//-- rangeQuery tests
+		TreeMap<Long, List<Long>> timesPerQuerySizesTree = new TreeMap<Long, List<Long>>();
+		TreeMap<Long, List<Long>> timesPerQuerySizesCompMap = new TreeMap<Long, List<Long>>();
+		
 		System.out.println("========================================================================");
 		System.out.println("================== SpatialQuery Tests (#="+ SPATIAL_QUERY_TESTS +"):");
 		System.out.println("========================================================================");
@@ -343,7 +345,8 @@ public class Test_TestableMap {
 			long tsTree = System.nanoTime(); // TIMING
 			Cursor<V> treeResultCursor = tree.areaRangeQuery(queryArea);
 			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
-			ttTree += System.nanoTime() - tsTree; // TIMING
+			tsTree = System.nanoTime() - tsTree; // TIMING
+			ttTree += tsTree; // TIMING
 			
 			//-- execute the query on the comparison structe (which has no structure, therefore is pretty slow.)
 			long tsCompMap = System.nanoTime(); // TIMING
@@ -352,9 +355,16 @@ public class Test_TestableMap {
 				if(getBoundingBox.apply(value).overlaps(queryArea))
 					mapAnswers.add(value);
 			}
-			ttCompMap += System.nanoTime() - tsCompMap; // TIMING
+			tsCompMap = System.nanoTime() - tsCompMap; // TIMING
+			ttCompMap += tsCompMap; // TIMING
 			
 			if(!mapAnswers.isEmpty()) nonEmptyQueries++;
+			//- save in "histogram"
+			long querySize = mapAnswers.size();
+			timesPerQuerySizesTree.putIfAbsent(querySize, new LinkedList<>());
+			timesPerQuerySizesCompMap.putIfAbsent(querySize, new LinkedList<>());
+			timesPerQuerySizesTree.get(querySize).add(tsTree);
+			timesPerQuerySizesCompMap.get(querySize).add(tsCompMap);			
 			
 			//-- Test current query
 			int e_negatives = 0;
@@ -406,357 +416,14 @@ public class Test_TestableMap {
 		System.out.println("\tcomp query time: "+ String.format("%8.2fms", ((double) ttCompMap / 1000000)) 
 		  					+"\t\tper item: "+ String.format("%5.2fms", ((double) ttCompMap / 1000000 / SPATIAL_QUERY_TESTS)));
 		
-		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+//		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+//		return "("+ timesPerQuerySizesTree.toString() +", "+ timesPerQuerySizesCompMap.toString() +")";
+		return new Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>>(timesPerQuerySizesTree, timesPerQuerySizesCompMap);
 	}
 
 	
-	public static Triple<Integer, Integer, Integer> samplingTest(RSTree1D<Integer, Integer, Long> tree,
-																Map<Integer,Integer> compmap, 
-																int SAMPLING_QUERY_TESTS) {
-		final int SAMPLE_SIZE = 100;
-		//-- rangeQuery tests
-		System.out.println("-- SamplingQuery Tests (#="+ SAMPLING_QUERY_TESTS +"):");
-		
-		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
-		containedKeys.sort(null);
-		
-		int error_false_positive = 0;
-		int error_false_negative = 0;
-		int error_both = 0;
-		
-		for(int i=1; i <= SAMPLING_QUERY_TESTS; i++) {
-			Integer lo = random.nextInt();
-			Integer hi = random.nextInt();
-			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
-			long possKeys = (long)hi - (long)lo + 1;
-			
-			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
-	
-			//-- execute the query
-			Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi, BATCH_SAMPLE_SIZE_DEFAULT), SAMPLE_SIZE);			
-			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
-			
-			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
-			
-			//-- Test current query
-			int e_negatives = 0;
-			int e_positives = 0;
-			
-			//-- Tests for false positives
-			for(Integer tVal : tRes)
-				if(!compmap.containsKey(tVal)) e_positives++;
-	
-			//--- Computing the comparison-result
-			int compLoIdx = HUtil.binFindES(containedKeys, lo);
-			int compHiIdx = HUtil.binFindES(containedKeys, hi);
-			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
-			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
-			
-			System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
-							
-			//- classify error case
-			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
-				if(e_negatives > 0 && e_positives > 0) error_both++;
-				else if(e_negatives > 0) error_false_negative++;
-				else if(e_positives > 0) error_false_positive++;
-			}
-			
-		}		
-		
-		System.out.println("\tToo big results:   "+ error_false_positive);
-		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
-	}
-	
-	public static Triple<Integer, Integer, Integer> samplingTest_fixedPrecision_average(
-			RSTree1D<Integer, Integer, Long> tree, 
-			Map<Integer,Integer> compmap, 
-			int FP_SAMPLING_QUERY_TESTS,
-			double TARGET_PRECISION) {
-		
-			final int SAMPLE_SIZE = 100;
-			//-- rangeQuery tests
-			System.out.println("-- SamplingQuery Tests (#="+ FP_SAMPLING_QUERY_TESTS +"):");
-			
-			ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
-			containedKeys.sort(null);
-			
-			int error_false_positive = 0;
-			int error_false_negative = 0;
-			int error_both = 0;
-			
-			for(int i=1; i <= FP_SAMPLING_QUERY_TESTS; i++) {
-				Integer lo = random.nextInt();
-				Integer hi = random.nextInt();
-				if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
-				long possKeys = (long)hi - (long)lo + 1;
-				
-				System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
-		
-				//-- execute the query
-				Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi, BATCH_SAMPLE_SIZE_DEFAULT), SAMPLE_SIZE);			
-				List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
-				
-				System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
-				
-				//-- Test current query
-				int e_negatives = 0;
-				int e_positives = 0;
-				
-				//-- Tests for false positives
-				for(Integer tVal : tRes)
-					if(!compmap.containsKey(tVal)) e_positives++;
-		
-				//--- Computing the comparison-result
-				int compLoIdx = HUtil.binFindES(containedKeys, lo);
-				int compHiIdx = HUtil.binFindES(containedKeys, hi);
-				while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
-				List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
-				
-				System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
-								
-				//- classify error case
-				if(e_negatives > 0 || e_positives > 0) {
-					System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
-					if(e_negatives > 0 && e_positives > 0) error_both++;
-					else if(e_negatives > 0) error_false_negative++;
-					else if(e_positives > 0) error_false_positive++;
-				}
-				
-			}		
-			
-			System.out.println("\tToo big results:   "+ error_false_positive);
-			return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
-		}
-
-	public static void testTree(WBTree<Integer, Integer, Long> tree) throws IOException {			
-		//-- comparison structure
-		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
-		
-		//-- Insertion - generate test data
-		// Random random = new Random(139);
-		System.out.println("-- Insertion test: Generating random test data");
-
-		for (int i = 1; i <= NUMBER_OF_ELEMENTS; i++) {
-			int value = random.nextInt();
-			tree.insert(value);
-			compmap.put(tree.getKey.apply(value), value);
-			if (i % (NUMBER_OF_ELEMENTS / 10) == 0)
-				System.out.print((i / (NUMBER_OF_ELEMENTS / 100)) + "%, ");
-		}		
-		System.out.println("Resulting tree height: " + tree.rootHeight);
-
-		//--- Lookup test
-		//-- positive lookups
-		
-		final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
-		List<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
-		int errors_positiveLookup = 0;
-		for(int i=1; i <= LOOKUP_TESTS_POSITIVE; i++) {
-			int keyNr = random.nextInt(containedKeys.size());
-			Integer key = containedKeys.get(keyNr);
-			
-			List<Integer> treeAnswers = tree.get(key);
-			Integer mapAnswer = compmap.get(key);
-			if(!treeAnswers.contains(mapAnswer)) {
-				System.out.println("Didn't find value \""+ mapAnswer +"\" for key \""+ key +"\". Only: "+ treeAnswers.toString());
-				errors_positiveLookup++;
-			} 
-			if(treeAnswers.size() > 1) {
-				System.out.println("Found multiple values for key \""+ key +"\": "+ treeAnswers.toString());
-			}
-		}		
-		System.out.println("Out of "+ LOOKUP_TESTS_POSITIVE +" (perhaps duplicate) positive lookups, failed on "+ errors_positiveLookup +" occasions.");
-		
-		//-- (mostly) negative (= random) lookups
-		final int LOOKUP_TESTS_RANDOM = NUMBER_OF_ELEMENTS / 2;
-		int errors_randomLookup = 0;
-		for(int i=1; i < LOOKUP_TESTS_RANDOM; i++) {
-			Integer key = random.nextInt();
-			
-			List<Integer> treeAnswers = tree.get(key);
-			if(!treeAnswers.isEmpty() && !containedKeys.contains(key)) {
-				System.out.println("False positive: \""+ key +"\"");
-				errors_randomLookup++;
-			}
-			else if(treeAnswers.isEmpty() && containedKeys.contains(key)) {
-				System.out.println("False negative: \""+ key +"\"");
-				errors_randomLookup++;
-			}
-		}
-		System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");
-
-		/* Old code: not used as we still miss the required functionality to test. ^^ */
-//		//-- Delete test
-//		random = new Random(42);
-//		System.out.println("-- Remove Test:");
-//		int error = 0;
-//		for (int i = 0; i < 10; i++) {
-//			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random).negate();
-//			BigInteger fou = (BigInteger) tree.remove(rem);
-//			if (fou != null)
-//				error++;
-//		}
-//		if (error > 0)
-//			System.err.println("false positive: " + error);
-//		error = 0;
-//		for (int i = 0; i < NUMBER_OF_ELEMENTS * .1 - 10; i++) {
-//			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random);
-//			BigInteger fou = (BigInteger) tree.remove(rem);
-//			if (!rem.equals(fou))
-//				error++;
-//		}
-//		if (error > 0)
-//			System.err.println("false negative: " + error);
-//
-//		//-- Query test
-//		BPlusTree.KeyRange region = (BPlusTree.KeyRange) tree.rootDescriptor();
-//		BigInteger min = (BigInteger) region.minBound();
-//		BigInteger max = (BigInteger) region.maxBound();
-//		BigInteger temp = max.subtract(min).divide(new BigInteger("10"));
-//		System.out.println("-- Query Test:");
-//		BigInteger minQR = min.add(temp);
-//		BigInteger maxQR = minQR.add(temp);
-//		System.out.println("Query: [" + minQR + ", " + maxQR + "]");
-//		Iterator<?> results = tree.rangeQuery(minQR, maxQR);
-//		System.out.println("Responses number: " + Cursors.count(results));
-//		System.out.println("End.");
-		
-	}
-
-	/**
-	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
-	 */
-	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTree<Integer, Integer, Long> tree) {
-		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
-		
-		//-- Insertion - generate test data
-		System.out.println("-- Insertion test: Generating random test data");
-		
-		int AMOUNT = 1000;
-		int domLo = 1; int domHi = AMOUNT;
-		for (int i = 1; i <= AMOUNT; i++) {
-			int value = i;
-			tree.insert(value);
-			compmap.put(tree.getKey.apply(value), value);
-			if (i % (AMOUNT / 10) == 0)
-				System.out.print((i / (AMOUNT / 100)) + "%, ");
-		}		
-		System.out.println("Resulting tree height: " + tree.rootHeight);
-
-	
-		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
-		containedKeys.sort(null);
-	
-		//---- Testing		
-		int error_false_positive = 0;
-		int error_false_negative = 0;
-		int error_both = 0;
-		
-		int RANGE_QUERY_TESTS = 20;
-		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
-			Integer lo = random.nextInt(domHi-domLo+1)+domLo;
-			Integer hi = random.nextInt(domHi-domLo+1)+domLo;
-			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
-			long possKeys = (long)hi - (long)lo + 1;
-
-			// System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
-			
-			//-- execute the query
-			Cursor<Integer> cur = tree.rangeQuery(lo, hi);			
-			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(cur));
-			
-			// System.out.println("C-result (#="+ results.size() +"): "+ results);
-			
-			//-- Test current query
-			int e_negatives = 0;
-			int e_positives = 0;
-			
-			//-- Tests for false positives
-			for(Integer tVal : tRes)
-				if(!compmap.containsKey(tVal)) e_positives++;
-
-			//--- Computing the comparison-result
-			int compLoIdx = HUtil.binFindES(containedKeys, lo);
-			int compHiIdx = HUtil.binFindES(containedKeys, hi);
-			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
-			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx+1);
-			
-			// System.out.println("C-result (#="+ compRes.size() +"): "+ compRes);			
-			
-			//-- Test for false negatives
-			for(Integer cVal : cRes) {
-				int pos = Collections.binarySearch(tRes, cVal); // FIXME
-				if(pos < 0) // <==> not found
-					e_negatives++;					
-			}
-			
-			if(e_negatives > 0 || e_positives > 0) {
-				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
-				if(e_negatives > 0 && e_positives > 0) error_both++;
-				else if(e_negatives > 0) error_false_negative++;
-				else if(e_positives > 0) error_false_positive++;
-			}
-			
-		}		
-		
-		System.out.println("Too big results:   "+ error_false_positive);
-		System.out.println("Too small results: "+ error_false_negative);
-		System.out.println("Both sided errors: "+ error_both);
-		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
-	}
-
-	public static void main(String[] args) throws Exception {
-		
-//		test_duplicateHandling(); return;
-		
-		//--- run the actual tests
-//		random = new CopyableRandom(122928473621795L); // 119066442596134L
-		random = new CopyableRandom(); 
-		System.out.println("seed: "+ random.getSeed());
-		
-		test_hilbertTree_fromAtoZ();
-		/*
-		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
-		int nDuplicatesAllowed = 40;
-		
-//		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
-//				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(random));
-// ---------------------------------------------------------
-//		block size: 	2048
-//		branching:	 tA: 12 ~ (4 - 47)
-//		leafentries:	 tK: 85 ~ (42 - 169)
-//		samples:	 20 - 83
-		
-		RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
-				TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 20, 
-						new CopyableRandom(random), nDuplicatesAllowed);
-		
-		Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
-		
-		NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
-				tree.getGetKey(), nDuplicatesAllowed);
-		
-		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
-		
-		rangeQueries(tree, compmap, tree.totalWeight() / 50, testKeysCursor);
-//		---------------------------------------------------------		
-//		block size: 	2048
-//		branching: 	4 - 47
-//		leafentries: 	43 - 170
-//		samples: 	20 - 83
-		
-//		testTree_sanityAgainstMemoryMap(rsTree, 
-//				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
-//				testKeysCursor,																  					// test data
-//				nDuplicatesAllowed
-//				);
-		  
-		 */
-		
-	}
-	
-	public static void test_hilbertTree_fromAtoZ() throws FileNotFoundException {
+	//	public static String test_hilbertTree_fromAtoZ() throws FileNotFoundException {
+	public static Pair<TreeMap<Long,List<Long>>,TreeMap<Long,List<Long>>> test_hilbertTree_fromAtoZ() throws FileNotFoundException {
 		long startTime = System.nanoTime();
 		int dimension = 3;
 		//======= INITIALISATION
@@ -887,12 +554,65 @@ public class Test_TestableMap {
 		
 		//=== spatial lookups
 		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
-		spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
+		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = 
+				spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
 		
 		long timeElapsed = System.nanoTime() - startTime;
 		System.out.println("-- Total time elapsed: "+ (timeElapsed / 1000000) +"ms");
+		return profResult;
 	}
 	
+	public static void main(String[] args) throws Exception {
+			
+	//		test_duplicateHandling(); return;
+			
+			//--- run the actual tests
+	//		random = new CopyableRandom(122928473621795L); // 119066442596134L
+			random = new CopyableRandom(); 
+			System.out.println("seed: "+ random.getSeed());
+			
+			Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_hilbertTree_fromAtoZ();
+			System.out.println(profResult.toString());
+			/*
+			Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));
+			int nDuplicatesAllowed = 40;
+			
+	//		TestableMap<Integer, Pair<Integer, Double>> wrsTree = 
+	//				TreeCreation.createWRSTree(TestUtils.resolveFilename("wrsTree_test101"), BLOCK_SIZE, 12, null, new CopyableRandom(random));
+	// ---------------------------------------------------------
+	//		block size: 	2048
+	//		branching:	 tA: 12 ~ (4 - 47)
+	//		leafentries:	 tK: 85 ~ (42 - 169)
+	//		samples:	 20 - 83
+			
+			RSTree1D<Integer, Pair<Integer, Double>, Long> tree = 
+					TreeCreation.createRSTree(TestUtils.resolveFilename("RSTree_sanity_16"), BLOCK_SIZE, 4, 20, 
+							new CopyableRandom(random), nDuplicatesAllowed);
+			
+			Cursor<Pair<Integer, Double>> dataCursor = DataDistributions.iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI);
+			
+			NavigableMap<Integer, List<Pair<Integer, Double>>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
+					tree.getGetKey(), nDuplicatesAllowed);
+			
+			System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
+			
+			rangeQueries(tree, compmap, tree.totalWeight() / 50, testKeysCursor);
+	//		---------------------------------------------------------		
+	//		block size: 	2048
+	//		branching: 	4 - 47
+	//		leafentries: 	43 - 170
+	//		samples: 	20 - 83
+			
+	//		testTree_sanityAgainstMemoryMap(rsTree, 
+	//				DataDistributions.data_iidUniformPairsIntDouble(random, KEY_LO, KEY_HI, VAL_LO, VAL_HI), 		// data
+	//				testKeysCursor,																  					// test data
+	//				nDuplicatesAllowed
+	//				);
+			  
+			 */
+			
+		}
+
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(
 			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor, int nDuplicatesAllowed) {
 		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey(), nDuplicatesAllowed);
@@ -926,6 +646,302 @@ public class Test_TestableMap {
 		LinkedList<Integer> collect = Cursors.toList(tree.rangeQuery(tree.universe)).stream().map(Pair::getElement1).collect(Collectors.toCollection(LinkedList::new));
 		System.out.println(collect);
 
+	}
+
+	public static Triple<Integer, Integer, Integer> samplingTest(RSTree1D<Integer, Integer, Long> tree,
+																Map<Integer,Integer> compmap, 
+																int SAMPLING_QUERY_TESTS) {
+		final int SAMPLE_SIZE = 100;
+		//-- rangeQuery tests
+		System.out.println("-- SamplingQuery Tests (#="+ SAMPLING_QUERY_TESTS +"):");
+		
+		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		containedKeys.sort(null);
+		
+		int error_false_positive = 0;
+		int error_false_negative = 0;
+		int error_both = 0;
+		
+		for(int i=1; i <= SAMPLING_QUERY_TESTS; i++) {
+			Integer lo = random.nextInt();
+			Integer hi = random.nextInt();
+			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
+			long possKeys = (long)hi - (long)lo + 1;
+			
+			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+	
+			//-- execute the query
+			Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi, BATCH_SAMPLE_SIZE_DEFAULT), SAMPLE_SIZE);			
+			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
+			
+			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
+			
+			//-- Test current query
+			int e_negatives = 0;
+			int e_positives = 0;
+			
+			//-- Tests for false positives
+			for(Integer tVal : tRes)
+				if(!compmap.containsKey(tVal)) e_positives++;
+	
+			//--- Computing the comparison-result
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
+			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
+			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
+			
+			System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
+							
+			//- classify error case
+			if(e_negatives > 0 || e_positives > 0) {
+				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				if(e_negatives > 0 && e_positives > 0) error_both++;
+				else if(e_negatives > 0) error_false_negative++;
+				else if(e_positives > 0) error_false_positive++;
+			}
+			
+		}		
+		
+		System.out.println("\tToo big results:   "+ error_false_positive);
+		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+	}
+
+	public static Triple<Integer, Integer, Integer> samplingTest_fixedPrecision_average(
+		RSTree1D<Integer, Integer, Long> tree, 
+		Map<Integer,Integer> compmap, 
+		int FP_SAMPLING_QUERY_TESTS,
+		double TARGET_PRECISION) {
+	
+		final int SAMPLE_SIZE = 100;
+		//-- rangeQuery tests
+		System.out.println("-- SamplingQuery Tests (#="+ FP_SAMPLING_QUERY_TESTS +"):");
+		
+		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		containedKeys.sort(null);
+		
+		int error_false_positive = 0;
+		int error_false_negative = 0;
+		int error_both = 0;
+		
+		for(int i=1; i <= FP_SAMPLING_QUERY_TESTS; i++) {
+			Integer lo = random.nextInt();
+			Integer hi = random.nextInt();
+			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
+			long possKeys = (long)hi - (long)lo + 1;
+			
+			System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+	
+			//-- execute the query
+			Cursor<Integer> sampCur = new Taker<Integer>(tree.samplingRangeQuery(lo, hi, BATCH_SAMPLE_SIZE_DEFAULT), SAMPLE_SIZE);			
+			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(sampCur));
+			
+			System.out.println("T-result (#="+ tRes.size() +"): "+ tRes);
+			
+			//-- Test current query
+			int e_negatives = 0;
+			int e_positives = 0;
+			
+			//-- Tests for false positives
+			for(Integer tVal : tRes)
+				if(!compmap.containsKey(tVal)) e_positives++;
+	
+			//--- Computing the comparison-result
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
+			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
+			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
+			
+			System.out.println("C-result (#="+ cRes.size() +"): "+ cRes);			
+							
+			//- classify error case
+			if(e_negatives > 0 || e_positives > 0) {
+				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				if(e_negatives > 0 && e_positives > 0) error_both++;
+				else if(e_negatives > 0) error_false_negative++;
+				else if(e_positives > 0) error_false_positive++;
+			}
+			
+		}		
+		
+		System.out.println("\tToo big results:   "+ error_false_positive);
+		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
+	}
+
+	public static void testTree(WBTree<Integer, Integer, Long> tree) throws IOException {			
+			//-- comparison structure
+			TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
+			
+			//-- Insertion - generate test data
+			// Random random = new Random(139);
+			System.out.println("-- Insertion test: Generating random test data");
+	
+			for (int i = 1; i <= NUMBER_OF_ELEMENTS; i++) {
+				int value = random.nextInt();
+				tree.insert(value);
+				compmap.put(tree.getKey.apply(value), value);
+				if (i % (NUMBER_OF_ELEMENTS / 10) == 0)
+					System.out.print((i / (NUMBER_OF_ELEMENTS / 100)) + "%, ");
+			}		
+			System.out.println("Resulting tree height: " + tree.rootHeight);
+	
+			//--- Lookup test
+			//-- positive lookups
+			
+			final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
+			List<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+			int errors_positiveLookup = 0;
+			for(int i=1; i <= LOOKUP_TESTS_POSITIVE; i++) {
+				int keyNr = random.nextInt(containedKeys.size());
+				Integer key = containedKeys.get(keyNr);
+				
+				List<Integer> treeAnswers = tree.get(key);
+				Integer mapAnswer = compmap.get(key);
+				if(!treeAnswers.contains(mapAnswer)) {
+					System.out.println("Didn't find value \""+ mapAnswer +"\" for key \""+ key +"\". Only: "+ treeAnswers.toString());
+					errors_positiveLookup++;
+				} 
+				if(treeAnswers.size() > 1) {
+					System.out.println("Found multiple values for key \""+ key +"\": "+ treeAnswers.toString());
+				}
+			}		
+			System.out.println("Out of "+ LOOKUP_TESTS_POSITIVE +" (perhaps duplicate) positive lookups, failed on "+ errors_positiveLookup +" occasions.");
+			
+			//-- (mostly) negative (= random) lookups
+			final int LOOKUP_TESTS_RANDOM = NUMBER_OF_ELEMENTS / 2;
+			int errors_randomLookup = 0;
+			for(int i=1; i < LOOKUP_TESTS_RANDOM; i++) {
+				Integer key = random.nextInt();
+				
+				List<Integer> treeAnswers = tree.get(key);
+				if(!treeAnswers.isEmpty() && !containedKeys.contains(key)) {
+					System.out.println("False positive: \""+ key +"\"");
+					errors_randomLookup++;
+				}
+				else if(treeAnswers.isEmpty() && containedKeys.contains(key)) {
+					System.out.println("False negative: \""+ key +"\"");
+					errors_randomLookup++;
+				}
+			}
+			System.out.println("Out of "+ LOOKUP_TESTS_RANDOM +" random lookups, failed on "+ errors_randomLookup +" occasions.");
+	
+			/* Old code: not used as we still miss the required functionality to test. ^^ */
+	//		//-- Delete test
+	//		random = new Random(42);
+	//		System.out.println("-- Remove Test:");
+	//		int error = 0;
+	//		for (int i = 0; i < 10; i++) {
+	//			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random).negate();
+	//			BigInteger fou = (BigInteger) tree.remove(rem);
+	//			if (fou != null)
+	//				error++;
+	//		}
+	//		if (error > 0)
+	//			System.err.println("false positive: " + error);
+	//		error = 0;
+	//		for (int i = 0; i < NUMBER_OF_ELEMENTS * .1 - 10; i++) {
+	//			BigInteger rem = new BigInteger(NUMBER_OF_BITS, random);
+	//			BigInteger fou = (BigInteger) tree.remove(rem);
+	//			if (!rem.equals(fou))
+	//				error++;
+	//		}
+	//		if (error > 0)
+	//			System.err.println("false negative: " + error);
+	//
+	//		//-- Query test
+	//		BPlusTree.KeyRange region = (BPlusTree.KeyRange) tree.rootDescriptor();
+	//		BigInteger min = (BigInteger) region.minBound();
+	//		BigInteger max = (BigInteger) region.maxBound();
+	//		BigInteger temp = max.subtract(min).divide(new BigInteger("10"));
+	//		System.out.println("-- Query Test:");
+	//		BigInteger minQR = min.add(temp);
+	//		BigInteger maxQR = minQR.add(temp);
+	//		System.out.println("Query: [" + minQR + ", " + maxQR + "]");
+	//		Iterator<?> results = tree.rangeQuery(minQR, maxQR);
+	//		System.out.println("Responses number: " + Cursors.count(results));
+	//		System.out.println("End.");
+			
+		}
+
+	/**
+	 * For debugging purposes: creates a tree with consecutive keys {1, ..., AMOUNT} 
+	 */
+	public static Triple<Integer, Integer, Integer> debugRangeQueries(WBTree<Integer, Integer, Long> tree) {
+		TreeMap<Integer, Integer> compmap = new TreeMap<Integer, Integer>();
+		
+		//-- Insertion - generate test data
+		System.out.println("-- Insertion test: Generating random test data");
+		
+		int AMOUNT = 1000;
+		int domLo = 1; int domHi = AMOUNT;
+		for (int i = 1; i <= AMOUNT; i++) {
+			int value = i;
+			tree.insert(value);
+			compmap.put(tree.getKey.apply(value), value);
+			if (i % (AMOUNT / 10) == 0)
+				System.out.print((i / (AMOUNT / 100)) + "%, ");
+		}		
+		System.out.println("Resulting tree height: " + tree.rootHeight);
+	
+	
+		ArrayList<Integer> containedKeys = new ArrayList<Integer>(compmap.keySet());
+		containedKeys.sort(null);
+	
+		//---- Testing		
+		int error_false_positive = 0;
+		int error_false_negative = 0;
+		int error_both = 0;
+		
+		int RANGE_QUERY_TESTS = 20;
+		for(int i=1; i <= RANGE_QUERY_TESTS; i++) {
+			Integer lo = random.nextInt(domHi-domLo+1)+domLo;
+			Integer hi = random.nextInt(domHi-domLo+1)+domLo;
+			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
+			long possKeys = (long)hi - (long)lo + 1;
+	
+			// System.out.println("Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
+			
+			//-- execute the query
+			Cursor<Integer> cur = tree.rangeQuery(lo, hi);			
+			List<Integer> tRes = new ArrayList<Integer>(Cursors.toList(cur));
+			
+			// System.out.println("C-result (#="+ results.size() +"): "+ results);
+			
+			//-- Test current query
+			int e_negatives = 0;
+			int e_positives = 0;
+			
+			//-- Tests for false positives
+			for(Integer tVal : tRes)
+				if(!compmap.containsKey(tVal)) e_positives++;
+	
+			//--- Computing the comparison-result
+			int compLoIdx = HUtil.binFindES(containedKeys, lo);
+			int compHiIdx = HUtil.binFindES(containedKeys, hi);
+			while(containedKeys.get(compHiIdx) == hi) compHiIdx++; // skip duplicates
+			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx+1);
+			
+			// System.out.println("C-result (#="+ compRes.size() +"): "+ compRes);			
+			
+			//-- Test for false negatives
+			for(Integer cVal : cRes) {
+				int pos = Collections.binarySearch(tRes, cVal); // FIXME
+				if(pos < 0) // <==> not found
+					e_negatives++;					
+			}
+			
+			if(e_negatives > 0 || e_positives > 0) {
+				System.out.println("\tErronous: #rsize: "+ tRes.size() +"; #compsize: "+ cRes.size() +"; #missing: "+ e_negatives +"; #too much: "+ e_positives);
+				if(e_negatives > 0 && e_positives > 0) error_both++;
+				else if(e_negatives > 0) error_false_negative++;
+				else if(e_positives > 0) error_false_positive++;
+			}
+			
+		}		
+		
+		System.out.println("Too big results:   "+ error_false_positive);
+		System.out.println("Too small results: "+ error_false_negative);
+		System.out.println("Both sided errors: "+ error_both);
+		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
 //	public static void s2_approxQueries(RSTree1D<Integer, Integer, Long> tree) {
