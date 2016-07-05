@@ -21,15 +21,20 @@ import com.google.uzaygezen.core.BitVector;
 import com.google.uzaygezen.core.BitVectorFactories;
 import com.google.uzaygezen.core.CompactHilbertCurve;
 
+import xxl.core.collections.containers.CastingContainer;
 import xxl.core.collections.containers.Container;
+import xxl.core.collections.containers.TypeSafeContainer;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.BufferedContainer;
+import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
 import xxl.core.functions.FunJ8;
+import xxl.core.indexStructures.HilbertRTreeSA.Node;
+import xxl.core.indexStructures.HilbertRTreeSA.NodeConverter;
 import xxl.core.io.LRUBuffer;
 import xxl.core.io.converters.BooleanConverter;
 import xxl.core.io.converters.ConvertableConverter;
@@ -69,7 +74,8 @@ public class Test_TestableMap {
 //	public static final int MAX_OBJECT_SIZE = 78;
 	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
-	public static final int SPEEDUP_BUFFER_SIZE = 10;
+	public static final int IO_BUFFER_SIZE = 0;
+	public static final int NODE_BUFFER_SIZE = 1;
 	
 	public static final int KEY_LO = 0, KEY_HI = 100000;
 	public static final double VAL_LO = 0, VAL_HI = ((double)KEY_HI * (double)KEY_HI + (double)KEY_HI);
@@ -80,7 +86,9 @@ public class Test_TestableMap {
 	public static <K extends Comparable<K>, V> int positiveLookups(
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_POSITIVE) {
 		// final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
-		long timeStart = System.nanoTime();
+		long ttFullFunc = System.nanoTime();
+		long ttTree = 0;
+		long ttCompMap = 0;
 		
 		System.out.println("========================================================================");
 		System.out.println("================== Positive Lookups (perhaps duplicate) (#="+ LOOKUP_TESTS_POSITIVE +"):");
@@ -95,8 +103,13 @@ public class Test_TestableMap {
 			K key = containedKeys.get(keyNr);
 			
 			// List<V> treeAnswers = tree.get(key);
-			List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
-			List<V> mapAnswers = compmap.get(key);
+			long tsTree = System.nanoTime();
+				List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
+			ttTree += System.nanoTime() - tsTree;
+			
+			long tsCompMap = System.nanoTime();
+				List<V> mapAnswers = compmap.get(key);
+			ttCompMap += System.nanoTime() - tsCompMap;
 			//-- compute the difference between the resulsts
 			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
 
@@ -124,17 +137,21 @@ public class Test_TestableMap {
 		System.out.println("\n\n========================================");
 		System.out.println("\tfailed: "+ errors_positiveLookup +"/"+ LOOKUP_TESTS_POSITIVE);
 		
-		long timeElapsed = System.nanoTime() - timeStart;
-		System.out.println("\ttime: "+ String.format("%8.2fms", ((double) timeElapsed / 1000000)) 
-						  +"\t\tper item: "+ String.format("%5.2fms", ((double) timeElapsed / 1000000 / LOOKUP_TESTS_POSITIVE)));
+		ttFullFunc = System.nanoTime() - ttFullFunc;
+		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFullFunc / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttFullFunc / 1000000 / LOOKUP_TESTS_POSITIVE)));		
+		System.out.println("\ttree query time: "+ String.format("%8.2fms", ((double) ttTree / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttTree / 1000000 / LOOKUP_TESTS_POSITIVE)));
+		System.out.println("\tcomp query time: "+ String.format("%8.2fms", ((double) ttCompMap / 1000000)) 
+		  					+"\t\tper item: "+ String.format("%5.2fms", ((double) ttCompMap / 1000000 / LOOKUP_TESTS_POSITIVE)));
 		
 		return errors_positiveLookup;
 	}
 	
 	public static <K extends Comparable<K>, V> int randomKeyLookups(
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_RANDOM, Cursor<K> testKeysCursor) {
-		long tsFunc = System.nanoTime();
-		long ttQuery = 0;
+		long ttFullFunc = System.nanoTime();
+		long ttTree = 0;
 		long ttCompMap = 0;
 		
 		System.out.println("========================================================================");
@@ -147,15 +164,15 @@ public class Test_TestableMap {
 		for(int i=1; i <= LOOKUP_TESTS_RANDOM; i++) {
 			K key = testKeysCursor.next();
 			
-			long tsQuerySingle = System.nanoTime();
-				List<V> treeAnswers = tree.get(key);
-//				List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
-			ttQuery += System.nanoTime() - tsQuerySingle;
+			long tsTree = System.nanoTime(); // TIMING
+			List<V> treeAnswers = tree.get(key);
+//			List<V> treeAnswers = Cursors.toList(tree.rangeQuery(new Interval<K>(key)));
+			ttTree += System.nanoTime() - tsTree; // TIMING
 			
-			long tsCompMapSingle = System.nanoTime();
-				List<V> mapAnswers = compmap.getOrDefault(key, new LinkedList<V>());
-				if(!mapAnswers.isEmpty()) nonEmptyQueries++;
-			ttCompMap += System.nanoTime() - tsCompMapSingle;
+			long tsCompMap = System.nanoTime(); // TIMING
+			List<V> mapAnswers = compmap.getOrDefault(key, new LinkedList<V>());
+			if(!mapAnswers.isEmpty()) nonEmptyQueries++;
+			ttCompMap += System.nanoTime() - tsCompMap; // TIMING
 			
 			//-- compute the difference between the resulsts
 			JoinResult<V> difference = ListJoinOuter3way.join3way(treeAnswers, mapAnswers);
@@ -184,11 +201,11 @@ public class Test_TestableMap {
 		System.out.println("\tnon empty queries: "+ nonEmptyQueries);
 		System.out.println("\tfailed: "+ errors_randomLookup +"/"+ LOOKUP_TESTS_RANDOM);
 		
-		long ttFunc = System.nanoTime() - tsFunc;
-		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFunc / 1000000)) 
-						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttFunc / 1000000 / LOOKUP_TESTS_RANDOM)));		
-		System.out.println("\ttree query time: "+ String.format("%8.2fms", ((double) ttQuery / 1000000)) 
-						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttQuery / 1000000 / LOOKUP_TESTS_RANDOM)));
+		ttFullFunc = System.nanoTime() - ttFullFunc;
+		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFullFunc / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttFullFunc / 1000000 / LOOKUP_TESTS_RANDOM)));		
+		System.out.println("\ttree query time: "+ String.format("%8.2fms", ((double) ttTree / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttTree / 1000000 / LOOKUP_TESTS_RANDOM)));
 		System.out.println("\tcomp query time: "+ String.format("%8.2fms", ((double) ttCompMap / 1000000)) 
 		  					+"\t\tper item: "+ String.format("%5.2fms", ((double) ttCompMap / 1000000 / LOOKUP_TESTS_RANDOM)));
 		
@@ -200,6 +217,10 @@ public class Test_TestableMap {
 			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
+		long ttFullFunc = System.nanoTime();
+		long ttTree = 0;
+		long ttCompMap = 0;
+		
 		System.out.println("========================================================================");
 		System.out.println("================== RangeQuery Tests (#="+ RANGE_QUERY_TESTS +"):");
 		System.out.println("========================================================================");
@@ -218,10 +239,13 @@ public class Test_TestableMap {
 	
 			//-- execute the query on the tree
 			Interval<K> query = new Interval<K>(lo, true, hi, false);
+			long tsTree = System.nanoTime(); // TIMING
 			Cursor<V> treeResultCursor = tree.rangeQuery(query);
 			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
-			
-			//-- execute the query on the comparison map			
+			ttTree += System.nanoTime() - tsTree; // TIMING
+				
+			//-- execute the query on the comparison map
+			long tsCompMap = System.nanoTime(); // TIMING			
 			NavigableMap<K, List<V>> comparisonResultMap = compmap.subMap(lo, true, hi, false);
 			if(!comparisonResultMap.isEmpty()) nonEmptyQueries++;
 			//- flatten
@@ -229,6 +253,7 @@ public class Test_TestableMap {
 			for(Map.Entry<K, List<V>> entry : comparisonResultMap.entrySet()) {
 				mapAnswers.addAll(entry.getValue());
 			}
+			ttCompMap += System.nanoTime() - tsCompMap; // TIMING
 			
 			//-- Test current query
 			int e_negatives = 0;
@@ -271,6 +296,15 @@ public class Test_TestableMap {
 		System.out.println("\tToo big results:   "+ error_false_positive);
 		System.out.println("\tToo small results: "+ error_false_negative);
 		System.out.println("\tBoth sided errors: "+ error_both);
+		
+		ttFullFunc = System.nanoTime() - ttFullFunc;
+		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFullFunc / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttFullFunc / 1000000 / RANGE_QUERY_TESTS)));		
+		System.out.println("\ttree query time: "+ String.format("%8.2fms", ((double) ttTree / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttTree / 1000000 / RANGE_QUERY_TESTS)));
+		System.out.println("\tcomp query time: "+ String.format("%8.2fms", ((double) ttCompMap / 1000000)) 
+		  					+"\t\tper item: "+ String.format("%5.2fms", ((double) ttCompMap / 1000000 / RANGE_QUERY_TESTS)));
+		
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
@@ -279,6 +313,9 @@ public class Test_TestableMap {
 	public static <K, V, P> Triple<Integer, Integer, Integer> spatialQueries(
 			HilbertRTreeSA<V, P> tree, NavigableMap<K, List<V>> compmap, int SPATIAL_QUERY_TESTS, Cursor<FixedPointRectangle> testKeysCursor,
 			Function<V, FixedPointRectangle> getBoundingBox) {
+		long ttFullFunc = System.nanoTime();
+		long ttTree = 0;
+		long ttCompMap = 0;
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
 		System.out.println("========================================================================");
@@ -303,15 +340,19 @@ public class Test_TestableMap {
 //			System.out.println("Range Query #"+ i +": \t\t"+ queryArea); // DEBUG
 	
 			//-- execute the query on the tree
+			long tsTree = System.nanoTime(); // TIMING
 			Cursor<V> treeResultCursor = tree.areaRangeQuery(queryArea);
 			List<V> treeAnswers = new ArrayList<V>(Cursors.toList(treeResultCursor));
+			ttTree += System.nanoTime() - tsTree; // TIMING
 			
 			//-- execute the query on the comparison structe (which has no structure, therefore is pretty slow.)
+			long tsCompMap = System.nanoTime(); // TIMING
 			List<V> mapAnswers = new LinkedList<V>();
 			for(V value : valueList) {
 				if(getBoundingBox.apply(value).overlaps(queryArea))
 					mapAnswers.add(value);
 			}
+			ttCompMap += System.nanoTime() - tsCompMap; // TIMING
 			
 			if(!mapAnswers.isEmpty()) nonEmptyQueries++;
 			
@@ -356,6 +397,15 @@ public class Test_TestableMap {
 		System.out.println("\tToo big results:   "+ error_false_positive);
 		System.out.println("\tToo small results: "+ error_false_negative);
 		System.out.println("\tBoth sided errors: "+ error_both);
+		
+		ttFullFunc = System.nanoTime() - ttFullFunc;
+		System.out.println("\ttotal time: "+ String.format("%8.2fms", ((double) ttFullFunc / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttFullFunc / 1000000 / SPATIAL_QUERY_TESTS)));		
+		System.out.println("\ttree query time: "+ String.format("%8.2fms", ((double) ttTree / 1000000)) 
+						  +"\t\tper item: "+ String.format("%5.2fms", ((double) ttTree / 1000000 / SPATIAL_QUERY_TESTS)));
+		System.out.println("\tcomp query time: "+ String.format("%8.2fms", ((double) ttCompMap / 1000000)) 
+		  					+"\t\tper item: "+ String.format("%5.2fms", ((double) ttCompMap / 1000000 / SPATIAL_QUERY_TESTS)));
+		
 		return new Triple<Integer, Integer, Integer>(error_false_positive, error_false_negative, error_both);
 	}
 
@@ -711,8 +761,9 @@ public class Test_TestableMap {
 		int dimension = 3;
 		//======= INITIALISATION
 		Container treeRawContainer = new BlockFileContainer(TestUtils.resolveFilename("HilbertTest_first"), BLOCK_SIZE);
-//		Container treeContainer = treeRawContainer;
-		Container treeContainer = new BufferedContainer(treeRawContainer, new LRUBuffer(SPEEDUP_BUFFER_SIZE));
+		Container treeContainer = IO_BUFFER_SIZE > 0 ? 
+										new BufferedContainer(treeRawContainer, new LRUBuffer(IO_BUFFER_SIZE))
+									  : treeRawContainer;
 		
 		MeasuredConverter<Interval<Long>> hvRangeConverter = 
 				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
@@ -804,7 +855,15 @@ public class Test_TestableMap {
 		//-- set the PRNG state
 		tree.setRNG(new CopyableRandom(random));
 		//-- Initialization with container creation inside the tree
-		tree.initialize_buildContainer(treeContainer, valueConverter);		
+//		tree.initialize_buildContainer(treeContainer, valueConverter);
+		//-- Build own Container outside the tree
+		HilbertRTreeSA<FixedPointRectangle, Long>.NodeConverter nodeConverter = tree.new NodeConverter(valueConverter);
+		Container nodeContainerUnbufferedUntyped = new ConverterContainer(treeContainer, nodeConverter);
+		Container nodeContainerUntyped = NODE_BUFFER_SIZE > 0 ? 
+				new BufferedContainer(nodeContainerUnbufferedUntyped, new LRUBuffer(NODE_BUFFER_SIZE))
+			  : nodeContainerUnbufferedUntyped;
+		TypeSafeContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node> nodeContainer = new CastingContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node>(nodeContainerUntyped);
+		tree.initialize_withReadyContainer(nodeContainer);
 		
 		System.out.println("Initialization of the tree finished.");
 

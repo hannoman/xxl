@@ -253,8 +253,7 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	 * @param valueConverter converter for the value type V
 	 */
 	public void initialize_buildContainer(Container rawContainer, Converter<V> valueConverter) {
-		NodeConverter nodeConverter = 
-				new NodeConverter(valueConverter);
+		NodeConverter nodeConverter = new NodeConverter(valueConverter);
 		this.container = new CastingContainer<P, Node>(new ConverterContainer(rawContainer, nodeConverter));
 	}
 
