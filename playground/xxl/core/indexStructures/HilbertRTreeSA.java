@@ -40,7 +40,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
+public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableMapV2<FixedPointRectangle,V>
 	// FixedPointRectangle (respectively any hypercubes) are not comparable naturally, so we can't support Comparable
 	/* implements SamplableMap<FixedPointRectangle, V> */ 
 {
@@ -1917,8 +1917,15 @@ public class HilbertRTreeSA<V, P> implements TestableMap<Long, V>
 	public ProfilingCursor<V> rangeQuery(Interval<Long> query) {
 		return hvRangeQuery(query);
 	}
+	
+	//-------------------------------------------------------------------------------
+	//--- SamplableMap<FixedPointRectangle, V> interface 
+	//-------------------------------------------------------------------------------
 
-
+//	@Override
+//	public ProfilingCursor<V> range1DQuery(FixedPointRectangle query) {
+//		return samplingRangeQuery(query, 20);
+//	}
 
 
 	

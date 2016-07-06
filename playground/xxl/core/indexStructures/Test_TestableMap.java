@@ -72,7 +72,7 @@ public class Test_TestableMap {
 //	public static final int BUFFER_SIZE = 10;
 //	public static final int NUMBER_OF_BITS = 256;
 //	public static final int MAX_OBJECT_SIZE = 78;
-	public static final int NUMBER_OF_ELEMENTS = 5000;
+	public static final int NUMBER_OF_ELEMENTS = 10000;
 	public static final int BATCH_SAMPLE_SIZE_DEFAULT = 20;
 	public static final int IO_BUFFER_SIZE = 0;
 	public static final int NODE_BUFFER_SIZE = 1;
@@ -84,7 +84,7 @@ public class Test_TestableMap {
 	public static CopyableRandom random;	
 	
 	public static <K extends Comparable<K>, V> int positiveLookups(
-			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_POSITIVE) {
+			Testable1DMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_POSITIVE) {
 		// final int LOOKUP_TESTS_POSITIVE = NUMBER_OF_ELEMENTS / 3;
 		long ttFullFunc = System.nanoTime();
 		long ttTree = 0;
@@ -149,7 +149,7 @@ public class Test_TestableMap {
 	}
 	
 	public static <K extends Comparable<K>, V> int randomKeyLookups(
-			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_RANDOM, Cursor<K> testKeysCursor) {
+			Testable1DMap<K, V> tree, NavigableMap<K, List<V>> compmap, int LOOKUP_TESTS_RANDOM, Cursor<K> testKeysCursor) {
 		long ttFullFunc = System.nanoTime();
 		long ttTree = 0;
 		long ttCompMap = 0;
@@ -214,7 +214,7 @@ public class Test_TestableMap {
 	
 	
 	public static <K extends Comparable<K>, V> Triple<Integer, Integer, Integer> rangeQueries(
-			TestableMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
+			Testable1DMap<K, V> tree, NavigableMap<K, List<V>> compmap, int RANGE_QUERY_TESTS, Cursor<K> testKeysCursor) {
 		// final int RANGE_QUERY_TESTS = 1;
 		//-- rangeQuery tests
 		long ttFullFunc = System.nanoTime();
@@ -618,7 +618,7 @@ public class Test_TestableMap {
 	}
 
 	public static <K extends Comparable<K>, V> void testTree_sanityAgainstMemoryMap(
-			TestableMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor, int nDuplicatesAllowed) {
+			Testable1DMap<K, V> tree, Cursor<V> dataCursor, Cursor<K> testKeysCursor, int nDuplicatesAllowed) {
 		NavigableMap<K, List<V>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, tree.getGetKey(), nDuplicatesAllowed);
 //		positiveLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3);
 //		randomKeyLookups(tree, compmap, NUMBER_OF_ELEMENTS / 3, testKeysCursor);

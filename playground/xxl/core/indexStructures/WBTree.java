@@ -29,7 +29,7 @@ import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Triple;
 
-public class WBTree<K extends Comparable<K>, V, P> implements TestableMap<K, V> {
+public class WBTree<K extends Comparable<K>, V, P> implements Testable1DMap<K, V> {
 	/** Standalone version of a weight-balanced B+-Tree.
 	 * Based on "Optimal Dynamic Interval Management in External Memory" by L. Arge, J.S. Vitter
 	 *

@@ -39,7 +39,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, V> {
+public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMapV2<Interval<K>, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -125,7 +125,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	 * 		Default use: containerFactory = BlockFileContainer::new 
 	 * @throws IOException
 	 */
-	public static <K extends Comparable<K>, V, P> TestableMap<K, V> loadFromMetaData(
+	public static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
 			String metaDataFilename, 
 			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
@@ -1110,8 +1110,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	}
 	
 	/** Executes a sampling range query of the interval [lo (inclusive), hi (inclusive)] */
-	public ProfilingCursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
-		Interval<K> query = new Interval<K>(lo, hi);
+	public ProfilingCursor<V> samplingRangeQuery(Interval<K> query, int samplingBatchSize){
 		return new ReallyLazySamplingCursor(query, samplingBatchSize, rootCID, rootHeight, universe, container.get(rootCID).totalWeight());
 	}
 
@@ -1569,10 +1568,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, 
 	@Override
 	public int height() { return rootHeight; }
 
-	@Override
-	public Function<V, K> getGetKey() {
-		return getKey;
-	}
+//	@Override
+//	public Function<V, K> getGetKey() {
+//		return getKey;
+//	}
 
 
 

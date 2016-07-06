@@ -27,7 +27,6 @@ import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
-import xxl.core.util.Interval1D;
 import xxl.core.util.Pair;
 import xxl.core.util.PairConverterFixedSized;
 import xxl.core.util.Quadruple;
@@ -74,7 +73,7 @@ public class Test_ApproxQueries {
 	 * This is done N_QUERIES times. 
 	 * @return */
 	public static Pair<Integer, Integer> approxExactComparisons(
-			SamplableMap<Integer, Pair<Integer, Double>> tree, double PRECISION_BOUND, double INCONFIDENCE, int N_QUERIES) {
+			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, double PRECISION_BOUND, double INCONFIDENCE, int N_QUERIES) {
 		int totalTouchedApprox = 0; int totalTouchedExact = 0;
 		for(int i=0; i < N_QUERIES; i++) {
 			// CHECK: is this a uniform distribution of intervals?
@@ -90,7 +89,7 @@ public class Test_ApproxQueries {
 	}
 	
 	public static Pair<Integer,Integer> approxExactComparison(
-			SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
+			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		// approximate computation
 		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND, INCONFIDENCE);
 		
@@ -122,7 +121,7 @@ public class Test_ApproxQueries {
 	/** Exact computation of one query.
 	 * @return a pair <tt>(result, count)</tt> where count is the full number of entries satisfying the range query.
 	 */
-	public static Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(TestableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi) {
+	public static Triple<Double, Integer, ProfilingCursor<Pair<Integer, Double>>> exact1(TestableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi) {
 //		double resultExact = (double) Cursors.last(new Aggregator(exactVals, new StatefulAverage()));
 		// exact computation
 		ProfilingCursor<Pair<Integer, Double>> exactQueryCursor = tree.rangeQuery(new Interval<Integer>(key_lo, key_hi));
@@ -142,10 +141,10 @@ public class Test_ApproxQueries {
 	/** Computes an average-estimator with confidence according to the large sample assumption, 
 	 * from as much samples as needed to match PRECISION_BOUND. */
 	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(
-			SamplableMap<Integer, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
+			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		int REPORT_INTERVAL = 1000;		
 		
-		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(key_lo, key_hi, BATCHSAMPLING_SIZE);
+		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(new Interval<Integer>(key_lo, key_hi), BATCHSAMPLING_SIZE);
 		Cursor<Double> vals = new Mapper<Pair<Integer,Double>, Double>(
 				FunJ8.toOld(Pair::getSecond), 
 				samplingCursor);
@@ -175,7 +174,7 @@ public class Test_ApproxQueries {
 	
 	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
 	public static Triple<Integer, Integer, Integer> samplingCursorCorrectness(
-					SamplableMap<Integer, Pair<Integer, Double>> tree, 
+					SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, 
 					SortedMap<Integer,Pair<Integer, Double>> compmap, 
 					final int SAMPLING_QUERY_TESTS,
 					final int SAMPLE_SIZE) {
@@ -194,12 +193,13 @@ public class Test_ApproxQueries {
 			Integer lo = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			Integer hi = KEY_LO + random.nextInt(KEY_HI - KEY_LO);
 			if(lo > hi) { int tmp = lo; lo = hi; hi = tmp; }
+			Interval<Integer> query = new Interval<Integer>(lo, hi);
 			long possKeys = (long)hi - (long)lo + 1;
 			
 			outputln(1, "Range Query #"+ i +": "+ lo +" - "+ hi +" (#possKeys: "+ possKeys +"): ");
 	
 			//-- execute the query
-			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(lo, hi, BATCHSAMPLING_SIZE), SAMPLE_SIZE);			
+			Cursor<Pair<Integer, Double>> sampCur = new Taker<Pair<Integer, Double>>(tree.samplingRangeQuery(query, BATCHSAMPLING_SIZE), SAMPLE_SIZE);			
 			List<Pair<Integer, Double>> tRes = new ArrayList<Pair<Integer, Double>>(Cursors.toList(sampCur));
 			
 			outputln(1, "T-result (#="+ tRes.size() +"): "+ tRes);
@@ -213,9 +213,6 @@ public class Test_ApproxQueries {
 				if(!compmap.containsKey(tree.getGetKey().apply(tVal))) e_positives++;
 	
 			//--- Computing the comparison-result
-//			int compLoIdx = HUtil.binFindES(containedKeys, lo);
-//			int compHiIdx = HUtil.binFindSE(containedKeys, hi);
-//			List<Integer> cRes = containedKeys.subList(compLoIdx, compHiIdx);
 			SortedMap<Integer, Pair<Integer, Double>> cResMap = compmap.subMap(lo, hi);
 			
 			outputln(1, "C-result (#="+ cResMap.size() +"): "+ cResMap);			

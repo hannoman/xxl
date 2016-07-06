@@ -11,7 +11,7 @@ import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.cursors.Cursor;
 import xxl.core.indexStructures.HilbertRTreeSA;
 import xxl.core.indexStructures.RSTree1D;
-import xxl.core.indexStructures.TestableMap;
+import xxl.core.indexStructures.Testable1DMap;
 import xxl.core.indexStructures.WBTree;
 import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.io.converters.BooleanConverter;
@@ -36,7 +36,7 @@ public class TreeCreation {
 	/** General fill method which just takes its values from a data generating cursor. 
 	 * Returns a memory map for comparisons against the resulting data structure. */
 	public static <K extends Comparable<K>, V> NavigableMap<K, List<V>> fillTestableMap(
-			TestableMap<K, V> tree, 
+			Testable1DMap<K, V> tree, 
 			int AMOUNT, 
 			Cursor<V> dataCursor,
 			Function<V, K> getKey,
