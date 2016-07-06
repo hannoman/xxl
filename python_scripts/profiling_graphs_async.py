@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 from java_parse import *
 import subprocess
 import os
+import asyncio.subprocess
+import sys
+
 
 # """This is the command to make the java program run with the directoy it has to be run in (this won't get much simpler...): 
 
@@ -21,35 +24,65 @@ print("=========== SUBPROCESS STARTED ===========")
 # res = subprocess.getoutput(execute_cmd)
 # print("-- Result: ")
 # print(res)
-java_proc = subprocess.Popen(execute_cmd, stdout=subprocess.PIPE, universal_newlines=1, bufsize=1, shell=1)
 
-res = ""
-i = 0
-try:
-    while True:
-    # for i in itt.count():
-        pout, perr = java_proc.communicate()
-        print(str(i) +"> "+ pout)
-        res += pout
-        i += 1
-except ValueError:
-    print("=========== SUBPROCESS FINISHED ===========")
+# java_proc = subprocess.Popen(execute_cmd, stdout=subprocess.PIPE, universal_newlines=1, bufsize=1, shell=1)
 
-print("Reads done:", i)
-rres = res.rstrip().split("\n")[-1]
-# print("- data to parse:\n"+ rres)
+# res = ""
+# i = 0
+# try:
+    # while True:
+    # # for i in itt.count():
+        # pout, perr = java_proc.communicate()
+        # print(str(i) +"> "+ pout)
+        # res += pout
+        # i += 1
+# except ValueError:
+    # print("=========== SUBPROCESS FINISHED ===========")
+
+# print("Reads done:", i)
+# rres = res.rstrip().split("\n")[-1]
+# # print("- data to parse:\n"+ rres)
     
-# input("\n[Press Enter to continue.]")
+# # input("\n[Press Enter to continue.]")
 
-#-- parsing of the got data
-singleDictParser = mapParser(greedyNumberParser, listParser(greedyNumberParser))
-pres = pairParser(singleDictParser, singleDictParser)(rres)[1]
-tree_times, comp_times = pres
-print("\n-- Tree times:")
-print(tree_times)
 
-print("\n-- Comparison times:")
-print(comp_times)
+#--- async
+
+create = asyncio.create_subprocess_exec(execute_cmd, stdout=asyncio.subprocess.PIPE)
+# @asyncio.coroutine
+# def get_date():
+    # # Create the subprocess, redirect the standard output into a pipe
+    # create = asyncio.create_subprocess_exec(execute_cmd, stdout=asyncio.subprocess.PIPE)
+    # proc = yield from create
+
+    # # Read one line of output
+    # data = yield from proc.stdout.readline()
+    # line = data.decode('ascii').rstrip()
+
+    # # Wait for the subprocess exit
+    # yield from proc.wait()
+    # return line
+
+# if sys.platform == "win32":
+    # loop = asyncio.ProactorEventLoop()
+    # asyncio.set_event_loop(loop)
+# else:
+    # loop = asyncio.get_event_loop()
+
+# rline = loop.run_until_complete(get_date())
+# print("Line from output:", rline)
+# loop.close()
+
+
+#-- parsing of the retrieved data
+# singleDictParser = mapParser(greedyNumberParser, listParser(greedyNumberParser))
+# pres = pairParser(singleDictParser, singleDictParser)(rres)[1]
+# tree_times, comp_times = pres
+# print("\n-- Tree times:")
+# print(tree_times)
+
+# print("\n-- Comparison times:")
+# print(comp_times)
 
 
 #-- plotting
