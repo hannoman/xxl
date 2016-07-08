@@ -32,6 +32,8 @@ import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.LongConverter;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.profiling.interfaces.SamplableArea;
+import xxl.core.profiling.interfaces.Testable1DMap;
 import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;

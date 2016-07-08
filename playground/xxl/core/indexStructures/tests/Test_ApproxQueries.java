@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.indexStructures.tests;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +16,10 @@ import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.mappers.Mapper;
 import xxl.core.functions.FunJ8;
+import xxl.core.indexStructures.BTree;
+import xxl.core.indexStructures.RSTree1D;
+import xxl.core.indexStructures.Tree;
+import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.io.converters.DoubleConverter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.math.functions.AggregationFunction;
@@ -25,6 +29,8 @@ import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
+import xxl.core.profiling.interfaces.SamplableArea;
+import xxl.core.profiling.interfaces.TestableMapV2;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.Interval;
 import xxl.core.util.Pair;

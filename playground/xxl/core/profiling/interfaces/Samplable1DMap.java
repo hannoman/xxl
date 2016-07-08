@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.profiling.interfaces;
 
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.Interval;

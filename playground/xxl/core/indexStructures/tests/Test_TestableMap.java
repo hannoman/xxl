@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.indexStructures.tests;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -33,6 +33,10 @@ import xxl.core.cursors.Cursors;
 import xxl.core.cursors.filters.Taker;
 import xxl.core.cursors.sources.DiscreteRandomNumber;
 import xxl.core.functions.FunJ8;
+import xxl.core.indexStructures.HilbertRTreeSA;
+import xxl.core.indexStructures.RSTree1D;
+import xxl.core.indexStructures.WBTree;
+import xxl.core.indexStructures.WRSTree1D;
 import xxl.core.indexStructures.HilbertRTreeSA.Node;
 import xxl.core.indexStructures.HilbertRTreeSA.NodeConverter;
 import xxl.core.io.LRUBuffer;
@@ -47,6 +51,7 @@ import xxl.core.io.converters.MeasuredFixedSizeConverter;
 import xxl.core.profiling.DataDistributions;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
+import xxl.core.profiling.interfaces.Testable1DMap;
 import xxl.core.spatial.rectangles.FixedPointRectangle;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;

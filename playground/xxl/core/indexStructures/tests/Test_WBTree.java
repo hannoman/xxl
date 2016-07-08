@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.indexStructures.tests;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -14,6 +14,7 @@ import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.cursors.Cursor;
 import xxl.core.cursors.Cursors;
+import xxl.core.indexStructures.WBTree;
 import xxl.core.io.converters.Converter;
 import xxl.core.io.converters.IntegerConverter;
 import xxl.core.util.HUtil;

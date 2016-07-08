@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.profiling.interfaces;
 
 import java.util.function.Predicate;
 

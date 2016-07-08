@@ -25,6 +25,7 @@ import xxl.core.cursors.Cursor;
 import xxl.core.functions.FunJ8;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
+import xxl.core.profiling.interfaces.Testable1DMap;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
 import xxl.core.util.Triple;
