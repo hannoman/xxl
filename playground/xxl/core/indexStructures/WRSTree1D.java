@@ -33,7 +33,7 @@ import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 import xxl.core.util.Triple;
 
-public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K, V> {
+public class WRSTree1D<K extends Comparable<K>, V, P> implements Samplable1DMap<K, V> {
 	/** First Implementation of the weight balanced RS-Tree for 1-dimensional data. */
 
 	/** How many samples per node should be kept = parameter s. 
@@ -1108,8 +1108,8 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 	}
 
 	/** Executes a sampling range query of the interval [lo (inclusive), hi (inclusive)] */
-	public ProfilingCursor<V> samplingRangeQuery(K lo, K hi, int samplingBatchSize){
-		Interval<K> query = new Interval<K>(lo, hi);
+	@Override
+	public ProfilingCursor<V> samplingRangeQuery(Interval<K> query, int samplingBatchSize){
 		return new ReallyLazySamplingCursor(query, samplingBatchSize, rootCID, rootHeight, universe, container.get(rootCID).totalWeight());
 	}
 
@@ -1572,5 +1572,6 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements SamplableMap<K,
 	public Function<V, K> getGetKey() {
 		return getKey;
 	}
+
 
 }

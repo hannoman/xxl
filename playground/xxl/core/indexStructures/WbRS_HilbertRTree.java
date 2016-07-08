@@ -16,7 +16,6 @@ import java.util.Stack;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import com.google.common.collect.Ordering;
 
@@ -41,7 +40,9 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableArea<FixedPointRectangle,V>
+// TODO: Implement... this is just a copy of HilbertRTreeSA
+
+public class WbRS_HilbertRTree<V, P> implements Testable1DMap<Long, V>, SamplableArea<FixedPointRectangle,V>
 	// FixedPointRectangle (respectively any hypercubes) are not comparable naturally, so we can't support Comparable
 	/* implements Samplable1DMap<FixedPointRectangle, V> */ 
 {
@@ -109,7 +110,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	- The container gets initialized during a later call to <tt>initialize</tt> as we 
 		implement the <tt>NodeConverter</tt> functionality once again (like in XXL) as inner class of this tree class.
 	*/
-	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, int samplesPerNodeHi, 
+	public WbRS_HilbertRTree(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, int samplesPerNodeHi, 
 			int dimension, FixedPointRectangle universe, Function<V, FixedPointRectangle> getBoundingBox, Function<FixedPointRectangle, Long> getSFCKey, 
 			int nDuplicatesAllowed) {
 		
@@ -175,7 +176,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 //		int nDuplicatesAllowed = metaData.readInt();
 //		
 //		//-- construct and initialize the tree
-//		HilbertRTreeSA<FixedPointRectangle, V, P> instance = new HilbertRTreeSA<FixedPointRectangle, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
+//		WbRS_HilbertRTree<FixedPointRectangle, V, P> instance = new WbRS_HilbertRTree<FixedPointRectangle, V, P>(branchingLo, branchingHi, leafLo, leafHi, samplesPerNodeLo, samplesPerNodeHi, universe, getKey, nDuplicatesAllowed);
 //		instance.initialize_buildContainer(rawContainer, hvRangeConverter, valueConverter);
 //		
 //		//- read state parameters
@@ -696,7 +697,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		/**
 		 * Returns all values relevant for a given query in this' node subtree. 
 		 * Needed for the sampling cursor when we have no sample buffer attached to a node.
-		 * OPT: only called from xxl.core.indexStructures.HilbertRTreeSA.SamplingCursor.addToFrontier(P) -> inline?
+		 * OPT: only called from xxl.core.indexStructures.WbRS_HilbertRTree.SamplingCursor.addToFrontier(P) -> inline?
 		 */
 //		protected List<V> relevantValues(Interval<FixedPointRectangle> query) {
 //			List<V> allValues = new LinkedList<V>(); // OPT use something which allows for O(1) concatenation
@@ -733,7 +734,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		/**
 		 * Checks for a underflow in the sample buffer and repairs it.
 		 * Repairing for InnerNodes is done by draining samples from the child nodes.
-		 * OPT: only called from xxl.core.indexStructures.HilbertRTreeSA.InnerNode.split() -> inline?
+		 * OPT: only called from xxl.core.indexStructures.WbRS_HilbertRTree.InnerNode.split() -> inline?
 		 */
 		protected void repairSampleBuffer() {
 			if(sampleUnderflow()) {				
@@ -1037,9 +1038,9 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	 * Instead it encapsulates all needed converters and hides them from the tree class (as the tree actually has 
 	 * no use for calling them directly.<br>
 	 * If one wants finer control over the constructed <tt>ConverterContainer</tt>, this class can be instantiated
-	 * by <tt>HilbertRTreeSA<FixedPointRectangle,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
+	 * by <tt>WbRS_HilbertRTree<FixedPointRectangle,V,P>.NodeConverter nodeConverter = tree.new NodeConverter(...)</tt>. 
 	 * 
-	 * @see HilbertRTreeSA#initialize_withReadyContainer(TypeSafeContainer)
+	 * @see WbRS_HilbertRTree#initialize_withReadyContainer(TypeSafeContainer)
 	 */
 	@SuppressWarnings("serial")
 	public class NodeConverter extends Converter<Node> {
@@ -1899,7 +1900,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	
 
 	//-------------------------------------------------------------------------------
-	//--- Testable1DMap<Long, V> interface - seeing it as 1-dimensional map of the hilbert values 
+	//--- TestableMap<Long, V> interface 
 	//-------------------------------------------------------------------------------
 	@Override
 	public int height() { return rootHeight; }
@@ -1909,10 +1910,10 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		return getSFCKey.compose(getBoundingBox);
 	}
 	
-//	@Override
-//	public List<V> get(Long key) {
-//		return Cursors.toList(hvRangeQuery(new Interval<Long>(key)));
-//	}
+	@Override
+	public List<V> get(Long key) {
+		return Cursors.toList(hvRangeQuery(new Interval<Long>(key)));
+	}
 	
 	@Override
 	public ProfilingCursor<V> rangeQuery(Interval<Long> query) {
@@ -1923,17 +1924,6 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	//--- Samplable1DMap<FixedPointRectangle, V> interface 
 	//-------------------------------------------------------------------------------
 
-	@Override
-	public Predicate<V> getValueInclusionTest(final FixedPointRectangle query) {
-		return new Predicate<V>() {
-			@Override
-			public boolean test(V v) {
-				return getBoundingBox.andThen(query::overlaps).apply(v);
-//				return ((Function<FixedPointRectangle, Boolean>) (query::overlaps)).compose(getBoundingBox).apply(v);
-			}
-		};
-	}
-	
 //	@Override
 //	public ProfilingCursor<V> range1DQuery(FixedPointRectangle query) {
 //		return samplingRangeQuery(query, 20);

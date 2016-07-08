@@ -73,7 +73,7 @@ public class Test_ApproxQueries {
 	 * This is done N_QUERIES times. 
 	 * @return */
 	public static Pair<Integer, Integer> approxExactComparisons(
-			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, double PRECISION_BOUND, double INCONFIDENCE, int N_QUERIES) {
+			SamplableArea<Interval<Integer>, Pair<Integer, Double>> tree, double PRECISION_BOUND, double INCONFIDENCE, int N_QUERIES) {
 		int totalTouchedApprox = 0; int totalTouchedExact = 0;
 		for(int i=0; i < N_QUERIES; i++) {
 			// CHECK: is this a uniform distribution of intervals?
@@ -89,7 +89,7 @@ public class Test_ApproxQueries {
 	}
 	
 	public static Pair<Integer,Integer> approxExactComparison(
-			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
+			SamplableArea<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		// approximate computation
 		Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx = approx1(tree, key_lo, key_hi, PRECISION_BOUND, INCONFIDENCE);
 		
@@ -141,7 +141,7 @@ public class Test_ApproxQueries {
 	/** Computes an average-estimator with confidence according to the large sample assumption, 
 	 * from as much samples as needed to match PRECISION_BOUND. */
 	public static Quadruple<Double, Double, Integer, ProfilingCursor<Pair<Integer, Double>>> approx1(
-			SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
+			SamplableArea<Interval<Integer>, Pair<Integer, Double>> tree, int key_lo, int key_hi, double PRECISION_BOUND, double INCONFIDENCE) {
 		int REPORT_INTERVAL = 1000;		
 		
 		ProfilingCursor<Pair<Integer, Double>> samplingCursor = tree.samplingRangeQuery(new Interval<Integer>(key_lo, key_hi), BATCHSAMPLING_SIZE);
@@ -174,7 +174,7 @@ public class Test_ApproxQueries {
 	
 	/** Tests the SamplingCursor for correctness regarding not producing false positives. */
 	public static Triple<Integer, Integer, Integer> samplingCursorCorrectness(
-					SamplableMapV2<Interval<Integer>, Pair<Integer, Double>> tree, 
+					SamplableArea<Interval<Integer>, Pair<Integer, Double>> tree, 
 					SortedMap<Integer,Pair<Integer, Double>> compmap, 
 					final int SAMPLING_QUERY_TESTS,
 					final int SAMPLE_SIZE) {
@@ -352,7 +352,7 @@ public class Test_ApproxQueries {
 //		dataCursor = DataDistributions.data_squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(rsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed);
 		
-//		SamplableMap<Integer, Pair<Integer,Double>> tree = rsTree;
+//		Samplable1DMap<Integer, Pair<Integer,Double>> tree = rsTree;
 //---------------------------------------------------------		
 //		block size: 	2048
 //		branching: 	4 - 47
@@ -365,14 +365,14 @@ public class Test_ApproxQueries {
 //		dataCursor = DataDistributions.data_iidUniformPairsIntDouble(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		dataCursor = DataDistributions.squarePairs(new CopyableRandom(random), KEY_LO, KEY_HI, VAL_LO, VAL_HI);
 		TreeCreation.fillTestableMap(wrsTree, NUMBER_OF_ELEMENTS, dataCursor, Pair::getElement1, nDuplicatesAllowed );
-//		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
+//		Samplable1DMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 // ---------------------------------------------------------
 //		block size: 	2048
 //		branching:	 tA: 12 ~ (4 - 47)
 //		leafentries:	 tK: 85 ~ (42 - 169)
 //		samples:	 20 - 83
 		
-//		SamplableMap<Integer, Pair<Integer,Double>> tree = wrsTree;
+//		Samplable1DMap<Integer, Pair<Integer,Double>> tree = wrsTree;
 
 		outputln(1, "\n\n===================== sampling RSTree:\n");
 		random = new CopyableRandom(seed); // reset seed for next batch of queries

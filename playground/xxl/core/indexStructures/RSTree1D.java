@@ -39,7 +39,7 @@ import xxl.core.util.Pair;
 import xxl.core.util.Randoms;
 import xxl.core.util.Sample;
 
-public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMapV2<Interval<K>, V> {
+public class RSTree1D<K extends Comparable<K>, V, P> implements Samplable1DMap<K, V> {
 	/** Implementation of the RS-Tree for 1-dimensional data.
 	 * 
 	 * Skeleton of WBTree used, as the RSTree also needs information about the weight of the nodes.
@@ -1568,10 +1568,10 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements SamplableMapV2<I
 	@Override
 	public int height() { return rootHeight; }
 
-//	@Override
-//	public Function<V, K> getGetKey() {
-//		return getKey;
-//	}
+	@Override
+	public Function<V, K> getGetKey() {
+		return getKey;
+	}
 
 
 

@@ -3,6 +3,7 @@ package xxl.core.indexStructures;
 import java.util.List;
 import java.util.function.Function;
 
+import xxl.core.cursors.Cursors;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.util.Interval;
 
@@ -17,7 +18,9 @@ public interface Testable1DMap<K extends Comparable<K>, V> {
 	int height();
 
 	/** Lookup. */
-	public List<V> get(K key);
+	public default List<V> get(K key){
+		return Cursors.toList(rangeQuery(new Interval<K>(key)));
+	}
 
 	ProfilingCursor<V> rangeQuery(Interval<K> query); 
 	

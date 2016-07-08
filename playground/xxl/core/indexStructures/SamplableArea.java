@@ -1,12 +1,12 @@
 package xxl.core.indexStructures;
 
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 import xxl.core.profiling.ProfilingCursor;
 
-public interface SamplableMapV2<Q, V> {
+public interface SamplableArea<Q, V> {
 	
-	Function<V, InclusionTestable<Q>> getGetQueryKey();
+	Predicate<V> getValueInclusionTest(Q query);
 	
 	ProfilingCursor<V> samplingRangeQuery(Q query, int samplingBatchSize);
 
