@@ -33,6 +33,7 @@ import xxl.core.io.converters.ConvertableConverter;
 import xxl.core.io.converters.Converter;
 import xxl.core.profiling.ProfilingCursor;
 import xxl.core.profiling.interfaces.Samplable1DMap;
+import xxl.core.profiling.interfaces.Testable1DMap;
 import xxl.core.util.CopyableRandom;
 import xxl.core.util.HUtil;
 import xxl.core.util.Interval;
@@ -126,7 +127,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements Samplable1DMap<K
 	 * 		Default use: containerFactory = BlockFileContainer::new 
 	 * @throws IOException
 	 */
-	public static <K extends Comparable<K>, V, P> RSTree1D<K, V, P> loadFromMetaData(
+	public static <K extends Comparable<K>, V, P> Testable1DMap<K, V> loadFromMetaData(
 			String metaDataFilename, 
 			Function<String, Container> containerFactory,  
 			Converter<K> keyConverter, 
@@ -1554,6 +1555,7 @@ public class RSTree1D<K extends Comparable<K>, V, P> implements Samplable1DMap<K
 		
 	}
 
+	@Override
 	public int totalWeight() {
 		if(rootCID == null)
 			return 0;

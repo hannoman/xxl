@@ -1,47 +1,47 @@
 
 
 ========== RSTree ========== 
- *   DONE Mini-Milestone 1: Implement sample buffer maintenance for insertions.
- *   DONE Mini-Milestone 1.5: Implement QueryCursor for range queries.
- *   DONE Mini-Milestone 2: Implement lazy sampling query cursor
- *   Mini-Milestone 2.5: ReallyLazySamplingCursor should adjust batchSize dynamically to use |Frontier|.
- *   DONE Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
- *   	-> TODO: yet, ReallyLazySamplingCursor needs to count the leaf nodes which got visited indirectly (from an unbuffered
- *   			inner node) too.  
- *   
- *   Future: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
- *   			And to automatically construct a tree with optimally set parameters.
- *   	(first tries can be seen in {@link xxl.core.indexStructures.Test_ApproxQueries#createRSTree(String)}
- *   							and {@link xxl.core.indexStructures.Test_ApproxQueries#createRSTree_withInnerUnbufferedNodes(String)}
- *   	) 
- *   Mini-Milestone: Augment QueryCursor of BPlusTree with profiling capabilities.
- *   Mini-Milestone (50%): Do real tests.
- *		-> Create and save really big trees and then only load them for testing. (DONE for RSTree1D)
- *   	-> Profiling of logical IOs: take a peek at: xxl.core.collections.containers.CounterContainer
- *   		(but that probably wont help)
- * 
- *   Mini-Milestone: Generalize Query-Types
- *   Mini-Milestone: Support removals
-
+	(DONE) Mini-Milestone 1: Implement sample buffer maintenance for insertions.
+    (DONE) Mini-Milestone 1.5: Implement QueryCursor for range queries.
+    (DONE) Mini-Milestone 2: Implement lazy sampling query cursor
+    Mini-Milestone 2.5: ReallyLazySamplingCursor should adjust batchSize dynamically to use |Frontier|.
+    (DONE) Mini-Milestone 3: Augment ReallyLazySamplingCursor with performance information, like number of nodes visited.
+    	-> TODO: yet, ReallyLazySamplingCursor needs to count the leaf nodes which got visited indirectly (from an unbuffered
+    			inner node) too.  
+    
+    (NN) Future: Supply functions from the NodeConverter for estimating the amount of entries in leaf and inner nodes.
+    			And to automatically construct a tree with optimally set parameters.
+    	(first tries can be seen in {@link xxl.core.indexStructures.Test_ApproxQueries#createRSTree(String)}
+    							and {@link xxl.core.indexStructures.Test_ApproxQueries#createRSTree_withInnerUnbufferedNodes(String)}
+    	) 
+    (NN) Mini-Milestone: Augment QueryCursor of BPlusTree with profiling capabilities.
+    Mini-Milestone (50%): Do real tests.
+	 	-> Create and save really big trees and then only load them for testing. (DONE for RSTree1D)
+    	(DONE with ProfilingCursor) -> Profiling of logical IOs: take a peek at: xxl.core.collections.containers.CounterContainer
+    		(but that probably wont help)
+    
+    Mini-Milestone: Generalize Query-Types
+    (NN) Mini-Milestone: Support removals
+    
 - cidConverter in NodeConverter is never used. (adjust in other trees)
 
 ========== Important Bugfixes ==========
 
-* ReallyLazySamplingCursor doesn't permute results enough (DONE)
+(DONE) ReallyLazySamplingCursor doesn't permute results enough 
 * OPT: The drawings perhaps permute too much 
 
 ========== Futures ==========
 
 * extend to Hilbert-RTrees
-	1.) implement Hilbert-R-Trees in general
-	2.) test on dataset with 2 dimensions (see xxl.core.spatial.SpaceFillingCurves.hilbert2d(int, int) )
- 	3.) do space-filling hilbert curves for higher dimensions (not present in XXL at the moment)
+	(DONE) 1.) implement Hilbert-R-Trees in general
+	(DONE) 2.) test on dataset with 2 dimensions (see xxl.core.spatial.SpaceFillingCurves.hilbert2d(int, int) )
+ 	(DONE) (mittels uzaygezen) 3.) do space-filling hilbert curves for higher dimensions (not present in XXL at the moment)
  		(3 dimensions needed to run the tests like in the paper (GeoLife: latitude, longitude, timestamp))
  		
  		
 ========== Further testing ==========
 
-* compare to exact BTree query
+(DONE) compare to exact BTree query (nicht benätigt. Wir können einfach die sampleBufferSize auf 0 setzen.)
 
 -- datasets:
 
@@ -53,13 +53,14 @@
 	 
 ========== Other ==========
 
-* sanity tests of data structures (Test_TestableMap & Test_ApproxQueries) are not well implemented, as there is
-	no so far no support to save multiple values in the comparison structure. (DONE)
-	-> Also duplicate handling of the trees should be specified better. (DONE)
-		-> check out SortMergeJoin and HashGrouper to implement the comparison, aand therefore SweepAreas.
+(DONE) sanity tests of data structures (Test_TestableMap & Test_ApproxQueries) are not well implemented, as there is
+	no so far no support to save multiple values in the comparison structure. 
+	(DONE) Also duplicate handling of the trees should be specified better. 
+		(DONE) check out SortMergeJoin and HashGrouper to implement the comparison, aand therefore SweepAreas. 
+			(nicht wirklich benötigt, dauern die Tests halt länger.)
 	
-* copy updated QueryCursor implementation from RSTree1D to WBTree and WRSTree_copyImpl
+* copy updated QueryCursor implementation from RSTree1D to WRSTree_copyImpl
 
-* update WBTree with better implementations from later trees
+(DONE) update WBTree with better implementations from later trees (nicht benötigt).
 
 * OPT LOW: simplify/unify TreeCreation.createRSTree_withInnerUnbufferedNodes and TreeCreation.createRSTree	   

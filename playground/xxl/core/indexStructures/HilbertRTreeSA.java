@@ -52,7 +52,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
     int dimension;	
     
     /** The splitting policy: "s-to-(s+1)" */
-    int splitPolicy = 1;
+    int splitPolicy;
     
     /** Computes the bounding boxes of the elements. */
     Function<V, FixedPointRectangle> getBoundingBox;
@@ -61,14 +61,6 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
      * For arbitrary dimensional hilbert curves, perhaps see: https://github.com/aioaneid/uzaygezen
      * */
     Function<FixedPointRectangle, Long> getSFCKey;
-    
-//    /** Precision of the space-filling curve. */
-//    long precision = 1 << 20;
-
-//    /** Ubiquitious getKey function which maps from values (V) to keys (FixedPointRectangle). */
-//	public Function<V, FixedPointRectangle> getKey;
-    
-    
     
 	/** How many samples per node should be kept = parameter s. 
 	 * The buffers must have between s/2 and 2*s items at all times. */
@@ -113,7 +105,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	*/
 	public HilbertRTreeSA(int branchingLo, int branchingHi, int leafLo, int leafHi, int samplesPerNodeLo, int samplesPerNodeHi, 
 			int dimension, FixedPointRectangle universe, Function<V, FixedPointRectangle> getBoundingBox, Function<FixedPointRectangle, Long> getSFCKey, 
-			int nDuplicatesAllowed) {
+			int nDuplicatesAllowed, int splitPolicy) {
 		
 		this.samplesPerNodeLo = samplesPerNodeLo;
 		this.samplesPerNodeHi = samplesPerNodeHi;
@@ -126,6 +118,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		this.getBoundingBox = getBoundingBox;
 		this.getSFCKey = getSFCKey;
 		this.nDuplicatesAllowed = nDuplicatesAllowed;
+		this.splitPolicy = splitPolicy;
 		
 		// set the hilbert value universe to the most general case (OPT: initialise hvUniverse smaller)
 		this.hvUniverse = new Interval<Long>(Long.MIN_VALUE, true, Long.MAX_VALUE, true);
@@ -497,10 +490,6 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 			return pagePointers.size() > branchingHi;
 		}
 
-		public boolean underflow() {
-			return pagePointers.size() < branchingLo;
-		}
-
 		public boolean sampleUnderflow() {
 			return samples.size() < samplesPerNodeLo;			
 		}
@@ -834,10 +823,6 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 			return values.size() > leafHi;
 		}
 
-		public boolean underflow() {
-			return values.size() < leafLo;
-		}
-		
 		@Override
 		public List<V> get(FixedPointRectangle query) {
 			List<V> results = new LinkedList<V>();

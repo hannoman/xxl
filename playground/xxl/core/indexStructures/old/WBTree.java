@@ -1,4 +1,4 @@
-package xxl.core.indexStructures;
+package xxl.core.indexStructures.old;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -705,6 +705,10 @@ public class WBTree<K extends Comparable<K>, V, P> implements Testable1DMap<K, V
 	public ProfilingCursor<V> rangeQuery(Interval<K> query) {
 		assert false : "Operation not supported.";
 		return null;
+	}
+
+	int totalWeight() {
+		return 0;
 	} 
 	
 }

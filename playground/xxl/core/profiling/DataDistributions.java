@@ -5,6 +5,8 @@ import java.util.Random;
 import xxl.core.cursors.AbstractCursor;
 import xxl.core.cursors.Cursor;
 import xxl.core.spatial.rectangles.FixedPointRectangle;
+import xxl.core.util.CopyableRandom;
+import xxl.core.util.Interval;
 import xxl.core.util.Pair;
 
 public class DataDistributions {
@@ -119,5 +121,19 @@ public class DataDistributions {
 		}
 		
 		return new FixedPointRectangle(left, right);
+	}
+
+	public static Cursor<Interval<Integer>> intervalsInteger(CopyableRandom rng, final int lo, final int hi) {
+		return new AbstractCursor<Interval<Integer>>() {
+			@Override
+			protected boolean hasNextObject() { return true; }
+			@Override
+			protected Interval<Integer> nextObject() {
+				int a = lo + rng.nextInt(hi - lo + 1);
+				int b = lo + rng.nextInt(hi - lo + 1);
+				if(a > b) { int tmp = a; a = b; b = tmp; }
+				return new Interval<Integer>(a,b);
+			}
+		};
 	}
 }

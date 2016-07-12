@@ -75,7 +75,7 @@ create = asyncio.create_subprocess_exec(execute_cmd, stdout=asyncio.subprocess.P
 
 
 #-- parsing of the retrieved data
-# singleDictParser = mapParser(greedyNumberParser, listParser(greedyNumberParser))
+# singleDictParser = mapParser(greedyIntParser, listParser(greedyIntParser))
 # pres = pairParser(singleDictParser, singleDictParser)(rres)[1]
 # tree_times, comp_times = pres
 # print("\n-- Tree times:")

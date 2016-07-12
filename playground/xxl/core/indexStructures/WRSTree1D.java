@@ -86,7 +86,7 @@ public class WRSTree1D<K extends Comparable<K>, V, P> implements Samplable1DMap<
 	int rootHeight;
 
 	/** Domain of the keys. */
-	Interval<K> universe;
+	public Interval<K> universe;
 	
 	/** Amount of duplicate key values allowed. 0 for no restriction. */
 	final int nDuplicatesAllowed;

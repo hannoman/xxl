@@ -22,7 +22,8 @@ public interface Testable1DMap<K extends Comparable<K>, V> {
 		return Cursors.toList(rangeQuery(new Interval<K>(key)));
 	}
 
-	ProfilingCursor<V> rangeQuery(Interval<K> query); 
-	
+	ProfilingCursor<V> rangeQuery(Interval<K> query);
+
+	int totalWeight(); 
 	
 }

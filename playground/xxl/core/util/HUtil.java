@@ -106,6 +106,196 @@ public class HUtil {
 		return binFindSE(Arrays.asList(arr), key);
 	}
 	
+	
+
+	/** Funktionierende Variante. Allerdings ineffizient da keine dynamische Programmierung verwendet wird. 
+	 *  
+	 * @param nBins Anzahl der zu füllenden Buckets.
+	 * @param binLo Minimales Gewicht eines Buckets (inklusiv). 
+	 * @param binHi Maximales Gewicht eines Buckets (exklusiv).
+	 * @param weights Gewichte der einzelnen Elemente
+	 * @param idxOffset nur intern genutzt. Immer mit idxOffset = 0 aufrufen.
+	 * @return
+	 */
+	public static List<LinkedList<Integer>> packBinsRecursive(int nBins, int binLo, int binHi, List<Integer> weights, int idxOffset) {
+		
+		LinkedList<LinkedList<Integer>> results = new LinkedList<LinkedList<Integer>>();
+		
+		if(nBins == 1) {
+			int restSum = weights.stream().reduce(0, ((x,y) -> x+y));
+			if(restSum >= binLo && restSum <= binHi) {
+				LinkedList<Integer> idxsHi = new LinkedList<Integer>();
+				idxsHi.add(weights.size()-1 + idxOffset);
+				results.add((LinkedList<Integer>) idxsHi.clone());
+			}
+		} else {
+			int i = 0, curBinWeight = 0;
+			try {
+				while(curBinWeight < binLo) {
+					curBinWeight += weights.get(i); // chance for Exception here
+					i++;
+				}
+				
+				while(curBinWeight <= binHi) {
+					// compute recursive results
+					List<LinkedList<Integer>> recursiveResults = packBinsRecursive(nBins-1, binLo, binHi, weights.subList(i, weights.size()), idxOffset+i);
+					for(LinkedList<Integer> recursiveResult : recursiveResults) {
+						LinkedList<Integer> idxsHi = new LinkedList<Integer>();
+						idxsHi.add(i-1 + idxOffset);
+						idxsHi.addAll(recursiveResult);
+						results.add(idxsHi);					
+					}
+					
+					// expand current bin
+					curBinWeight += weights.get(i); // chance for Exception here
+					i++;
+				}
+			} catch(IndexOutOfBoundsException e) {
+				// just catch the exception, we don't need to do anything. The Exception just signals the end of valid results.  
+			}
+		}
+		
+		return results;
+	}
+
+	
+	/** Mit dynamischer Programmierung. 
+	 *  
+	 * @param nBins Anzahl der zu füllenden Buckets.
+	 * @param binLo Minimales Gewicht eines Buckets (inklusiv). 
+	 * @param binHi Maximales Gewicht eines Buckets (exklusiv).
+	 * @param weights Gewichte der einzelnen Elemente
+	 * @return
+	 */
+	public static Pair<LinkedList<Integer>, Integer> packBinsDP(int nBins, int binLo, int binHi, List<Integer> weights) {
+		
+		Integer[][] d = new Integer[weights.size()][nBins+1];
+		Integer[][] lastPartSize = new Integer[weights.size()][nBins+1];
+		
+		//- Initialisierung der Abbruchfälle
+		int ws = 0;
+		for(int n=0; n < weights.size(); n++) {
+			ws += weights.get(n);
+			d[n][0] = Integer.MAX_VALUE;
+			lastPartSize[n][0] = null;
+			d[n][1] = ws;
+			lastPartSize[n][1] = n;
+		}
+		
+		for(int k=1; k <= nBins; k++) {
+			d[0][k] = 0;
+			lastPartSize[0][k] = 0;
+		}
+		
+		//- Eager Berechnung der Tabelle
+		for(int k=2; k <= nBins; k++) {
+			for(int n=1; n < weights.size(); n++) {
+				
+				int lastClusterWeight = 0;
+				int t = 0;
+				while(lastClusterWeight < binLo) {
+					t++;
+					lastClusterWeight += weights.get(n - t + 1);
+				}
+				
+				Integer best = Integer.MAX_VALUE;
+				Integer bestT = null;
+				do {
+					int curD = Math.max( d[n-t][k-1], lastClusterWeight );
+					if(curD < best) {
+						best = curD;
+						bestT = t;
+					}
+					// grow last cluster by 1 element
+					t++;
+					lastClusterWeight += weights.get(n - t + 1);
+				} while(t <= n && lastClusterWeight <= binHi);
+				
+				d[n][k] = best;
+				lastPartSize[n][k] = bestT;
+			}
+		}
+		
+		
+		//- Rekonstruktion des Ergebnisses
+		LinkedList<Integer> result = new LinkedList<Integer>();
+		
+		int n = weights.size() - 1;
+		int k = nBins;
+		while(n > 0) {
+			result.addFirst(n);
+			int t = lastPartSize[n][k];
+			n = n - t;
+			k = k - 1;
+		}
+		
+//		return result;
+		return new Pair(result, d[weights.size()-1][nBins]);
+	}
+
+	public static List<Integer> toSizes(LinkedList<Integer> idxsHi) {
+		int idxLo = 0;
+		LinkedList<Integer> sizes = new LinkedList<Integer>();
+		for(int idxHi : idxsHi) {
+			sizes.add(idxHi - idxLo + 1);
+			idxLo = idxHi + 1;
+		}
+		return sizes;
+	}
+	
+	public static void packBinsPrettyPrintResult(LinkedList<Integer> result, List<Integer> weights) {
+		int maxBinWeight = 0;
+		LinkedList<Integer> maxBins = new LinkedList<Integer>();
+		int idxLo = 0;
+		int binNr = 1;
+		for(int idxHi : result) {
+			List<Integer> curBin = weights.subList(idxLo, idxHi+1);
+			idxLo = idxHi+1;
+			int curBinWeight = curBin.stream().reduce(0, ((x,y) -> x+y));
+			
+			System.out.println("\t bin #"+ binNr +": weight: "+ curBinWeight +"; contents: "+ curBin );
+			
+			if(curBinWeight > maxBinWeight) {
+				maxBinWeight = curBinWeight;
+				maxBins.clear();
+				maxBins.add(binNr);
+			} else if(curBinWeight == maxBinWeight) {
+				maxBins.add(binNr);
+			}
+			binNr++;
+		}
+		
+		System.out.println("Maximal bin weight: "+ maxBinWeight +" on bins "+ maxBins);
+		
+	}
+	
+	
+	/** Quick tests. */
+		public static void main(String[] args) {
+	//		System.out.println(partitionInNParts(10, 3));
+	//		System.out.println(partitionInNParts(20, 5));
+	//		System.out.println(partitionInNParts(100, 18));
+			
+			List<Integer> weights = Arrays.asList(12, 17, 9, 5, 7, 8, 19, 14, 6);
+			int nBins = 4, binLo = 10, binHi = 40;
+			Pair<LinkedList<Integer>, Integer> maxResTuple = packBinsDP(nBins, binLo, binHi, weights);
+			LinkedList<Integer> maxRes = maxResTuple.getElement1(); int maxResMaxSize = maxResTuple.getElement2();
+			System.out.println("-- Maximum-computation: "+ maxRes +" - "+ toSizes(maxRes));
+			packBinsPrettyPrintResult(maxRes, weights);
+			System.out.println("maxResMaxSize: "+ maxResMaxSize);
+			
+			System.out.println("-- All Results: ");
+			List<LinkedList<Integer>> allRes = packBinsRecursive(nBins, binLo, binHi, weights, 0);
+			int i=1;
+			for(LinkedList<Integer> res : allRes) {
+				System.out.println("---> Result "+ i +": "+ res +" - " + toSizes(res));
+				packBinsPrettyPrintResult(res, weights);
+				i++;
+			}
+			
+		}
+
+
 	public static int[] distributeByAbsoluteWeights(int toDistribute, List<Integer> weights) {
 		int remaining = toDistribute;
 		
@@ -201,14 +391,6 @@ public class HUtil {
 			values.remove(idx-removed);
 			removed++;
 		}
-	}
-	
-	
-	/** Quick tests. */
-	public static void main(String[] args) {
-		System.out.println(partitionInNParts(10, 3));
-		System.out.println(partitionInNParts(20, 5));
-		System.out.println(partitionInNParts(100, 18));
 	}
 	
 }
