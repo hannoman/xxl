@@ -1176,7 +1176,8 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 	
 	public class AreaQueryCursor extends AbstractCursor<V> implements ProfilingCursor<V> {
 		FixedPointRectangle query;
-		LinkedList<Pair<Integer, P>> candidateNodes = new LinkedList<Pair<Integer, P>>();
+//		LinkedList<Pair<Integer, P>> candidateNodes = new LinkedList<Pair<Integer, P>>(); // TODO: braucht das Level nicht zu speichern
+		LinkedList<P> candidateNodes = new LinkedList<P>(); // TODO: braucht das Level nicht zu speichern
 		/** Profiling information: nodes touched. */
 		Set<Pair<Integer, P>> p_nodesTouched = new HashSet<Pair<Integer,P>>();
 		LinkedList<V> precomputed = new LinkedList<V>();
@@ -1184,7 +1185,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		public AreaQueryCursor(FixedPointRectangle query) {
 			super();
 			this.query = query;
-			this.candidateNodes.add(new Pair<Integer, P>(rootHeight, rootCID));
+			this.candidateNodes.add(rootCID);
 		}
 
 		@Override
@@ -1194,10 +1195,11 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 			else if(candidateNodes.isEmpty())
 				return false;
 			else {
-				Pair<Integer, P> cand = candidateNodes.pop();
-				int level = cand.getElement1(); P nodeCID = cand.getElement2();
+//				Pair<Integer, P> cand = candidateNodes.pop();
+				P nodeCID = candidateNodes.pop();
+//				int level = cand.getElement1(); P nodeCID = cand.getElement2();
 				Node node = container.get(nodeCID);
-				p_nodesTouched.add(cand);
+				p_nodesTouched.add(new Pair(node.getLevel(), nodeCID));
 
 				// expand one step
 				if(node.isLeaf()) {
@@ -1206,7 +1208,8 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 					List<P> nextCIDs = ((InnerNode) node).chooseSubtreeCIDs(query);
 					ListIterator<P> nextCIDiter = nextCIDs.listIterator(nextCIDs.size());
 					while(nextCIDiter.hasPrevious())
-						candidateNodes.addFirst(new Pair<>(level-1, nextCIDiter.previous()));
+//						candidateNodes.addFirst(new Pair<>(level-1, nextCIDiter.previous()));
+						candidateNodes.addFirst(nextCIDiter.previous());
 				}
 				return hasNextObject();
 			}

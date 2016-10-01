@@ -266,7 +266,8 @@ public class Test_Approximating1Dmaps {
 		}
 	}
 	
-	public static <K extends Comparable<K>, V> void nSamples_comparison_bySelectivity(Cursor<Interval<K>> testQueries, int nSamples, Testable1DMap<K,V> exactImpl, Samplable1DMap<K, V> ... maps) {
+	public static <K extends Comparable<K>, V> void nSamples_comparison_bySelectivity(
+			Cursor<Interval<K>> testQueries, int nSamples, Testable1DMap<K,V> exactImpl, Samplable1DMap<K, V> ... maps) {
 		int[] summedPagesTouched = new int[maps.length];
 		TreeMap<Double, List<Integer>>[] pagesTouchedBySelectivity = new TreeMap[maps.length];
 		for (int i = 0; i < pagesTouchedBySelectivity.length; i++) {

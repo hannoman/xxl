@@ -545,7 +545,7 @@ public class Test_TestableMap {
 		System.out.println("Initialization of the tree finished.");
 
 		//=== FILLING
-		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
 		Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
 			protected boolean hasNextObject() { return true; }
 			protected Long nextObject() { return random.nextLong(1 << (sumBitsPerDimensionFinal-1) /* Long.MAX_VALUE */); }
@@ -563,7 +563,7 @@ public class Test_TestableMap {
 		rangeQueries(tree, compmap, tree.totalWeight() / 200, testKeysCursor);
 		
 		//=== spatial lookups
-		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
 		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = 
 				spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
 		
@@ -692,7 +692,7 @@ public class Test_TestableMap {
 			System.out.println("Initialization of the tree finished.");
 	
 			//=== FILLING
-			Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+			Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
 			Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
 				protected boolean hasNextObject() { return true; }
 				protected Long nextObject() { return random.nextLong(1 << (sumBitsPerDimensionFinal-1) /* Long.MAX_VALUE */); }
@@ -710,7 +710,7 @@ public class Test_TestableMap {
 			rangeQueries(tree, compmap, tree.totalWeight() / 200, testKeysCursor);
 			
 			//=== spatial lookups
-			Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandom(random, bitsPerDimensions);
+			Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
 			Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = 
 					spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
 			
@@ -732,8 +732,8 @@ public class Test_TestableMap {
 		random = new CopyableRandom(); 
 		System.out.println("seed: "+ random.getSeed());
 		
-//		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_hilbertTree_fromAtoZ();
-		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_weightBalanced_hilbertTree_fromAtoZ();
+		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_hilbertTree_fromAtoZ();
+//		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_weightBalanced_hilbertTree_fromAtoZ();
 		System.out.println(profResult.toString());
 		
 		/*
