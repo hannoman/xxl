@@ -82,6 +82,11 @@ public class WbRS_HilbertRTreeInh<V,P> extends HilbertRTreeSA<V, P>{
 		return weight >= 2*leafParam;
 	}
 	
+	@Override
+	public InnerNode createInnerNode() {
+		return new InnerNode();
+	}
+	
 	public class InnerNode extends HilbertRTreeSA<V,P>.InnerNode {
 		@Override
 		public boolean overflow() {
@@ -117,7 +122,7 @@ public class WbRS_HilbertRTreeInh<V,P> extends HilbertRTreeSA<V, P>{
 			Pair<LinkedList<Integer>, Integer> packBinsSharingTuple = 
 					HUtil.packBinsDP(coopSiblings.size(), minWeightInnerNode(level), maxWeightInnerNode(level), all_childWeights);
 			if(packBinsSharingTuple.getElement2() > maxWeightInnerNode(level)) { // need to create a new node
-				InnerNode newnode = new InnerNode();
+				InnerNode newnode = createInnerNode(); // new InnerNode();
 				newnode.pagePointer = container.reserve(null); // assign a CID to the newly created node
 				coopSiblings.add(newnode); // update all references last
 				insertionInfo = SPLIT(coopSiblingIdxs, newnode);

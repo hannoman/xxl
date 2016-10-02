@@ -3,6 +3,7 @@ package xxl.core.indexStructures.tests;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedList;
@@ -50,6 +51,7 @@ import xxl.core.io.converters.LongConverter;
 import xxl.core.io.converters.MeasuredConverter;
 import xxl.core.io.converters.MeasuredFixedSizeConverter;
 import xxl.core.profiling.DataDistributions;
+import xxl.core.profiling.ProfilingCursor;
 import xxl.core.profiling.TestUtils;
 import xxl.core.profiling.TreeCreation;
 import xxl.core.profiling.interfaces.Testable1DMap;
@@ -453,12 +455,163 @@ public class Test_TestableMap {
 		int leafLo = (int) Math.ceil((double)leafHi / 4.0);
 		
 		//- allow just as many duplicates as fit in a leaf
+//		int nDuplicatesAllowed = 1;
 		int nDuplicatesAllowed = leafHi;
 //		int nDuplicatesAllowed = 5;
 		
 		//- set branching param fixed
 		int branchingHi = 20;
 		int branchingLo = 5;
+		
+		//- determine how much is left for samples
+		int innerSpaceLeft = BLOCK_SIZE;
+		innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
+		innerSpaceLeft -= hvRangeConverter.getMaxObjectSize() * branchingHi; 	// hilbert value ranges of children
+		innerSpaceLeft -= areaConverter.getMaxObjectSize() * branchingHi; 		// area ranges of children
+		innerSpaceLeft -= treeContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
+		innerSpaceLeft -= IntegerConverter.SIZE * branchingHi; // weights
+		
+		innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
+		//- set sample param for the remaining space optimal
+		int samplesPerNodeHi = innerSpaceLeft / valueConverter.getMaxObjectSize();
+		int samplesPerNodeLo = samplesPerNodeHi / 4;		
+
+		//== bounding box computer // OPT: make general
+		Function<FixedPointRectangle, FixedPointRectangle> getBoundingBox = (x -> x);
+		
+		//== space filling curve
+		int[] bitsPerDimensions = {4,4,4};
+		int sumBitsPerDimension = 0; for(int bd : bitsPerDimensions) sumBitsPerDimension += bd;
+		final int sumBitsPerDimensionFinal = sumBitsPerDimension;
+		FixedPointRectangle universe = DataDistributions.universeForBitsPerDimensions(bitsPerDimensions);
+		CompactHilbertCurve hilbertCurve = new CompactHilbertCurve(bitsPerDimensions);
+		
+		Function<FixedPointRectangle, Long> getSFCKey = new Function<FixedPointRectangle, Long>() {
+			// OPT: don't repeat input-/output-var allocation
+			@Override
+			public Long apply(FixedPointRectangle t) {
+				long[] center = SpatialHelpers.centralPoint(t);
+				
+				//- initialise input variables 
+				BitVector[] p = new BitVector[bitsPerDimensions.length];
+				for(int i = 0; i < bitsPerDimensions.length; i++) {
+		        	p[i] = BitVectorFactories.OPTIMAL.apply(bitsPerDimensions[i]);
+		        	p[i].copyFrom(center[i]);
+				}
+				
+				//- initialise output variables
+				BitVector chi = BitVectorFactories.OPTIMAL.apply(hilbertCurve.getSpec().sumBitsPerDimension());
+				
+				hilbertCurve.index(p, 0, chi);
+				return chi.toExactLong();
+			}
+		};
+		
+		int splitPolicy = 1;
+		
+		//-- tree construction
+		System.out.println("Initializing tree with parameters: ");
+		System.out.println("\t block size: \t"+ BLOCK_SIZE);
+		System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
+		System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
+		System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
+		System.out.println("\t number of duplicates allowed: \t"+ nDuplicatesAllowed);
+		System.out.println("\t splitPoliy: \t"+ splitPolicy +" -> "+ (splitPolicy+1));
+
+		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
+				new HilbertRTreeSA<FixedPointRectangle, Long>(
+						branchingLo, branchingHi, 
+						leafLo, leafHi, 
+						samplesPerNodeLo, samplesPerNodeHi,
+						dimension,
+						universe,
+						getBoundingBox,
+						getSFCKey, 
+						nDuplicatesAllowed,
+						splitPolicy
+						);
+		
+		//-- set the PRNG state
+		tree.setRNG(new CopyableRandom(random));
+		//-- Initialization with container creation inside the tree
+//		tree.initialize_buildContainer(treeContainer, valueConverter);
+		//-- Build own Container outside the tree
+		HilbertRTreeSA<FixedPointRectangle, Long>.NodeConverter nodeConverter = tree.new NodeConverter(valueConverter);
+		Container nodeContainerUnbufferedUntyped = new ConverterContainer(treeContainer, nodeConverter);
+		Container nodeContainerUntyped = NODE_BUFFER_SIZE > 0 ? 
+				new BufferedContainer(nodeContainerUnbufferedUntyped, new LRUBuffer(NODE_BUFFER_SIZE))
+			  : nodeContainerUnbufferedUntyped;
+		TypeSafeContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node> nodeContainer = new CastingContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node>(nodeContainerUntyped);
+		tree.initialize_withReadyContainer(nodeContainer);
+		
+		System.out.println("Initialization of the tree finished.");
+
+		//=== FILLING
+//		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
+		Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomVolumed(random, bitsPerDimensions, 0.01);
+		Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
+			protected boolean hasNextObject() { return true; }
+			protected Long nextObject() { return random.nextLong(1 << (sumBitsPerDimensionFinal-1) /* Long.MAX_VALUE */); }
+		};
+//		System.out.println("testKeysCursor sample: "+ Cursors.toList(new Taker(testKeysCursor, 100))); // DEBUG
+		
+		NavigableMap<Long, List<FixedPointRectangle>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
+				tree.getGetKey(), nDuplicatesAllowed);
+		
+		System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
+		
+		//==== 1-dimensional SANITY TESTS
+		positiveLookups(tree, compmap, tree.totalWeight() / 30);
+		randomKeyLookups(tree, compmap, tree.totalWeight() / 30, testKeysCursor);
+//		rangeQueries(tree, compmap, tree.totalWeight() / 200, testKeysCursor);
+		
+		//=== spatial lookups
+//		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
+		Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandomVolumed(random, bitsPerDimensions, 0.01);
+		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = 
+//				spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
+				spatialQueries(tree, compmap, 20, testAreaCursor, (x -> x));
+		
+		long timeElapsed = System.nanoTime() - startTime;
+		System.out.println("-- Total time elapsed: "+ (timeElapsed / 1000000) +"ms");
+		return profResult;
+	}
+	
+	//	public static String test_hilbertTree_fromAtoZ() throws FileNotFoundException {
+	public static Pair<TreeMap<Long,List<Long>>,TreeMap<Long,List<Long>>> test_weightBalanced_hilbertTree_fromAtoZ() throws FileNotFoundException {
+		long startTime = System.nanoTime();
+		int dimension = 3;
+		//======= INITIALISATION
+		Container treeRawContainer = new BlockFileContainer(TestUtils.resolveFilename("HilbertTest_first"), BLOCK_SIZE);
+		Container treeContainer = IO_BUFFER_SIZE > 0 ? 
+										new BufferedContainer(treeRawContainer, new LRUBuffer(IO_BUFFER_SIZE))
+									  : treeRawContainer;
+		
+		MeasuredConverter<Interval<Long>> hvRangeConverter = 
+				new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
+		
+		Supplier<FixedPointRectangle> fixedPointRectangleFactory = () -> new FixedPointRectangle(dimension);
+		MeasuredConverter<FixedPointRectangle> areaConverter = 
+				Converters.createMeasuredConverter(dimension * 2 * LongConverter.SIZE, 
+						new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld(fixedPointRectangleFactory))); // TODO: how to make it fixed size?
+		MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter; // our values are the areas
+		
+		//-- estimating parameters for the tree
+		//- fill leafes optimal
+		int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getMaxObjectSize();
+		
+		int leafParam = (leafHi + 1) / 2; 
+		leafHi = leafParam * 2 - 1;
+		int leafLo = leafParam / 2;
+		
+		//- allow just as many duplicates as fit in a leaf
+		int nDuplicatesAllowed = leafHi;
+		
+		//- set branching param fixed
+		int branchingParam = 10;
+		int branchingHi = branchingParam * 4 - 1;
+		int branchingLo = branchingParam / 4 + 1;
 		
 		//- determine how much is left for samples
 		int innerSpaceLeft = BLOCK_SIZE;
@@ -516,10 +669,10 @@ public class Test_TestableMap {
 		System.out.println("\t number of duplicates allowed: \t"+ nDuplicatesAllowed);
 		System.out.println("\t splitPoliy: \t"+ splitPolicy +" -> "+ (splitPolicy+1));
 
-		HilbertRTreeSA<FixedPointRectangle, Long> tree = 
-				new HilbertRTreeSA<FixedPointRectangle, Long>(
-						branchingLo, branchingHi, 
-						leafLo, leafHi, 
+		WbRS_HilbertRTreeInh<FixedPointRectangle, Long> tree = 
+				WbRS_HilbertRTreeInh.<FixedPointRectangle, Long>create(
+						branchingParam, 
+						leafParam, 
 						samplesPerNodeLo, samplesPerNodeHi,
 						dimension,
 						universe,
@@ -571,154 +724,82 @@ public class Test_TestableMap {
 		System.out.println("-- Total time elapsed: "+ (timeElapsed / 1000000) +"ms");
 		return profResult;
 	}
-	
-	//	public static String test_hilbertTree_fromAtoZ() throws FileNotFoundException {
-		public static Pair<TreeMap<Long,List<Long>>,TreeMap<Long,List<Long>>> test_weightBalanced_hilbertTree_fromAtoZ() throws FileNotFoundException {
-			long startTime = System.nanoTime();
-			int dimension = 3;
-			//======= INITIALISATION
-			Container treeRawContainer = new BlockFileContainer(TestUtils.resolveFilename("HilbertTest_first"), BLOCK_SIZE);
-			Container treeContainer = IO_BUFFER_SIZE > 0 ? 
-											new BufferedContainer(treeRawContainer, new LRUBuffer(IO_BUFFER_SIZE))
-										  : treeRawContainer;
-			
-			MeasuredConverter<Interval<Long>> hvRangeConverter = 
-					new MeasuredFixedSizeConverter<Interval<Long>>(Interval.getConverter(LongConverter.DEFAULT_INSTANCE));
-			
-			Supplier<FixedPointRectangle> fixedPointRectangleFactory = () -> new FixedPointRectangle(dimension);
-			MeasuredConverter<FixedPointRectangle> areaConverter = 
-					Converters.createMeasuredConverter(dimension * 2 * LongConverter.SIZE, 
-							new ConvertableConverter<FixedPointRectangle>(FunJ8.toOld(fixedPointRectangleFactory))); // TODO: how to make it fixed size?
-			MeasuredConverter<FixedPointRectangle> valueConverter = areaConverter; // our values are the areas
-			
-			//-- estimating parameters for the tree
-			//- fill leafes optimal
-			int leafHi = (BLOCK_SIZE - BooleanConverter.SIZE - IntegerConverter.SIZE) / valueConverter.getMaxObjectSize();
-			
-			int leafParam = (leafHi + 1) / 2; 
-			leafHi = leafParam * 2 - 1;
-			int leafLo = leafParam / 2;
-			
-			//- allow just as many duplicates as fit in a leaf
-			int nDuplicatesAllowed = leafHi;
-			
-			//- set branching param fixed
-			int branchingParam = 10;
-			int branchingHi = branchingParam * 4 - 1;
-			int branchingLo = branchingParam / 4 + 1;
-			
-			//- determine how much is left for samples
-			int innerSpaceLeft = BLOCK_SIZE;
-			innerSpaceLeft -= BooleanConverter.SIZE; // node type indicator
-			innerSpaceLeft -= IntegerConverter.SIZE; // amount of child nodes
-			innerSpaceLeft -= hvRangeConverter.getMaxObjectSize() * branchingHi; 	// hilbert value ranges of children
-			innerSpaceLeft -= areaConverter.getMaxObjectSize() * branchingHi; 		// area ranges of children
-			innerSpaceLeft -= treeContainer.objectIdConverter().getSerializedSize() * branchingHi; // childCIDs 
-			innerSpaceLeft -= IntegerConverter.SIZE * branchingHi; // weights
-			
-			innerSpaceLeft -= IntegerConverter.SIZE; // amount of samples present
-			//- set sample param for the remaining space optimal
-			int samplesPerNodeHi = innerSpaceLeft / valueConverter.getMaxObjectSize();
-			int samplesPerNodeLo = samplesPerNodeHi / 4;		
-	
-			//== bounding box computer // OPT: make general
-			Function<FixedPointRectangle, FixedPointRectangle> getBoundingBox = (x -> x);
-			
-			//== space filling curve
-			int[] bitsPerDimensions = {4,4,4};
-			int sumBitsPerDimension = 0; for(int bd : bitsPerDimensions) sumBitsPerDimension += bd;
-			final int sumBitsPerDimensionFinal = sumBitsPerDimension;
-			FixedPointRectangle universe = DataDistributions.universeForBitsPerDimensions(bitsPerDimensions);
-			CompactHilbertCurve hilbertCurve = new CompactHilbertCurve(bitsPerDimensions);
-			
-			Function<FixedPointRectangle, Long> getSFCKey = new Function<FixedPointRectangle, Long>() {
-				// OPT: don't repeat input-/output-var allocation
-				@Override
-				public Long apply(FixedPointRectangle t) {
-					long[] center = SpatialHelpers.centralPoint(t);
-					
-					//- initialise input variables 
-					BitVector[] p = new BitVector[bitsPerDimensions.length];
-					for(int i = 0; i < bitsPerDimensions.length; i++) {
-			        	p[i] = BitVectorFactories.OPTIMAL.apply(bitsPerDimensions[i]);
-			        	p[i].copyFrom(center[i]);
-					}
-					
-					//- initialise output variables
-					BitVector chi = BitVectorFactories.OPTIMAL.apply(hilbertCurve.getSpec().sumBitsPerDimension());
-					
-					hilbertCurve.index(p, 0, chi);
-					return chi.toExactLong();
-				}
-			};
-			
-			int splitPolicy = 4;
-			
-			//-- tree construction
-			System.out.println("Initializing tree with parameters: ");
-			System.out.println("\t block size: \t"+ BLOCK_SIZE);
-			System.out.println("\t branching: \t"+ branchingLo +" - "+ branchingHi);
-			System.out.println("\t leafentries: \t"+ leafLo +" - "+ leafHi);
-			System.out.println("\t samples: \t"+ samplesPerNodeLo +" - "+ samplesPerNodeHi);
-			System.out.println("\t number of duplicates allowed: \t"+ nDuplicatesAllowed);
-			System.out.println("\t splitPoliy: \t"+ splitPolicy +" -> "+ (splitPolicy+1));
-	
-			WbRS_HilbertRTreeInh<FixedPointRectangle, Long> tree = 
-					WbRS_HilbertRTreeInh.<FixedPointRectangle, Long>create(
-							branchingParam, 
-							leafParam, 
-							samplesPerNodeLo, samplesPerNodeHi,
-							dimension,
-							universe,
-							getBoundingBox,
-							getSFCKey, 
-							nDuplicatesAllowed,
-							splitPolicy
-							);
-			
-			//-- set the PRNG state
-			tree.setRNG(new CopyableRandom(random));
-			//-- Initialization with container creation inside the tree
-	//		tree.initialize_buildContainer(treeContainer, valueConverter);
-			//-- Build own Container outside the tree
-			HilbertRTreeSA<FixedPointRectangle, Long>.NodeConverter nodeConverter = tree.new NodeConverter(valueConverter);
-			Container nodeContainerUnbufferedUntyped = new ConverterContainer(treeContainer, nodeConverter);
-			Container nodeContainerUntyped = NODE_BUFFER_SIZE > 0 ? 
-					new BufferedContainer(nodeContainerUnbufferedUntyped, new LRUBuffer(NODE_BUFFER_SIZE))
-				  : nodeContainerUnbufferedUntyped;
-			TypeSafeContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node> nodeContainer = new CastingContainer<Long, HilbertRTreeSA<FixedPointRectangle, Long>.Node>(nodeContainerUntyped);
-			tree.initialize_withReadyContainer(nodeContainer);
-			
-			System.out.println("Initialization of the tree finished.");
-	
-			//=== FILLING
-			Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
-			Cursor<Long> testKeysCursor = new AbstractCursor<Long>() {
-				protected boolean hasNextObject() { return true; }
-				protected Long nextObject() { return random.nextLong(1 << (sumBitsPerDimensionFinal-1) /* Long.MAX_VALUE */); }
-			};
-	//		System.out.println("testKeysCursor sample: "+ Cursors.toList(new Taker(testKeysCursor, 100))); // DEBUG
-			
-			NavigableMap<Long, List<FixedPointRectangle>> compmap = TreeCreation.fillTestableMap(tree, NUMBER_OF_ELEMENTS, dataCursor, 
-					tree.getGetKey(), nDuplicatesAllowed);
-			
-			System.out.println("resulting weight: "+ tree.totalWeight() +" / "+ NUMBER_OF_ELEMENTS);
-			
-			//==== 1-dimensional SANITY TESTS
-			positiveLookups(tree, compmap, tree.totalWeight() / 30);
-			randomKeyLookups(tree, compmap, tree.totalWeight() / 30, testKeysCursor);
-			rangeQueries(tree, compmap, tree.totalWeight() / 200, testKeysCursor);
-			
-			//=== spatial lookups
-			Cursor<FixedPointRectangle> testAreaCursor = DataDistributions.rectanglesRandomThird(random, bitsPerDimensions);
-			Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = 
-					spatialQueries(tree, compmap, tree.totalWeight() / 200, testAreaCursor, (x -> x));
-			
-			long timeElapsed = System.nanoTime() - startTime;
-			System.out.println("-- Total time elapsed: "+ (timeElapsed / 1000000) +"ms");
-			return profResult;
-		}
 
+	
+	public static long[] finalTests() throws FileNotFoundException {
+		
+		//=========== Test parameters
+		int n = 50000;
+		double dataSelectivity = 0.001;
+		int nQueries = 500;
+		double querySelectivity = 0.01;
+		int nSamples = 1000;
+		int splitPolicy = 1;
+		//=========== Results
+		long[] pagesTouchedPerImpl = {0L, 0L};
+		
+		//=========== Tree parameters
+		int[] bitsPerDimensions = {5,5,5};
+		
+		int branchingParam =  8;
+		int branchingLoBound = branchingParam / 4 + 1;
+		int branchingHiBound = branchingParam * 4 - 1;
+		
+//		int leafParam = 80;		
+//		int leafLoBound = leafParam / 2;
+//		int leafHiBound = leafParam * 2 - 1;
+		
+//		int nDuplicatesAllowed = leafHiBound;
+		int samplingBatchSize = 20;
+		
+		//========= create trees
+		// String testFile, int BLOCK_SIZE, int branchingLoWish, int branchingHiWish, CopyableRandom rng, int[] bitsPerDimensions, int nDuplicatesAllowed) throws FileNotFoundException {
+//		HilbertRTreeSA<FixedPointRectangle, Long> wbTree = TreeCreation.createHilbertRSTree("wbTree-final", BLOCK_SIZE, branchingLoBound, branchingHiBound, random, bitsPerDimensions);
+		HilbertRTreeSA<FixedPointRectangle, Long> wbTree = TreeCreation.createWbHilbertRSTree("wbtree-final", BLOCK_SIZE, branchingParam, null, random, bitsPerDimensions, null, splitPolicy);
+		HilbertRTreeSA<FixedPointRectangle, Long> bbTree = TreeCreation.createHilbertRSTree("bbTree-final", BLOCK_SIZE, branchingLoBound, branchingHiBound, random, bitsPerDimensions, splitPolicy); 
+		HilbertRTreeSA[] impls = {wbTree, bbTree};
+		
+		//========= fill trees
+		for(int iimpl=0; iimpl < impls.length; iimpl++) {
+			HilbertRTreeSA<FixedPointRectangle, Long> impl = impls[iimpl];
+			Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomVolumed(new CopyableRandom(random), bitsPerDimensions, dataSelectivity);
+//			Cursor<FixedPointRectangle> dataCursor = DataDistributions.rectanglesRandomParetoVolumed(new CopyableRandom(random), bitsPerDimensions, dataSelectivity, 0.5);
+			for(int i=0; i < n; i++)
+				impl.insert(dataCursor.next());
+			System.out.println("("+ iimpl +") height: "+ impl.height());
+			System.out.println("("+ iimpl +") #vals: "+ impl.totalWeight());
+			System.out.println("("+ iimpl +") #nodes: "+ impl.container.size());
+			
+		}
+		
+		//========== issue queries
+		for(int iimpl=0; iimpl < impls.length; iimpl++) {
+			HilbertRTreeSA<FixedPointRectangle, Long> impl = impls[iimpl];
+			Cursor<FixedPointRectangle> queryCursor = DataDistributions.rectanglesRandomVolumed(new CopyableRandom(random), bitsPerDimensions, querySelectivity);
+			
+			for(int iquery=0; iquery < nQueries; iquery++) {
+				FixedPointRectangle query = queryCursor.next();
+				ProfilingCursor<FixedPointRectangle> profCursor = impl.samplingRangeQuery(query, samplingBatchSize);
+				List<FixedPointRectangle> samplesGot = Cursors.toList(new Taker<FixedPointRectangle>(profCursor, nSamples)); // consume the samples
+				int pagesTouched = profCursor.getProfilingInformation().getElement1().values().stream().reduce(0, (x,y) -> x+y);
+				pagesTouchedPerImpl[iimpl] += pagesTouched;
+			}
+		}
+		
+		return pagesTouchedPerImpl;
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	public static void main(String[] args) throws Exception {
 		
 		//- versuche den Classpath so zu kriegen
@@ -732,9 +813,17 @@ public class Test_TestableMap {
 		random = new CopyableRandom(); 
 		System.out.println("seed: "+ random.getSeed());
 		
-		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_hilbertTree_fromAtoZ();
-//		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = test_weightBalanced_hilbertTree_fromAtoZ();
-		System.out.println(profResult.toString());
+		System.out.println("total pages touched: "+ Arrays.toString(finalTests()));
+		
+		//=== Sanity tests for the Hilbert-Implementation
+//		Pair<TreeMap<Long, List<Long>>, TreeMap<Long, List<Long>>> profResult = null;
+//		random = new CopyableRandom(122928473621795L); // 119066442596134L
+//		profResult = test_hilbertTree_fromAtoZ();
+//		System.out.println(profResult.toString());
+//		
+//		random = new CopyableRandom(122928473621795L); // 119066442596134L
+//		profResult = test_weightBalanced_hilbertTree_fromAtoZ();
+//		System.out.println(profResult.toString());
 		
 		/*
 		Cursor<Integer> testKeysCursor = new DiscreteRandomNumber(new JavaDiscreteRandomWrapper(new CopyableRandom(random), 10000));

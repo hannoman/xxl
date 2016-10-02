@@ -190,27 +190,31 @@ public class HUtil {
 		//- Eager Berechnung der Tabelle
 		for(int k=2; k <= nBins; k++) {
 			for(int n=1; n < weights.size(); n++) {
-				
-				int lastClusterWeight = 0;
-				int t = 0;
-				while(lastClusterWeight < binLo) {
-					t++;
-					lastClusterWeight += weights.get(n - t + 1);
-				}
-				
 				Integer best = Integer.MAX_VALUE;
 				Integer bestT = null;
-				do {
-					int curD = Math.max( d[n-t][k-1], lastClusterWeight );
-					if(curD < best) {
-						best = curD;
-						bestT = t;
+			
+				try {
+					int lastClusterWeight = 0;
+					int t = 0;
+					while(lastClusterWeight < binLo) {
+						t++;
+						lastClusterWeight += weights.get(n - t + 1);
 					}
-					// grow last cluster by 1 element
-					t++;
-					lastClusterWeight += weights.get(n - t + 1);
-				} while(t <= n && lastClusterWeight <= binHi);
-				
+					
+					do {
+						int curD = Math.max( d[n-t][k-1], lastClusterWeight );
+						if(curD < best) {
+							best = curD;
+							bestT = t;
+						}
+						// grow last cluster by 1 element
+						t++;
+						lastClusterWeight += weights.get(n - t + 1);
+					} while(t <= n && lastClusterWeight <= binHi);
+				} catch (IndexOutOfBoundsException e) {
+					// TODO: handle exception
+				}
+			
 				d[n][k] = best;
 				lastPartSize[n][k] = bestT;
 			}

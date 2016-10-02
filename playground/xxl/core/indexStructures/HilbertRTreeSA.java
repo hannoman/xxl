@@ -282,7 +282,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 			} else if(insertionInfo.newnode == null) { // normal insertion
 				return true;
 			} else { // insertion resulting in new root
-				InnerNode rootNew = new InnerNode();
+				InnerNode rootNew = createInnerNode(); // new InnerNode();
 				
 				rootNew.pagePointers.add(rootCID);
 				rootNew.pagePointers.add(insertionInfo.newnode.pagePointer);
@@ -457,6 +457,10 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		public abstract long getLHV();
 	}
 	
+	public InnerNode createInnerNode() {
+		return new InnerNode();
+	}
+	
 	public class InnerNode extends Node {		
 		public List<Long> lhvSeparators;
 		public List<FixedPointRectangle> areaRanges;
@@ -596,7 +600,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 			InsertionInfo insertionInfo;
 			if(summedSizes > summedCapacity) { // split can't be avoided
 				// create new node
-				InnerNode newnode = new InnerNode();
+				InnerNode newnode = createInnerNode(); // new InnerNode();
 				newnode.pagePointer = container.reserve(null); // assign a CID to the newly created node
 				coopSiblings.add(newnode); // update all references last
 				insertionInfo = SPLIT(coopSiblingIdxs, newnode);
@@ -843,7 +847,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 				for(int i = insertPos; i > 0 && getSFCKey.apply(getBoundingBox.apply(values.get(i-1))).compareTo(lhKey) == 0; i--)
 					nDupsFound++;
 				if(nDupsFound >= nDuplicatesAllowed) {
-					System.out.println("duplicate rejected ("+ nDupsFound +" present of: "+ lhKey +" / "+ value); // DEBUG
+//					System.out.println("duplicate rejected ("+ nDupsFound +" present of: "+ lhKey +" / "+ value); // DEBUG
 					return NO_INSERTION(); // return early
 				}
 			}
@@ -1067,7 +1071,7 @@ public class HilbertRTreeSA<V, P> implements Testable1DMap<Long, V>, SamplableAr
 		}
 
 		Node readInnerNode(DataInput dataInput) throws IOException {
-			InnerNode node = new InnerNode();
+			InnerNode node = createInnerNode(); // new InnerNode();
 			
 			// - read number of childs
 			int nChildren = dataInput.readInt();
